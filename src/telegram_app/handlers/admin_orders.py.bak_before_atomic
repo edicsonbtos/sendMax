@@ -1,0 +1,337 @@
+﻿from __future__ import annotations
+
+import logging
+from decimal import Decimal, ROUND_HALF_UP
+
+import psycopg
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+
+from src.config.settings import settings
+from src.db.repositories import rates_repo
+from src.db.repositories.orders_repo import (
+    list_orders_by_status,
+    update_order_status,
+    get_order_by_public_id,
+    cancel_order,
+    mark_order_paid,
+    set_profit_usdt,
+    set_awaiting_paid_proof,
+    clear_awaiting_paid_proof,
+    list_orders_awaiting_paid_proof_by,
+)
+from src.db.repositories.users_repo import get_telegram_id_by_user_id
+from src.db.repositories.wallet_repo import add_ledger_entry
+
+logger = logging.getLogger(__name__)
+
+
+def _q8(d: Decimal) -> Decimal:
+    """Mantiene la precisión de 8 decimales para cálculos internos"""
+    return d.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
+
+
+def _is_authorized(update: Update) -> bool:
+    """
+    Autoriza si es Admin Global O si la acción ocurre en el Grupo de Pagos.
+    """
+    user_id = getattr(update.effective_user, "id", None)
+    chat_id = getattr(update.effective_chat, "id", None)
+
+    if settings.is_admin_id(user_id):
+        return True
+
+    if str(chat_id) == str(settings.PAYMENTS_TELEGRAM_CHAT_ID):
+        return True
+
+    return False
+
+
+def _order_actions_kb(public_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("⏳ EN PROCESO", callback_data=f"ord:proc:{public_id}"),
+                InlineKeyboardButton("✅ PAGADA", callback_data=f"ord:paid:{public_id}"),
+            ],
+            [InlineKeyboardButton("❌ CANCELAR", callback_data=f"ord:cancel:{public_id}")],
+        ]
+    )
+
+
+async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_authorized(update):
+        return
+
+    orders = list_orders_by_status("CREADA", limit=10)
+    if not orders:
+        await update.message.reply_text("✅ No hay órdenes pendientes por procesar.")
+        return
+
+    await update.message.reply_text(
+        f"📋 <b>Órdenes Pendientes ({len(orders)})</b>\nToca una acción 👇",
+        parse_mode="HTML"
+    )
+
+    for o in orders:
+        text = (
+            f"🆔 <b>#{o.public_id}</b>\n"
+            f"🏳️ {o.origin_country} -> {o.dest_country}\n"
+            f"💰 Recibe: {o.amount_origin}\n"
+            f"💵 Payout: {o.payout_dest:,.2f}\n"
+        )
+        await update.message.reply_text(text, reply_markup=_order_actions_kb(o.public_id), parse_mode="HTML")
+
+
+async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    q = update.callback_query
+    if not q:
+        return
+
+    if not _is_authorized(update):
+        try:
+            await q.answer("🚫 Acceso denegado.", show_alert=True)
+        except Exception:
+            pass
+        return
+
+    data = q.data or ""
+    parts = data.split(":")
+    if len(parts) != 3:
+        return
+
+    _, action, pid_str = parts
+    try:
+        public_id = int(pid_str)
+    except Exception:
+        return
+
+    if action == "proc":
+        ok = update_order_status(public_id, "EN_PROCESO")
+        try:
+            await q.answer("✅ Marcada en Proceso")
+            if ok:
+                new_text = q.message.text + "\n\n🔄 Estado: EN PROCESO"
+                await q.edit_message_text(new_text, reply_markup=_order_actions_kb(public_id))
+        except Exception:
+            pass
+
+        if ok:
+            order = get_order_by_public_id(public_id)
+            if order:
+                op_tid = get_telegram_id_by_user_id(int(order.operator_user_id))
+                if op_tid:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=int(op_tid),
+                            text=f"⏳ Tu orden #{public_id} está siendo procesada...",
+                        )
+                    except Exception:
+                        pass
+        return
+
+    if action == "paid":
+        # Seguridad: evita que un mismo operador tenga 2 órdenes en espera de comprobante
+        already = list_orders_awaiting_paid_proof_by(getattr(update.effective_user, "id", 0) or 0, limit=2)
+        if already and int(already[0].public_id) != int(public_id):
+            try:
+                await q.answer("⚠️ Ya tienes una orden en espera. Sube ese comprobante primero.", show_alert=True)
+            except Exception:
+                pass
+            await q.message.reply_text(
+                f"⚠️ Ya tienes una orden en espera de comprobante: #{int(already[0].public_id)}.\n"
+                f"Cierra esa primero antes de marcar otra como PAGADA."
+            )
+            return
+        # Persistir en DB (anti-caídas)
+        ok = set_awaiting_paid_proof(
+            public_id,
+            by_telegram_user_id=getattr(update.effective_user, "id", None),
+        )
+        try:
+            await q.answer("📸 Sube la foto" if ok else "❌ No pude dejar la orden en espera")
+        except Exception:
+            pass
+
+        await q.message.reply_text(
+            f"📸 <b>PAGO ORDEN #{public_id}</b>\n"
+            f"Envía la captura del pago aquí para cerrar la orden.\n\n"
+            f"(Si el bot se reinicia, la orden seguirá en espera en la DB.)",
+            parse_mode="HTML"
+        )
+        return
+
+    if action == "cancel":
+        context.user_data["awaiting_cancel_reason_for"] = public_id
+        try:
+            await q.answer()
+            await q.message.reply_text(f"✍️ Escribe el motivo de cancelación para la #{public_id}:")
+        except Exception:
+            pass
+        return
+
+
+def _pick_pending_order_id_from_db(by_telegram_user_id: int) -> int | None:
+    pending = list_orders_awaiting_paid_proof_by(by_telegram_user_id, limit=1)
+    if not pending:
+        return None
+    return int(pending[0].public_id)
+
+
+
+async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Procesa la foto enviada al grupo.
+    Anti-caídas: NO depende de context.user_data. Toma la orden pendiente desde DB.
+    """
+    if not _is_authorized(update):
+        return
+
+    if not update.message or not update.message.photo:
+        return
+
+    public_id = _pick_pending_order_id_from_db(update.effective_user.id)
+    if not public_id:
+        await update.message.reply_text("ℹ️ No hay órdenes en espera de comprobante.")
+        return
+
+    proof_file_id = update.message.photo[-1].file_id
+
+    try:
+        order = get_order_by_public_id(public_id)
+        if not order:
+            await update.message.reply_text(
+                "❌ Error: Orden no encontrada. (No limpio la espera para poder reintentar)"
+            )
+            return
+
+        # 1) marcar pagada
+        ok_paid = mark_order_paid(int(public_id), proof_file_id)
+        if not ok_paid:
+            await update.message.reply_text("❌ No pude marcar la orden como PAGADA.")
+            return
+
+        # 2) calcular profit con snapshot DB
+        rr = rates_repo.get_route_rate(
+            rate_version_id=int(order.rate_version_id),
+            origin_country=str(order.origin_country),
+            dest_country=str(order.dest_country),
+        )
+        if not rr:
+            await update.message.reply_text("❌ No pude obtener route_rate para calcular profit_usdt.")
+            return
+
+        amount_origin = Decimal(str(order.amount_origin))
+        payout_dest = Decimal(str(order.payout_dest))
+        buy_origin = Decimal(str(rr.buy_origin))
+        sell_dest = Decimal(str(rr.sell_dest))
+        profit_usdt = _q8((amount_origin / buy_origin) - (payout_dest / sell_dest))
+
+        # 3) sponsor split
+        sponsor_id = None
+        try:
+            with psycopg.connect(settings.DATABASE_URL) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT sponsor_id FROM users WHERE id=%s LIMIT 1;",
+                        (int(order.operator_user_id),),
+                    )
+                    row = cur.fetchone()
+                    sponsor_id = int(row[0]) if row and row[0] is not None else None
+        except Exception:
+            sponsor_id = None
+
+        if sponsor_id:
+            op_share = _q8(profit_usdt * Decimal("0.45"))
+            sp_share = _q8(profit_usdt * Decimal("0.10"))
+            memo_op = "Profit orden (45%)"
+            memo_sp = "Comisión sponsor (10%)"
+        else:
+            op_share = _q8(profit_usdt * Decimal("0.50"))
+            sp_share = Decimal("0")
+            memo_op = "Profit orden (50%)"
+            memo_sp = None
+
+        # 4) guardar profit
+        set_profit_usdt(int(public_id), profit_usdt)
+
+        # 5) ledger idempotente
+        if op_share != 0:
+            add_ledger_entry(
+                user_id=int(order.operator_user_id),
+                amount_usdt=op_share,
+                entry_type="ORDER_PROFIT",
+                ref_order_public_id=int(public_id),
+                memo=memo_op,
+                idempotency=True,
+            )
+
+        if sponsor_id and sp_share != 0:
+            add_ledger_entry(
+                user_id=int(sponsor_id),
+                amount_usdt=sp_share,
+                entry_type="SPONSOR_COMMISSION",
+                ref_order_public_id=int(public_id),
+                memo=memo_sp,
+                idempotency=True,
+            )
+
+        # 6) limpiar awaiting flag (DB)
+        clear_awaiting_paid_proof(int(public_id))
+
+        # 7) confirmar en grupo
+        lines = [
+            f"✅ <b>ORDEN #{public_id} CERRADA</b>",
+            "",
+            f"💰 Profit: {profit_usdt:,.2f} USDT",
+            f"👤 Operador: {op_share:,.2f} USDT",
+        ]
+        if sponsor_id and sp_share != 0:
+            lines.append(f"🤝 Sponsor: {sp_share:,.2f} USDT")
+
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+    except Exception as e:
+        logger.exception("process_paid_proof_photo: fallo cerrando orden %s: %s", public_id, e)
+        await update.message.reply_text(
+            "❌ Error interno cerrando la orden. Reintenta subiendo la foto nuevamente."
+        )
+        return
+
+    # 8) notificar operador (fuera del try: si falla no afecta el cierre)
+    op_tid = get_telegram_id_by_user_id(int(order.operator_user_id))
+    if op_tid:
+        try:
+            await context.bot.send_message(
+                chat_id=int(op_tid),
+                text=f"✅ Orden #{public_id} PAGADA.\n¡Gracias! 🚀",
+            )
+            await context.bot.send_photo(
+                chat_id=int(op_tid),
+                photo=proof_file_id,
+                caption=f"Comprobante Orden #{public_id}",
+            )
+        except Exception:
+            pass
+
+
+async def handle_cancel_reason_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_authorized(update):
+        return
+
+    public_id = context.user_data.get("awaiting_cancel_reason_for")
+    if not public_id:
+        return
+
+    reason = (update.message.text or "").strip()
+    if len(reason) < 3:
+        await update.message.reply_text("Motivo muy corto.")
+        return
+
+    ok = cancel_order(int(public_id), reason)
+    context.user_data.pop("awaiting_cancel_reason_for", None)
+
+    if ok:
+        await update.message.reply_text(f"❌ Orden #{public_id} cancelada.\nMotivo: {reason}")
+    else:
+        await update.message.reply_text("Error al cancelar.")

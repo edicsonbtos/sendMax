@@ -1,0 +1,33 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.pkl
+
+# Virtualenv
+.venv/
+
+# Env / secrets
+.env
+backoffice_api/.env
+
+# Logs
+*.log
+
+# Local dumps / temp
+_audit_dump/
+_backup_security/
+_dump_for_review/
+*.zip
+.tmp_*
+_show_*.py
+_patch_*.py
+_fix_*.py
+_cleanup_*.py
+_replace_*.py
+_add_*.py
+
+# OS
+.DS_Store
+Thumbs.db

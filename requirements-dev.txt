@@ -1,0 +1,3 @@
+﻿ruff==0.9.6
+bandit==1.7.8
+pip-audit==2.7.3
