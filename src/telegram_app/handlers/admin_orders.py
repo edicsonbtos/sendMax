@@ -13,6 +13,7 @@ from src.db.repositories import rates_repo
 from src.db.repositories.orders_repo import (
     list_orders_by_status,
     update_order_status,
+    mark_origin_verified,
     get_order_by_public_id,
     cancel_order,
     mark_order_paid,
@@ -46,6 +47,9 @@ def _is_authorized(update: Update) -> bool:
         return True
 
     if str(chat_id) == str(settings.PAYMENTS_TELEGRAM_CHAT_ID):
+        return True
+
+    if str(chat_id) == str(settings.ORIGIN_REVIEW_TELEGRAM_CHAT_ID):
         return True
 
     return False
@@ -131,7 +135,11 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
             return
 
         if action == "orig_ok":
-            ok = update_order_status(public_id, "ORIGEN_CONFIRMADO")
+            ok = mark_origin_verified(
+                public_id,
+                by_telegram_user_id=getattr(update.effective_user, "id", None),
+                by_name=(getattr(update.effective_user, "full_name", None) or getattr(update.effective_user, "username", None)),
+            )
             try:
                 await q.answer("✅ Origen confirmado" if ok else "⚠️ No pude actualizar estado", show_alert=not ok)
             except Exception:
