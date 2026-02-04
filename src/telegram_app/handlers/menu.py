@@ -91,6 +91,10 @@ async def show_home(update: Update, context: ContextTypes.DEFAULT_TYPE, alias: s
 async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (update.message.text or "").strip()
 
+    # No mostrar/operar menú en grupos (solo DM)
+    if update.effective_chat and update.effective_chat.type != "private":
+        return
+
     # No interceptar durante retiro/orden
     if context.user_data.get("withdraw_mode") or context.user_data.get("order_mode"):
         return

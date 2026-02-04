@@ -179,6 +179,26 @@ def update_order_status(public_id: int, new_status: str) -> bool:
             return updated
 
 
+def mark_origin_verified(public_id: int, *, by_telegram_user_id: int | None = None, by_name: str | None = None) -> bool:
+    """Marca origen verificado (auditoría) y actualiza status a ORIGEN_CONFIRMADO."""
+    sql = """
+        UPDATE orders
+        SET
+            status = 'ORIGEN_CONFIRMADO',
+            origin_verified_at = now(),
+            origin_verified_by_telegram_id = %s,
+            origin_verified_by_name = %s,
+            updated_at = now()
+        WHERE public_id = %s;
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (by_telegram_user_id, by_name, public_id))
+            ok = cur.rowcount > 0
+            conn.commit()
+            return ok
+
+
 def mark_order_paid(public_id: int, dest_payment_proof_file_id: str) -> bool:
     sql = """
         UPDATE orders
