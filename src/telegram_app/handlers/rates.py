@@ -84,7 +84,8 @@ async def rates_country_router(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if text == BTN_BACK:
         context.user_data.pop("rates_mode", None)
-        await update.message.reply_text("Listo ✅")
+        from src.telegram_app.handlers.menu import show_home  # import local para evitar circular
+        await show_home(update, context)
         return
 
     mode = context.user_data.get("rates_mode")
