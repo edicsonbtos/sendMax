@@ -8,6 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings
+from src.telegram_app.ui.routes_popular import COUNTRY_FLAGS, format_rate_no_noise
 from src.db.repositories import rates_repo
 from src.db.repositories.orders_repo import (
     list_orders_by_status,
@@ -108,6 +109,84 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
         public_id = int(pid_str)
     except Exception:
         return
+
+
+    # ORIGIN REVIEW (nuevo grupo): callbacks de verificación de comprobante ORIGEN
+    if action in ("orig_ok", "orig_rej"):
+        # Solo aceptar estas acciones desde el chat ORIGIN_REVIEW
+        chat_id = getattr(update.effective_chat, "id", None)
+        if str(chat_id) != str(settings.ORIGIN_REVIEW_TELEGRAM_CHAT_ID):
+            try:
+                await q.answer("Acción solo válida en el grupo de verificación de origen.", show_alert=True)
+            except Exception:
+                pass
+            return
+
+        order = get_order_by_public_id(public_id)
+        if not order:
+            try:
+                await q.answer("Orden no encontrada.", show_alert=True)
+            except Exception:
+                pass
+            return
+
+        if action == "orig_ok":
+            ok = update_order_status(public_id, "ORIGEN_CONFIRMADO")
+            try:
+                await q.answer("✅ Origen confirmado" if ok else "⚠️ No pude actualizar estado", show_alert=not ok)
+            except Exception:
+                pass
+
+            # Notificar a PAYMENTS: enviar resumen (sin comprobante origen) con teclado actual
+            try:
+                target_chat_id = int(settings.PAYMENTS_TELEGRAM_CHAT_ID)
+                origin = str(order.origin_country)
+                dest = str(order.dest_country)
+                origin_flag = COUNTRY_FLAGS.get(origin, origin)
+                dest_flag = COUNTRY_FLAGS.get(dest, dest)
+
+                summary = (
+                    "🆕 <b>ORDEN LISTA PARA PAGOS</b>\n\n"
+                    f"🆔 <b>#{public_id}</b>\n"
+                    f"Monto Origen: <b>{order.amount_origin} {origin}</b>\n"
+                    f"Tasa: {format_rate_no_noise(order.rate_client)}\n"
+                    f"Pago Destino: <b>{order.payout_dest} {dest}</b>\n"
+                )
+
+                await context.bot.send_message(
+                    chat_id=target_chat_id,
+                    text=summary,
+                    parse_mode="HTML",
+                    reply_markup=_order_actions_kb(public_id),
+                    disable_web_page_preview=True,
+                )
+
+                # Beneficiario (ya escapado en new_order_flow cuando se envía, pero aquí es nuevo envío)
+                if (order.beneficiary_text or "").strip():
+                    from src.telegram_app.utils.text_escape import esc_html
+                    await context.bot.send_message(
+                        chat_id=target_chat_id,
+                        text="👤 <b>Datos Beneficiario:</b>\n" + esc_html(order.beneficiary_text or ""),
+                        parse_mode="HTML",
+                    )
+            except Exception:
+                logger.exception("orig_ok: fallo notificando a PAYMENTS para orden %s", public_id)
+
+            return
+
+        # action == orig_rej (por ahora cancela sin motivo; luego pedimos motivo con flow)
+        if action == "orig_rej":
+            ok = cancel_order(public_id, "ORIGEN RECHAZADO")
+            try:
+                await q.answer("❌ Origen rechazado" if ok else "⚠️ No pude cancelar", show_alert=not ok)
+            except Exception:
+                pass
+            try:
+                await q.message.reply_text(f"Orden #{public_id} cancelada por ORIGEN RECHAZADO.")
+            except Exception:
+                pass
+            return
+
 
     if action == "proc":
         ok = update_order_status(public_id, "EN_PROCESO")

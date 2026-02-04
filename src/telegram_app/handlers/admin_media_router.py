@@ -8,7 +8,9 @@ logger = logging.getLogger(__name__)
 
 def _is_authorized(update: Update) -> bool:
     """
-    Autoriza si es Admin Global O si el mensaje viene del Grupo de Pagos.
+    Router de fotos: SOLO debe actuar en el Grupo de Pagos (PAYMENTS),
+    para no interceptar fotos de KYC/ORIGIN_REVIEW u otros chats.
+    Admin global también permitido.
     """
     user_id = getattr(update.effective_user, "id", None)
     chat_id = getattr(update.effective_chat, "id", None)
@@ -16,10 +18,7 @@ def _is_authorized(update: Update) -> bool:
     if settings.is_admin_id(user_id):
         return True
 
-    if str(chat_id) == str(settings.PAYMENTS_TELEGRAM_CHAT_ID):
-        return True
-
-    return False
+    return str(chat_id) == str(settings.PAYMENTS_TELEGRAM_CHAT_ID)
 
 
 async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

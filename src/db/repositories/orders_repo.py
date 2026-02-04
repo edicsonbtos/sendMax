@@ -41,7 +41,7 @@ class Order:
     cancel_reason: str | None = None
 
 
-VALID_STATUSES = {"CREADA", "EN_PROCESO", "PAGADA", "CANCELADA"}
+VALID_STATUSES = {"CREADA", "ORIGEN_VERIFICANDO", "ORIGEN_CONFIRMADO", "EN_PROCESO", "PAGADA", "CANCELADA"}
 
 
 def get_conn():

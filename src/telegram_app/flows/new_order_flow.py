@@ -199,7 +199,7 @@ def _build_summary_text(order: dict, rr) -> str:
 
 
 async def _notify_admin_new_order(context: ContextTypes.DEFAULT_TYPE, order) -> None:
-    target_chat_id = settings.PAYMENTS_TELEGRAM_CHAT_ID or settings.ADMIN_TELEGRAM_USER_ID
+    target_chat_id = settings.ORIGIN_REVIEW_TELEGRAM_CHAT_ID or settings.ADMIN_TELEGRAM_USER_ID
     if not target_chat_id:
         return
     target_chat_id = int(target_chat_id)
@@ -220,10 +220,9 @@ async def _notify_admin_new_order(context: ContextTypes.DEFAULT_TYPE, order) -> 
     kb = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("⏳ EN PROCESO", callback_data=f"ord:proc:{order.public_id}"),
-                InlineKeyboardButton("✅ PAGADA", callback_data=f"ord:paid:{order.public_id}"),
-            ],
-            [InlineKeyboardButton("❌ CANCELAR", callback_data=f"ord:cancel:{order.public_id}")],
+                InlineKeyboardButton("✅ ORIGEN RECIBIDO", callback_data=f"ord:orig_ok:{order.public_id}"),
+                InlineKeyboardButton("❌ ORIGEN RECHAZADO", callback_data=f"ord:orig_rej:{order.public_id}"),
+            ]
         ]
     )
 
@@ -495,6 +494,13 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         beneficiary_text=beneficiary_text,
         origin_payment_proof_file_id=file_id,
     )
+
+    # Nuevo flujo: ORIGEN primero (grupo ORIGIN_REVIEW)
+    try:
+        from src.db.repositories.orders_repo import update_order_status
+        update_order_status(int(order.public_id), "ORIGEN_VERIFICANDO")
+    except Exception as e:
+        _flow_dbg(f"update_order_status ORIGEN_VERIFICANDO failed: {e}")
 
     try:
         await _notify_admin_new_order(context, order)

@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # Nuevo: grupo KYC (solicitudes de ingreso)
     KYC_TELEGRAM_CHAT_ID: int | None = None
 
+    # Nuevo: grupo verificación ORIGEN (comprobante origen)
+    ORIGIN_REVIEW_TELEGRAM_CHAT_ID: int | None = None
+
     # Debug de flujos (0/1)
     FLOW_DEBUG: int = 0
 
