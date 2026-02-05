@@ -422,5 +422,21 @@ async def handle_cancel_reason_text(update: Update, context: ContextTypes.DEFAUL
 
     if ok:
         await update.message.reply_text(f"❌ Orden #{public_id} cancelada.\nMotivo: {reason}")
+
+        # Notificar al operador (best-effort)
+        try:
+            order = get_order_by_public_id(int(public_id))
+            if order:
+                op_tid = get_telegram_id_by_user_id(int(order.operator_user_id))
+                if op_tid:
+                    await context.bot.send_message(
+                        chat_id=int(op_tid),
+                        text=(
+                            f"❌ Orden #{public_id} CANCELADA\n"
+                            f"Motivo: {reason}"
+                        ),
+                    )
+        except Exception:
+            logger.exception("cancel_order: no pude notificar al operador para orden %s", public_id)
     else:
         await update.message.reply_text("Error al cancelar.")
