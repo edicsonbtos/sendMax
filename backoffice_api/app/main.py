@@ -1,15 +1,42 @@
-﻿from fastapi import FastAPI, Query
+﻿from fastapi import FastAPI, Query, Request, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 import os
 from .db import fetch_one, fetch_all
 
-app = FastAPI(title="Sendmax Backoffice API", version="0.4.0")
+app = FastAPI(title="Sendmax Backoffice API", version="0.5.1")
+
+# Configuración de API Key
+API_KEY = os.getenv("BACKOFFICE_API_KEY", "dev-key-12345")
+api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
+
+async def verify_api_key(api_key: str = Depends(api_key_header)):
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing X-API-KEY header"
+        )
+    if api_key != API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key"
+        )
+    return api_key
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["X-API-KEY"],
+)
 
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "backoffice-api"}
+    return {"ok": True, "service": "backoffice-api", "version": "0.5.1"}
 
 @app.get("/metrics/overview")
-def metrics_overview():
+def metrics_overview(api_key: str = Depends(verify_api_key)):
     row = fetch_one(
         """
         SELECT
@@ -18,119 +45,51 @@ def metrics_overview():
           COUNT(*) FILTER (WHERE status='PAGADA')      AS pagadas,
           COUNT(*) FILTER (WHERE status='CANCELADA')   AS canceladas,
           COUNT(*) FILTER (WHERE awaiting_paid_proof=true) AS awaiting_paid_proof
-        FROM orders;
+        FROM orders
         """
     )
     return {
-        "ok": True,
-        "data": {
-            "creadas": row[0] if row else 0,
-            "en_proceso": row[1] if row else 0,
-            "pagadas": row[2] if row else 0,
-            "canceladas": row[3] if row else 0,
-            "awaiting_paid_proof": row[4] if row else 0,
+        "status_counts": {
+            "CREADA": row["creadas"],
+            "EN_PROCESO": row["en_proceso"],
+            "PAGADA": row["pagadas"],
+            "CANCELADA": row["canceladas"],
         },
-        "env": os.getenv("ENV", "local"),
+        "awaiting_paid_proof": row["awaiting_paid_proof"]
     }
 
 @app.get("/orders")
-def list_orders(limit: int = Query(20, ge=1, le=200)):
-    rows = fetch_all(
+def list_orders(limit: int = Query(default=20, le=100), api_key: str = Depends(verify_api_key)):
+    orders = fetch_all(
         """
-        SELECT public_id, status, origin_country, dest_country,
-               amount_origin, payout_dest, profit_usdt,
-               awaiting_paid_proof, awaiting_paid_proof_at,
-               created_at, updated_at
+        SELECT
+          public_id, created_at, status, awaiting_paid_proof,
+          origin_country, destination_country, amount_origin, amount_destination,
+          destination_type, beneficiary
         FROM orders
         ORDER BY created_at DESC
-        LIMIT %s;
+        LIMIT %s
         """,
-        (limit,),
+        (limit,)
     )
-
-    data = []
-    for r in rows:
-        data.append(
-            {
-                "public_id": r[0],
-                "status": r[1],
-                "origin_country": r[2],
-                "dest_country": r[3],
-                "amount_origin": float(r[4]) if r[4] is not None else None,
-                "payout_dest": float(r[5]) if r[5] is not None else None,
-                "profit_usdt": float(r[6]) if r[6] is not None else None,
-                "awaiting_paid_proof": bool(r[7]),
-                "awaiting_paid_proof_at": r[8].isoformat() if r[8] else None,
-                "created_at": r[9].isoformat() if r[9] else None,
-                "updated_at": r[10].isoformat() if r[10] else None,
-            }
-        )
-
-    return {"ok": True, "count": len(data), "data": data}
+    return {"orders": orders}
 
 @app.get("/orders/{public_id}")
-def get_order(public_id: int):
-    o = fetch_one(
-        """
-        SELECT public_id, status, operator_user_id,
-               origin_country, dest_country,
-               amount_origin, payout_dest, profit_usdt,
-               beneficiary_text,
-               origin_payment_proof_file_id, dest_payment_proof_file_id,
-               awaiting_paid_proof, awaiting_paid_proof_at, awaiting_paid_proof_by,
-               paid_at, cancel_reason,
-               created_at, updated_at
-        FROM orders
-        WHERE public_id=%s
-        LIMIT 1;
-        """,
-        (public_id,),
+def order_detail(public_id: str, api_key: str = Depends(verify_api_key)):
+    order = fetch_one(
+        "SELECT * FROM orders WHERE public_id=%s",
+        (public_id,)
     )
-    if not o:
-        return {"ok": False, "error": "ORDER_NOT_FOUND"}
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
 
-    order = {
-        "public_id": o[0],
-        "status": o[1],
-        "operator_user_id": o[2],
-        "origin_country": o[3],
-        "dest_country": o[4],
-        "amount_origin": float(o[5]) if o[5] is not None else None,
-        "payout_dest": float(o[6]) if o[6] is not None else None,
-        "profit_usdt": float(o[7]) if o[7] is not None else None,
-        "beneficiary_text": o[8],
-        "origin_payment_proof_file_id": o[9],
-        "dest_payment_proof_file_id": o[10],
-        "awaiting_paid_proof": bool(o[11]),
-        "awaiting_paid_proof_at": o[12].isoformat() if o[12] else None,
-        "awaiting_paid_proof_by": o[13],
-        "paid_at": o[14].isoformat() if o[14] else None,
-        "cancel_reason": o[15],
-        "created_at": o[16].isoformat() if o[16] else None,
-        "updated_at": o[17].isoformat() if o[17] else None,
-    }
-
-    # Ledger asociado a la orden (si tu tabla tiene created_at; si no, lo ajustamos)
-    rows = fetch_all(
+    ledger = fetch_all(
         """
-        SELECT user_id, amount_usdt, type, ref_order_public_id, memo, created_at
-        FROM wallet_ledger
-        WHERE ref_order_public_id=%s
-        ORDER BY created_at ASC;
+        SELECT * FROM ledger
+        WHERE order_id=%s
+        ORDER BY created_at ASC
         """,
-        (public_id,),
+        (order["id"],)
     )
-    ledger = []
-    for r in rows:
-        ledger.append(
-            {
-                "user_id": r[0],
-                "amount_usdt": float(r[1]) if r[1] is not None else None,
-                "type": r[2],
-                "ref_order_public_id": r[3],
-                "memo": r[4],
-                "created_at": r[5].isoformat() if r[5] else None,
-            }
-        )
-
-    return {"ok": True, "order": order, "ledger": ledger}
+    
+    return {"order": order, "ledger": ledger}

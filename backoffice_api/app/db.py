@@ -1,5 +1,6 @@
 ﻿import os
 import psycopg
+from psycopg.rows import dict_row
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,13 +12,13 @@ def get_db_url() -> str:
     return url
 
 def fetch_one(sql: str, params: tuple = ()):
-    with psycopg.connect(get_db_url()) as conn:
+    with psycopg.connect(get_db_url(), row_factory=dict_row) as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
             return cur.fetchone()
 
 def fetch_all(sql: str, params: tuple = ()):
-    with psycopg.connect(get_db_url()) as conn:
+    with psycopg.connect(get_db_url(), row_factory=dict_row) as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
             return cur.fetchall()
