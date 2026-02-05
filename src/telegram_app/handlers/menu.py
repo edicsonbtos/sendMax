@@ -122,6 +122,41 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         for k in ("pm_mode", "summary_mode", "rates_mode", "ref_mode"):
             context.user_data.pop(k, None)
 
+
+    # Si el usuario toca un botón principal, forzamos cambio de módulo (evita cross-talk por modes activos)
+    if text in {BTN_REFERRALS, BTN_SUMMARY, BTN_PAYMENT_METHODS, BTN_RATES, BTN_WALLET, BTN_ADMIN}:
+        if text == BTN_ADMIN:
+            if _is_admin(update):
+                _clear_menu_modes()
+                await open_admin_panel(update, context)
+            return
+
+        if text == BTN_REFERRALS:
+            _clear_menu_modes()
+            await enter_referrals(update, context)
+            return
+
+        if text == BTN_SUMMARY:
+            _clear_menu_modes()
+            await enter_summary(update, context)
+            return
+
+        if text == BTN_PAYMENT_METHODS:
+            _clear_menu_modes()
+            await enter_payment_methods(update, context)
+            return
+
+        if text == BTN_RATES:
+            _clear_menu_modes()
+            await show_rates(update, context)
+            return
+
+        if text == BTN_WALLET:
+            _clear_menu_modes()
+            await wallet_menu(update, context)
+            return
+
+
     # Routers de estado
     # Tasas por país (mini-modo)
     if context.user_data.get("rates_mode") or text in {"🌍 Ver por país", "⬅️ Volver"}:
