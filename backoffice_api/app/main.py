@@ -93,3 +93,20 @@ def order_detail(public_id: str, api_key: str = Depends(verify_api_key)):
     )
     
     return {"order": order, "ledger": ledger}
+
+@app.get("/metrics/profit_daily")
+def profit_daily(days: int = Query(default=30, le=90), api_key: str = Depends(verify_api_key)):
+    from .audit import get_profit_daily
+    data = get_profit_daily(days)
+    return {"days": days, "profit_by_day": data}
+
+@app.get("/alerts/stuck")
+def alerts_stuck(api_key: str = Depends(verify_api_key)):
+    from .audit import get_stuck_orders
+    return get_stuck_orders()
+
+@app.get("/operators/ranking")
+def operators_ranking(days: int = Query(default=7, le=30), api_key: str = Depends(verify_api_key)):
+    from .audit import get_operators_ranking
+    data = get_operators_ranking(days)
+    return {"days": days, "operators": data}
