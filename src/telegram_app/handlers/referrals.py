@@ -13,7 +13,7 @@ from src.config.settings import settings
 
 
 def _is_admin(update: Update) -> bool:
-    return bool(settings.ADMIN_TELEGRAM_USER_ID) and update.effective_user.id == int(settings.ADMIN_TELEGRAM_USER_ID)
+    return settings.is_admin_id(getattr(update.effective_user, 'id', None))
 
 
 def _ref_link(context: ContextTypes.DEFAULT_TYPE, alias: str) -> str:
@@ -33,6 +33,11 @@ async def enter_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     context.user_data["ref_mode"] = True
+    # Exclusividad: salir de otros modos de menú
+    context.user_data.pop("pm_mode", None)
+    context.user_data.pop("summary_mode", None)
+    context.user_data.pop("rates_mode", None)
+
 
     await update.message.reply_text(
         "🤝 Referidos\n\nElige una opción 👇",

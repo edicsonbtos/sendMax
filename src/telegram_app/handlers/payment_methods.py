@@ -67,7 +67,7 @@ async def handle_payment_methods_country(update: Update, context: ContextTypes.D
         context.user_data.pop("pm_mode", None)
         await update.message.reply_text(
             "Listo ✅",
-            reply_markup=main_menu_keyboard(),
+            reply_markup=main_menu_keyboard(is_admin=settings.is_admin_id(getattr(update.effective_user, "id", None))),
         )
         return
 

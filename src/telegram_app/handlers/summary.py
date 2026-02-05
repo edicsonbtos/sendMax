@@ -26,7 +26,7 @@ BTN_BACK = "⬅️ Volver"
 
 
 def _is_admin(update: Update) -> bool:
-    return bool(settings.ADMIN_TELEGRAM_USER_ID) and update.effective_user.id == int(settings.ADMIN_TELEGRAM_USER_ID)
+    return settings.is_admin_id(getattr(update.effective_user, 'id', None))
 
 
 def _fmt_money_latam(x: Decimal) -> str:
