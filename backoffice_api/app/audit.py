@@ -8,7 +8,7 @@ def get_profit_daily(days: int = 30):
         SELECT
             DATE(created_at) as day,
             COUNT(*) as total_orders,
-            SUM(CASE WHEN status = 'PAGADA' THEN profit_usd ELSE 0 END) as total_profit,
+            SUM(CASE WHEN status = 'PAGADA' THEN profit_usdt ELSE 0 END) as total_profit,
             SUM(CASE WHEN status = 'PAGADA' THEN amount_origin ELSE 0 END) as total_volume
         FROM orders
         WHERE created_at >= NOW() - make_interval(days => %s)
@@ -21,7 +21,6 @@ def get_profit_daily(days: int = 30):
 
 def get_stuck_orders():
     """Órdenes antiguas en estados intermedios"""
-    # Órdenes esperando verificación de origen (>24h)
     stuck_origin = fetch_all(
         """
         SELECT public_id, created_at, status, origin_country
@@ -32,7 +31,6 @@ def get_stuck_orders():
         """
     )
     
-    # Órdenes esperando comprobante de pago (>48h)
     stuck_payment = fetch_all(
         """
         SELECT public_id, created_at, status, destination_country_code, awaiting_paid_proof_by
@@ -56,7 +54,7 @@ def get_operators_ranking(days: int = 7):
             paid_by_user_telegram_id,
             paid_by_user_name,
             COUNT(*) as orders_paid,
-            SUM(profit_usd) as total_profit
+            SUM(profit_usdt) as total_profit
         FROM orders
         WHERE status = 'PAGADA'
           AND paid_at >= NOW() - make_interval(days => %s)
