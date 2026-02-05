@@ -44,6 +44,11 @@ async def enter_payment_methods(update: Update, context: ContextTypes.DEFAULT_TY
     Entrada al módulo: mostrar selector de país.
     """
     context.user_data["pm_mode"] = True
+    # Exclusividad: salir de otros modos de menú
+    context.user_data.pop("summary_mode", None)
+    context.user_data.pop("rates_mode", None)
+    context.user_data.pop("ref_mode", None)
+
 
     await update.message.reply_text(
         "🏦 Métodos de pago\n\nSelecciona el país para ver los datos 👇",

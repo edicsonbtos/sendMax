@@ -192,6 +192,11 @@ def _proof_buttons(rows) -> InlineKeyboardMarkup:
 
 
 async def enter_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Exclusividad: salir de otros modos de menú
+    context.user_data.pop("pm_mode", None)
+    context.user_data.pop("rates_mode", None)
+    context.user_data.pop("ref_mode", None)
+
     telegram_id = update.effective_user.id
     me = get_user_by_telegram_id(telegram_id)
     if not me:
