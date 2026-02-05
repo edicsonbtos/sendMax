@@ -118,6 +118,10 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             )
         return
 
+    def _clear_menu_modes() -> None:
+        for k in ("pm_mode", "summary_mode", "rates_mode", "ref_mode"):
+            context.user_data.pop(k, None)
+
     # Routers de estado
     # Tasas por país (mini-modo)
     if context.user_data.get("rates_mode") or text in {"🌍 Ver por país", "⬅️ Volver"}:
@@ -158,14 +162,17 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     if text == BTN_REFERRALS:
+        _clear_menu_modes()
         await enter_referrals(update, context)
         return
 
     if text == BTN_SUMMARY:
+        _clear_menu_modes()
         await enter_summary(update, context)
         return
 
     if text == BTN_PAYMENT_METHODS:
+        _clear_menu_modes()
         await enter_payment_methods(update, context)
         return
 
@@ -177,10 +184,12 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     if text == BTN_RATES:
+        _clear_menu_modes()
         await show_rates(update, context)
         return
 
     if text == BTN_WALLET:
+        _clear_menu_modes()
         await wallet_menu(update, context)
         return
 
