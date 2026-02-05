@@ -21,38 +21,43 @@ def get_profit_daily(days: int = 30):
 
 def get_stuck_orders():
     """Órdenes antiguas en estados intermedios"""
-    stuck_origin = fetch_all(
+    # Simplificado: solo contar, no traer detalles
+    stuck_origin = fetch_one(
         """
-        SELECT public_id, created_at, status, origin_country
+        SELECT COUNT(*) as count
         FROM orders
         WHERE status = 'ORIGIN_VERIFYING'
           AND created_at < NOW() - INTERVAL '24 hours'
-        ORDER BY created_at ASC
         """
     )
     
-    stuck_payment = fetch_all(
+    stuck_payment = fetch_one(
         """
-        SELECT public_id, created_at, status, destination_country_code, awaiting_paid_proof_by
+        SELECT COUNT(*) as count
         FROM orders
         WHERE awaiting_paid_proof = true
           AND created_at < NOW() - INTERVAL '48 hours'
-        ORDER BY created_at ASC
         """
     )
     
     return {
-        "stuck_origin_verification": stuck_origin,
-        "stuck_payment_proof": stuck_payment
+        "stuck_origin_verification_count": stuck_origin["count"] if stuck_origin else 0,
+        "stuck_payment_proof_count": stuck_payment["count"] if stuck_payment else 0
     }
 
 def get_operators_ranking(days: int = 7):
     """Ranking de operadores por profit y cantidad"""
+    # Verificar primero si hay datos
+    count = fetch_one("SELECT COUNT(*) as total FROM orders WHERE status = 'PAGADA' AND paid_by_user_telegram_id IS NOT NULL")
+    
+    if not count or count["total"] == 0:
+        return []
+    
     rows = fetch_all(
         """
         SELECT
-            paid_by_user_telegram_id,
-            paid_by_user_name,
+            paid_by_user_telegram_id as telegram_id,
+            paid_by_user_name as name,
             COUNT(*) as orders_paid,
             SUM(profit_usdt) as total_profit
         FROM orders
