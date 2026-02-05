@@ -11,7 +11,7 @@ def get_profit_daily(days: int = 30):
             SUM(CASE WHEN status = 'PAGADA' THEN profit_usd ELSE 0 END) as total_profit,
             SUM(CASE WHEN status = 'PAGADA' THEN amount_origin ELSE 0 END) as total_volume
         FROM orders
-        WHERE created_at >= NOW() - INTERVAL '%s days'
+        WHERE created_at >= NOW() - make_interval(days => %s)
         GROUP BY DATE(created_at)
         ORDER BY day DESC
         """,
@@ -27,7 +27,7 @@ def get_stuck_orders():
         SELECT public_id, created_at, status, origin_country
         FROM orders
         WHERE status = 'ORIGIN_VERIFYING'
-          AND created_at < NOW() - INTERVAL '24 hours'
+          AND created_at < NOW() - make_interval(hours => 24)
         ORDER BY created_at ASC
         """
     )
@@ -35,10 +35,10 @@ def get_stuck_orders():
     # Órdenes esperando comprobante de pago (>48h)
     stuck_payment = fetch_all(
         """
-        SELECT public_id, created_at, status, destination_country, awaiting_paid_proof_by
+        SELECT public_id, created_at, status, destination_country_code, awaiting_paid_proof_by
         FROM orders
         WHERE awaiting_paid_proof = true
-          AND created_at < NOW() - INTERVAL '48 hours'
+          AND created_at < NOW() - make_interval(hours => 48)
         ORDER BY created_at ASC
         """
     )
@@ -53,15 +53,15 @@ def get_operators_ranking(days: int = 7):
     rows = fetch_all(
         """
         SELECT
-            paid_by_telegram_id,
-            paid_by_name,
+            paid_by_user_telegram_id,
+            paid_by_user_name,
             COUNT(*) as orders_paid,
             SUM(profit_usd) as total_profit
         FROM orders
         WHERE status = 'PAGADA'
-          AND paid_at >= NOW() - INTERVAL '%s days'
-          AND paid_by_telegram_id IS NOT NULL
-        GROUP BY paid_by_telegram_id, paid_by_name
+          AND paid_at >= NOW() - make_interval(days => %s)
+          AND paid_by_user_telegram_id IS NOT NULL
+        GROUP BY paid_by_user_telegram_id, paid_by_user_name
         ORDER BY total_profit DESC
         """,
         (days,)
