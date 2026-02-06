@@ -27,8 +27,19 @@ from src.db.repositories.orders_repo import (
 )
 from src.db.repositories.users_repo import get_telegram_id_by_user_id
 from src.db.repositories.wallet_repo import add_ledger_entry, add_ledger_entry_tx
+from src.db.repositories.origin_wallet_repo import add_origin_receipt_daily
 
 logger = logging.getLogger(__name__)
+
+# Moneda fiat por país de ORIGEN (ajusta según tu operación)
+ORIGIN_FIAT_CURRENCY = {
+    "PERU": "PEN",
+    "CHILE": "CLP",
+    "VENEZUELA": "VES",
+    "COLOMBIA": "COP",
+    "USA": "USD",
+}
+
 
 
 def _q8(d: Decimal) -> Decimal:
@@ -145,7 +156,29 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
             except Exception:
                 pass
 
-            # Notificar a PAYMENTS: enviar resumen (sin comprobante origen) con teclado actual
+            
+            # Registrar ingreso ORIGEN para auditoría/cierre diario (origin_receipts_daily)
+            try:
+                from datetime import datetime, timedelta, timezone
+                from decimal import Decimal
+
+                # día en Venezuela (UTC-4)
+                VET = timezone(timedelta(hours=-4))
+                day_vet = datetime.now(tz=timezone.utc).astimezone(VET).date()
+
+                fiat_currency = ORIGIN_FIAT_CURRENCY.get(str(order.origin_country), str(order.origin_country))
+                add_origin_receipt_daily(
+                    day=day_vet,
+                    origin_country=str(order.origin_country),
+                    fiat_currency=str(fiat_currency),
+                    amount_fiat=Decimal(str(order.amount_origin)),
+                    approved_by_telegram_id=getattr(update.effective_user, "id", None),
+                    approved_note=f"ORIGEN OK por {(getattr(update.effective_user, 'full_name', None) or getattr(update.effective_user, 'username', None) or 'operador')}",
+                    ref_order_public_id=int(public_id),
+                )
+            except Exception:
+                logger.exception("orig_ok: no pude insertar origin_receipts_daily para orden %s", public_id)
+# Notificar a PAYMENTS: enviar resumen (sin comprobante origen) con teclado actual
             try:
                 target_chat_id = int(settings.PAYMENTS_TELEGRAM_CHAT_ID)
                 origin = str(order.origin_country)
