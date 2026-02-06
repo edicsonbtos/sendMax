@@ -430,6 +430,7 @@ def create_origin_sweep(payload: OriginSweepIn, api_key: str = Depends(verify_ap
         RETURNING id
         """,
         (d, payload.origin_country, payload.fiat_currency, payload.amount_fiat, payload.created_by_telegram_id, payload.note, payload.external_ref),
+        rw=True,
     )
 
     return {"ok": True, "id": row["id"] if row else None}
