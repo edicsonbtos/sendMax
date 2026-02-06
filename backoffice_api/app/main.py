@@ -462,3 +462,135 @@ def create_origin_sweep_debug(payload: OriginSweepIn, api_key: str = Depends(ver
         return {"ok": False, "db_error": str(e)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+class OriginCloseIn(BaseModel):
+    day: str
+    origin_country: str
+    fiat_currency: str
+    closed_by_telegram_id: int | None = None
+    note: str | None = None
+
+@app.get("/origin-wallets/close-report")
+def origin_wallets_close_report(day: str = Query(...), api_key: str = Depends(verify_api_key)):
+    from datetime import date as _date
+    try:
+        d = _date.fromisoformat(day)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid day format. Use YYYY-MM-DD")
+
+    # balances (in/out/net)
+    balances = fetch_all(
+        """
+        WITH ins AS (
+          SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS in_amount
+          FROM origin_receipts_daily
+          WHERE day=%s
+          GROUP BY origin_country, fiat_currency
+        ),
+        outs AS (
+          SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS out_amount
+          FROM origin_sweeps
+          WHERE day=%s
+          GROUP BY origin_country, fiat_currency
+        )
+        SELECT
+          COALESCE(ins.origin_country, outs.origin_country) AS origin_country,
+          COALESCE(ins.fiat_currency, outs.fiat_currency) AS fiat_currency,
+          COALESCE(ins.in_amount, 0) AS in_amount,
+          COALESCE(outs.out_amount, 0) AS out_amount,
+          COALESCE(ins.in_amount, 0) - COALESCE(outs.out_amount, 0) AS net_amount
+        FROM ins
+        FULL OUTER JOIN outs
+          ON ins.origin_country=outs.origin_country AND ins.fiat_currency=outs.fiat_currency
+        ORDER BY origin_country, fiat_currency
+        """,
+        (d, d),
+    )
+
+    # pendientes ORIGEN_VERIFICANDO del día por país
+    pending = fetch_all(
+        """
+        SELECT origin_country, COUNT(*) AS cnt
+        FROM orders
+        WHERE status='ORIGEN_VERIFICANDO'
+          AND created_at >= (%s::date)::timestamptz
+          AND created_at < ((%s::date)+interval '1 day')::timestamptz
+        GROUP BY origin_country
+        """,
+        (d, d),
+    )
+    pending_map = {r["origin_country"]: int(r["cnt"]) for r in pending}
+
+    # cierres existentes
+    closures = fetch_all(
+        """
+        SELECT origin_country, fiat_currency, closed_at, closed_by_telegram_id, note, net_amount_at_close
+        FROM origin_wallet_closures
+        WHERE day=%s
+        """,
+        (d,),
+    )
+    close_map = {(r["origin_country"], r["fiat_currency"]): r for r in closures}
+
+    def iso(x): return x.isoformat() if x else None
+
+    out = []
+    for r in balances:
+        key = (r["origin_country"], r["fiat_currency"])
+        closed = close_map.get(key)
+        net = float(r["net_amount"])
+        pend = pending_map.get(r["origin_country"], 0)
+        out.append({
+            "origin_country": r["origin_country"],
+            "fiat_currency": r["fiat_currency"],
+            "in_amount": float(r["in_amount"]),
+            "out_amount": float(r["out_amount"]),
+            "net_amount": net,
+            "pending_origin_verificando_count": pend,
+            "ok_to_close": (net == 0.0 and pend == 0),
+            "closed": bool(closed),
+            "closed_at": iso(closed["closed_at"]) if closed else None,
+            "closed_by_telegram_id": closed["closed_by_telegram_id"] if closed else None,
+            "close_note": closed["note"] if closed else None,
+            "net_amount_at_close": float(closed["net_amount_at_close"]) if closed else None,
+        })
+
+    return {"ok": True, "day": day, "items": out}
+
+@app.post("/origin-wallets/close")
+def origin_wallets_close(payload: OriginCloseIn, api_key: str = Depends(verify_api_key)):
+    from datetime import date as _date
+    try:
+        d = _date.fromisoformat(payload.day)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid day format. Use YYYY-MM-DD")
+
+    # calcular net actual
+    net_row = fetch_one(
+        """
+        WITH ins AS (
+          SELECT COALESCE(SUM(amount_fiat),0) AS in_amount
+          FROM origin_receipts_daily
+          WHERE day=%s AND origin_country=%s AND fiat_currency=%s
+        ),
+        outs AS (
+          SELECT COALESCE(SUM(amount_fiat),0) AS out_amount
+          FROM origin_sweeps
+          WHERE day=%s AND origin_country=%s AND fiat_currency=%s
+        )
+        SELECT (SELECT in_amount FROM ins) - (SELECT out_amount FROM outs) AS net_amount
+        """,
+        (d, payload.origin_country, payload.fiat_currency, d, payload.origin_country, payload.fiat_currency),
+    )
+    net_amount = float(net_row["net_amount"]) if net_row and net_row["net_amount"] is not None else 0.0
+
+    # insertar cierre (RW)
+    row = fetch_one(
+        """
+        INSERT INTO origin_wallet_closures (day, origin_country, fiat_currency, closed_by_telegram_id, note, net_amount_at_close)
+        VALUES (%s,%s,%s,%s,%s,%s)
+        RETURNING id
+        """,
+        (d, payload.origin_country, payload.fiat_currency, payload.closed_by_telegram_id, payload.note, net_amount),
+        rw=True,
+    )
+    return {"ok": True, "id": row["id"] if row else None, "net_amount_at_close": net_amount}
