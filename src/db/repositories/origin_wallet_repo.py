@@ -4,9 +4,15 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+import psycopg
 from psycopg.rows import dict_row
 
-from src.db.connection import get_conn
+from src.config.settings import settings
+
+
+def get_conn():
+    # mismo patrón que repos existentes (abre conexión desde settings.DATABASE_URL)
+    return psycopg.connect(settings.DATABASE_URL)
 
 
 @dataclass
@@ -30,10 +36,6 @@ def add_origin_receipt_daily(
     approved_note: str | None = None,
     ref_order_public_id: int | None = None,
 ) -> int:
-    """
-    Inserta un movimiento diario de ORIGEN (dinero recibido).
-    Devuelve id.
-    """
     sql = """
         INSERT INTO origin_receipts_daily
           (day, origin_country, fiat_currency, amount_fiat,
