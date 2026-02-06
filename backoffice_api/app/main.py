@@ -403,3 +403,33 @@ def origin_wallets_balance(day: str = Query(..., description="YYYY-MM-DD"), api_
         )
 
     return {"ok": True, "day": day, "balances": out}
+from pydantic import BaseModel
+
+class OriginSweepIn(BaseModel):
+    day: str  # YYYY-MM-DD
+    origin_country: str
+    fiat_currency: str
+    amount_fiat: float
+    created_by_telegram_id: int | None = None
+    note: str | None = None
+    external_ref: str | None = None
+
+@app.post("/origin-wallets/sweeps")
+def create_origin_sweep(payload: OriginSweepIn, api_key: str = Depends(verify_api_key)):
+    from datetime import date as _date
+    try:
+        d = _date.fromisoformat(payload.day)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid day format. Use YYYY-MM-DD")
+
+    # Insert
+    row = fetch_one(
+        """
+        INSERT INTO origin_sweeps (day, origin_country, fiat_currency, amount_fiat, created_by_telegram_id, note, external_ref)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)
+        RETURNING id
+        """,
+        (d, payload.origin_country, payload.fiat_currency, payload.amount_fiat, payload.created_by_telegram_id, payload.note, payload.external_ref),
+    )
+
+    return {"ok": True, "id": row["id"] if row else None}
