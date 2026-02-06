@@ -449,3 +449,16 @@ def diag_db_users(api_key: str = Depends(verify_api_key)):
     ro = fetch_one("SELECT current_user AS u", ())
     rw = fetch_one("SELECT current_user AS u", (), rw=True)
     return {"ok": True, "ro_user": ro["u"] if ro else None, "rw_user": rw["u"] if rw else None}
+# --- TEMP: safe error wrapper for sweeps POST ---
+from psycopg import Error as PsycopgError
+
+_old_create_origin_sweep = create_origin_sweep
+
+@app.post("/origin-wallets/sweeps_debug")
+def create_origin_sweep_debug(payload: OriginSweepIn, api_key: str = Depends(verify_api_key)):
+    try:
+        return _old_create_origin_sweep(payload, api_key)
+    except PsycopgError as e:
+        return {"ok": False, "db_error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
