@@ -434,3 +434,12 @@ def create_origin_sweep(payload: OriginSweepIn, api_key: str = Depends(verify_ap
     )
 
     return {"ok": True, "id": row["id"] if row else None}
+@app.get("/diag/env")
+def diag_env(api_key: str = Depends(verify_api_key)):
+    import os
+    return {
+        "ok": True,
+        "has_DATABASE_URL_RO": bool(os.getenv("DATABASE_URL_RO")),
+        "has_DATABASE_URL_RW": bool(os.getenv("DATABASE_URL_RW")),
+        "has_BACKOFFICE_API_KEY": bool(os.getenv("BACKOFFICE_API_KEY")),
+    }
