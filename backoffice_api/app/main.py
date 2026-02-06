@@ -594,3 +594,6 @@ def origin_wallets_close(payload: OriginCloseIn, api_key: str = Depends(verify_a
         rw=True,
     )
     return {"ok": True, "id": row["id"] if row else None, "net_amount_at_close": net_amount}
+@app.get("/version2")
+def version2():
+    return {"ok": True, "marker": "deployed_after_close_endpoints", "ts": "2026-02-06"}
