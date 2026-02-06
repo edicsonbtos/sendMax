@@ -148,3 +148,79 @@ def operators_ranking(days: int = Query(default=7, le=30), api_key: str = Depend
     from .audit import get_operators_ranking
     data = get_operators_ranking(days)
     return {"days": days, "operators": data}
+from datetime import datetime, date, timedelta, timezone
+from fastapi import Query
+
+# --- Daily close (Venezuela UTC-4) ---
+VET = timezone(timedelta(hours=-4))
+
+@app.get("/daily-close")
+def daily_close(
+    day: str = Query(..., description="YYYY-MM-DD en hora Venezuela"),
+    api_key: str = Depends(verify_api_key),
+):
+    try:
+        d = date.fromisoformat(day)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid day format. Use YYYY-MM-DD")
+
+    start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=VET)
+    end_local = start_local + timedelta(days=1)
+
+    # Convertimos a UTC para comparar con created_at (timestamptz)
+    start_utc = start_local.astimezone(timezone.utc)
+    end_utc = end_local.astimezone(timezone.utc)
+
+    # 1) Conteo por status
+    row = fetch_one(
+        """
+        SELECT
+          COUNT(*) FILTER (WHERE status='CREADA') AS creadas,
+          COUNT(*) FILTER (WHERE status='ORIGEN_VERIFICANDO') AS origen_verificando,
+          COUNT(*) FILTER (WHERE status='ORIGEN_CONFIRMADO') AS origen_confirmado,
+          COUNT(*) FILTER (WHERE status='EN_PROCESO') AS en_proceso,
+          COUNT(*) FILTER (WHERE status='PAGADA') AS pagadas,
+          COUNT(*) FILTER (WHERE status='CANCELADA') AS canceladas,
+          COUNT(*) FILTER (WHERE awaiting_paid_proof=true) AS awaiting_paid_proof
+        FROM orders
+        WHERE created_at >= %s AND created_at < %s
+        """,
+        (start_utc, end_utc),
+    )
+
+    # 2) Profit del día (solo pagadas)
+    row2 = fetch_one(
+        """
+        SELECT COALESCE(SUM(profit_usdt), 0) AS profit_usdt
+        FROM orders
+        WHERE status='PAGADA'
+          AND paid_at >= %s AND paid_at < %s
+        """,
+        (start_utc, end_utc),
+    )
+
+    # 3) Volumen por origen (monto origen fiat)
+    rows3 = fetch_all(
+        """
+        SELECT origin_country, COALESCE(SUM(amount_origin),0) AS total_amount_origin
+        FROM orders
+        WHERE created_at >= %s AND created_at < %s
+        GROUP BY origin_country
+        ORDER BY total_amount_origin DESC
+        """,
+        (start_utc, end_utc),
+    )
+
+    by_origin = []
+    for r in rows3:
+        by_origin.append({"origin_country": r["origin_country"], "amount_origin_sum": float(r["total_amount_origin"])})
+
+    return {
+        "ok": True,
+        "day_local": day,
+        "tz": "VET(UTC-4)",
+        "window_utc": {"start": start_utc.isoformat(), "end": end_utc.isoformat()},
+        "status_counts": dict(row) if row else {},
+        "profit_usdt_paid_window": float(row2["profit_usdt"]) if row2 else 0.0,
+        "volume_by_origin_amount_origin": by_origin,
+    }
