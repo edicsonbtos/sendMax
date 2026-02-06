@@ -286,3 +286,71 @@ def alerts_stuck_30m(api_key: str = Depends(verify_api_key)):
             for r in pay_rows
         ],
     }
+from datetime import date as _date
+
+@app.get("/origin-wallets/daily")
+def origin_wallets_daily(day: str = Query(..., description="YYYY-MM-DD (Venezuela)"), api_key: str = Depends(verify_api_key)):
+    try:
+        d = _date.fromisoformat(day)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid day format. Use YYYY-MM-DD")
+
+    # Totales por país/moneda (lo que se aprobó/registró)
+    totals = fetch_all(
+        """
+        SELECT origin_country, fiat_currency,
+               COALESCE(SUM(amount_fiat),0) AS total_amount_fiat,
+               COUNT(*) AS movements
+        FROM origin_receipts_daily
+        WHERE day=%s
+        GROUP BY origin_country, fiat_currency
+        ORDER BY origin_country, fiat_currency
+        """,
+        (d,),
+    )
+
+    totals_out = [
+        {
+            "origin_country": r["origin_country"],
+            "fiat_currency": r["fiat_currency"],
+            "total_amount_fiat": float(r["total_amount_fiat"]),
+            "movements": int(r["movements"]),
+        }
+        for r in totals
+    ]
+
+    # Movimientos del día (audit)
+    moves = fetch_all(
+        """
+        SELECT day, origin_country, fiat_currency, amount_fiat,
+               ref_order_public_id,
+               created_at, created_by_telegram_id, note,
+               approved_at, approved_by_telegram_id, approved_note
+        FROM origin_receipts_daily
+        WHERE day=%s
+        ORDER BY created_at ASC
+        """,
+        (d,),
+    )
+
+    def iso(x):
+        return x.isoformat() if x else None
+
+    moves_out = [
+        {
+            "day": str(r["day"]),
+            "origin_country": r["origin_country"],
+            "fiat_currency": r["fiat_currency"],
+            "amount_fiat": float(r["amount_fiat"]) if r["amount_fiat"] is not None else None,
+            "ref_order_public_id": r["ref_order_public_id"],
+            "created_at": iso(r["created_at"]),
+            "created_by_telegram_id": r["created_by_telegram_id"],
+            "note": r["note"],
+            "approved_at": iso(r["approved_at"]),
+            "approved_by_telegram_id": r["approved_by_telegram_id"],
+            "approved_note": r["approved_note"],
+        }
+        for r in moves
+    ]
+
+    return {"ok": True, "day": day, "totals": totals_out, "movements": moves_out}
