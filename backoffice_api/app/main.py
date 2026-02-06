@@ -443,3 +443,9 @@ def diag_env(api_key: str = Depends(verify_api_key)):
         "has_DATABASE_URL_RW": bool(os.getenv("DATABASE_URL_RW")),
         "has_BACKOFFICE_API_KEY": bool(os.getenv("BACKOFFICE_API_KEY")),
     }
+@app.get("/diag/db-users")
+def diag_db_users(api_key: str = Depends(verify_api_key)):
+    # current_user en RO y RW, sin revelar URLs
+    ro = fetch_one("SELECT current_user AS u", ())
+    rw = fetch_one("SELECT current_user AS u", (), rw=True)
+    return {"ok": True, "ro_user": ro["u"] if ro else None, "rw_user": rw["u"] if rw else None}
