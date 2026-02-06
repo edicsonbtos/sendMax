@@ -224,3 +224,65 @@ def daily_close(
         "profit_usdt_paid_window": float(row2["profit_usdt"]) if row2 else 0.0,
         "volume_by_origin_amount_origin": by_origin,
     }
+from datetime import datetime, timedelta, timezone
+
+@app.get("/alerts/stuck-30m")
+def alerts_stuck_30m(api_key: str = Depends(verify_api_key)):
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=30)
+
+    origin_rows = fetch_all(
+        """
+        SELECT public_id, origin_country, dest_country, status, created_at, updated_at
+        FROM orders
+        WHERE status='ORIGEN_VERIFICANDO'
+          AND created_at < %s
+        ORDER BY created_at ASC
+        LIMIT 100
+        """,
+        (cutoff,),
+    )
+
+    pay_rows = fetch_all(
+        """
+        SELECT public_id, origin_country, dest_country, status,
+               awaiting_paid_proof_at, updated_at
+        FROM orders
+        WHERE awaiting_paid_proof = true
+          AND awaiting_paid_proof_at IS NOT NULL
+          AND awaiting_paid_proof_at < %s
+        ORDER BY awaiting_paid_proof_at ASC
+        LIMIT 100
+        """,
+        (cutoff,),
+    )
+
+    def iso(x):
+        return x.isoformat() if x else None
+
+    return {
+        "ok": True,
+        "cutoff_utc": cutoff.isoformat(),
+        "origin_verificando_stuck": [
+            {
+                "public_id": r["public_id"],
+                "origin_country": r["origin_country"],
+                "dest_country": r["dest_country"],
+                "status": r["status"],
+                "created_at": iso(r["created_at"]),
+                "updated_at": iso(r["updated_at"]),
+            }
+            for r in origin_rows
+        ],
+        "awaiting_paid_proof_stuck": [
+            {
+                "public_id": r["public_id"],
+                "origin_country": r["origin_country"],
+                "dest_country": r["dest_country"],
+                "status": r["status"],
+                "awaiting_paid_proof_at": iso(r["awaiting_paid_proof_at"]),
+                "updated_at": iso(r["updated_at"]),
+            }
+            for r in pay_rows
+        ],
+    }
