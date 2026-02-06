@@ -354,3 +354,52 @@ def origin_wallets_daily(day: str = Query(..., description="YYYY-MM-DD (Venezuel
     ]
 
     return {"ok": True, "day": day, "totals": totals_out, "movements": moves_out}
+@app.get("/origin-wallets/balance")
+def origin_wallets_balance(day: str = Query(..., description="YYYY-MM-DD"), api_key: str = Depends(verify_api_key)):
+    from datetime import date as _date
+    try:
+        d = _date.fromisoformat(day)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid day format. Use YYYY-MM-DD")
+
+    rows = fetch_all(
+        """
+        WITH ins AS (
+          SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS in_amount
+          FROM origin_receipts_daily
+          WHERE day=%s
+          GROUP BY origin_country, fiat_currency
+        ),
+        outs AS (
+          SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS out_amount
+          FROM origin_sweeps
+          WHERE day=%s
+          GROUP BY origin_country, fiat_currency
+        )
+        SELECT
+          COALESCE(ins.origin_country, outs.origin_country) AS origin_country,
+          COALESCE(ins.fiat_currency, outs.fiat_currency) AS fiat_currency,
+          COALESCE(ins.in_amount, 0) AS in_amount,
+          COALESCE(outs.out_amount, 0) AS out_amount,
+          COALESCE(ins.in_amount, 0) - COALESCE(outs.out_amount, 0) AS net_amount
+        FROM ins
+        FULL OUTER JOIN outs
+          ON ins.origin_country=outs.origin_country AND ins.fiat_currency=outs.fiat_currency
+        ORDER BY origin_country, fiat_currency
+        """,
+        (d, d),
+    )
+
+    out = []
+    for r in rows:
+        out.append(
+            {
+                "origin_country": r["origin_country"],
+                "fiat_currency": r["fiat_currency"],
+                "in_amount": float(r["in_amount"]),
+                "out_amount": float(r["out_amount"]),
+                "net_amount": float(r["net_amount"]),
+            }
+        )
+
+    return {"ok": True, "day": day, "balances": out}
