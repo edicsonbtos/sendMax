@@ -60,38 +60,76 @@ def metrics_overview(api_key: str = Depends(verify_api_key)):
 
 @app.get("/orders")
 def list_orders(limit: int = Query(default=20, le=100), api_key: str = Depends(verify_api_key)):
-    orders = fetch_all(
+    rows = fetch_all(
         """
         SELECT
           public_id, created_at, status, awaiting_paid_proof,
-          origin_country, destination_country, amount_origin, amount_destination,
-          destination_type, beneficiary
+          origin_country, dest_country,
+          amount_origin, payout_dest, profit_usdt,
+          awaiting_paid_proof_at, paid_at, updated_at
         FROM orders
         ORDER BY created_at DESC
         LIMIT %s
         """,
-        (limit,)
+        (limit,),
     )
-    return {"orders": orders}
+    orders = []
+    for r in rows:
+        orders.append(
+            {
+                "public_id": r["public_id"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                "status": r["status"],
+                "awaiting_paid_proof": bool(r["awaiting_paid_proof"]),
+                "origin_country": r["origin_country"],
+                "dest_country": r["dest_country"],
+                "amount_origin": float(r["amount_origin"]) if r["amount_origin"] is not None else None,
+                "payout_dest": float(r["payout_dest"]) if r["payout_dest"] is not None else None,
+                "profit_usdt": float(r["profit_usdt"]) if r["profit_usdt"] is not None else None,
+                "awaiting_paid_proof_at": r["awaiting_paid_proof_at"].isoformat() if r["awaiting_paid_proof_at"] else None,
+                "paid_at": r["paid_at"].isoformat() if r["paid_at"] else None,
+                "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+            }
+        )
+    return {"count": len(orders), "orders": orders}
 
 @app.get("/orders/{public_id}")
-def order_detail(public_id: str, api_key: str = Depends(verify_api_key)):
+def order_detail(public_id: int, api_key: str = Depends(verify_api_key)):
     order = fetch_one(
-        "SELECT * FROM orders WHERE public_id=%s",
-        (public_id,)
+        """
+        SELECT *
+        FROM orders
+        WHERE public_id=%s
+        LIMIT 1
+        """,
+        (public_id,),
     )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    ledger = fetch_all(
+    ledger_rows = fetch_all(
         """
-        SELECT * FROM ledger
-        WHERE order_id=%s
+        SELECT user_id, amount_usdt, type, ref_order_public_id, memo, created_at
+        FROM wallet_ledger
+        WHERE ref_order_public_id=%s
         ORDER BY created_at ASC
         """,
-        (order["id"],)
+        (public_id,),
     )
-    
+
+    ledger = []
+    for r in ledger_rows:
+        ledger.append(
+            {
+                "user_id": r["user_id"],
+                "amount_usdt": float(r["amount_usdt"]) if r["amount_usdt"] is not None else None,
+                "type": r["type"],
+                "ref_order_public_id": r["ref_order_public_id"],
+                "memo": r["memo"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            }
+        )
+
     return {"order": order, "ledger": ledger}
 
 @app.get("/metrics/profit_daily")
