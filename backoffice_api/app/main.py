@@ -149,7 +149,6 @@ def operators_ranking(days: int = Query(default=7, le=30), api_key: str = Depend
     data = get_operators_ranking(days)
     return {"days": days, "operators": data}
 from datetime import datetime, date, timedelta, timezone
-from fastapi import Query
 
 # --- Daily close (Venezuela UTC-4) ---
 VET = timezone(timedelta(hours=-4))
@@ -597,3 +596,40 @@ def origin_wallets_close(payload: OriginCloseIn, api_key: str = Depends(verify_a
 @app.get("/version2")
 def version2():
     return {"ok": True, "marker": "deployed_after_close_endpoints", "ts": "2026-02-06"}
+
+# ---- Added: GET /origin-wallets/sweeps (list) ----
+
+@app.get("/origin-wallets/sweeps")
+def list_origin_sweeps(
+    day: str = Query(..., description="YYYY-MM-DD"),
+    origin_country: str | None = Query(None),
+    x_api_key: str = Header(..., alias="X-API-KEY"),
+):
+    verify_api_key(x_api_key)
+
+    sql = """
+        SELECT
+            id,
+            day,
+            origin_country,
+            fiat_currency,
+            amount_fiat,
+            created_at,
+            created_by_telegram_id,
+            note,
+            external_ref
+        FROM origin_sweeps
+        WHERE day = %s
+    """
+    params: list = [day]
+
+    if origin_country:
+        sql += " AND origin_country = %s"
+        params.append(origin_country)
+
+    sql += " ORDER BY created_at DESC LIMIT 200"
+
+    rows = fetch_all(sql, tuple(params))
+    return {"ok": True, "day": day, "count": len(rows), "sweeps": rows}
+# ---- End added ----
+
