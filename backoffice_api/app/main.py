@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, Query, Request, Depends, HTTPException, status
+﻿from fastapi import FastAPI, Header, Query, Request, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 import os
