@@ -589,12 +589,19 @@ def origin_wallets_close(payload: OriginCloseIn, api_key: str = Depends(verify_a
         """
         INSERT INTO origin_wallet_closures (day, origin_country, fiat_currency, closed_by_telegram_id, note, net_amount_at_close)
         VALUES (%s,%s,%s,%s,%s,%s)
+        ON CONFLICT (day, origin_country, fiat_currency) DO NOTHING
         RETURNING id
         """,
         (d, payload.origin_country, payload.fiat_currency, payload.closed_by_telegram_id, payload.note, net_amount),
         rw=True,
     )
-    return {"ok": True, "id": row["id"] if row else None, "net_amount_at_close": net_amount}
+    if not row:
+        row = fetch_one(
+            "SELECT id FROM origin_wallet_closures WHERE day=%s AND origin_country=%s AND fiat_currency=%s",
+            (d, payload.origin_country, payload.fiat_currency),
+            rw=False,
+        )
+    return {"ok": True, "id": row["id"] if row else None, "net_amount_at_close": net_amount, "already_closed": True if row else False}
 @app.get("/version2")
 def version2():
     return {"ok": True, "marker": "deployed_after_close_endpoints", "ts": "2026-02-06"}
