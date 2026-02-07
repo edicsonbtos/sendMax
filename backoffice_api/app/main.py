@@ -4,7 +4,7 @@ from fastapi.security import APIKeyHeader
 import os
 from .db import fetch_one, fetch_all
 
-app = FastAPI(title="Sendmax Backoffice API", version="0.5.1")
+app = FastAPI(title="Sendmax Backoffice API", version="0.5.2")
 
 # Configuración de API Key
 API_KEY = os.getenv("BACKOFFICE_API_KEY")
