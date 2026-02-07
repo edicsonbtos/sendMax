@@ -7,7 +7,9 @@ from .db import fetch_one, fetch_all
 app = FastAPI(title="Sendmax Backoffice API", version="0.5.1")
 
 # Configuración de API Key
-API_KEY = os.getenv("BACKOFFICE_API_KEY", "dev-key-12345")
+API_KEY = os.getenv("BACKOFFICE_API_KEY")
+if not API_KEY:
+    raise RuntimeError("BACKOFFICE_API_KEY no está configurada en este servicio")
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
 async def verify_api_key(api_key: str = Depends(api_key_header)):
