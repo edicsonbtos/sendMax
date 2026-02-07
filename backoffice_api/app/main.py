@@ -633,3 +633,10 @@ def list_origin_sweeps(
     return {"ok": True, "day": day, "count": len(rows), "sweeps": rows}
 # ---- End added ----
 
+@app.get("/gitsha")
+def gitsha():
+    import os
+    return {
+        "ok": True,
+        "railway_commit": os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("RAILWAY_GIT_COMMIT") or "unknown",
+    }
