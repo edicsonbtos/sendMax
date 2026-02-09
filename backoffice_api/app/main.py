@@ -742,3 +742,9 @@ def put_admin_settings(
     )
 
     return {"ok": True, "key": key, "value_json": after_json}
+
+@app.get("/diag/db-roles")
+def diag_db_roles(api_key: str = Depends(verify_api_key)):
+    ro = fetch_one("SELECT current_user AS u", (), rw=False)
+    rw = fetch_one("SELECT current_user AS u", (), rw=True)
+    return {"ro_user": ro["u"] if ro else None, "rw_user": rw["u"] if rw else None}
