@@ -46,18 +46,43 @@ def metrics_overview(api_key: str = Depends(verify_api_key)):
           COUNT(*) FILTER (WHERE status='EN_PROCESO')  AS en_proceso,
           COUNT(*) FILTER (WHERE status='PAGADA')      AS pagadas,
           COUNT(*) FILTER (WHERE status='CANCELADA')   AS canceladas,
-          COUNT(*) FILTER (WHERE awaiting_paid_proof=true) AS awaiting_paid_proof
+          COUNT(*) FILTER (WHERE awaiting_paid_proof=true) AS awaiting_paid_proof,
+
+          -- Profit: sumamos profit_usdt solo de PAGADA (orden completada)
+          COALESCE(SUM(profit_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_usd,
+
+          -- Volumen: SOLO es correcto si amount_origin ya esta en USD.
+          -- Si NO esta en USD, dejalo en 0 y luego definimos la regla.
+          0::numeric AS total_volume_usd
         FROM orders
         """
     )
+
+    creadas = int(row["creadas"] or 0)
+    en_proceso = int(row["en_proceso"] or 0)
+    pagadas = int(row["pagadas"] or 0)
+    canceladas = int(row["canceladas"] or 0)
+
+    total_orders = creadas + en_proceso + pagadas + canceladas
+    pending_orders = creadas + en_proceso
+    completed_orders = pagadas
+
     return {
+        # Contrato esperado por el frontend (Overview)
+        "total_orders": total_orders,
+        "pending_orders": pending_orders,
+        "completed_orders": completed_orders,
+        "total_volume_usd": float(row["total_volume_usd"] or 0),
+        "total_profit_usd": float(row["total_profit_usd"] or 0),
+
+        # Extras (no rompen el frontend; utiles para otras vistas)
         "status_counts": {
-            "CREADA": row["creadas"],
-            "EN_PROCESO": row["en_proceso"],
-            "PAGADA": row["pagadas"],
-            "CANCELADA": row["canceladas"],
+            "CREADA": creadas,
+            "EN_PROCESO": en_proceso,
+            "PAGADA": pagadas,
+            "CANCELADA": canceladas,
         },
-        "awaiting_paid_proof": row["awaiting_paid_proof"]
+        "awaiting_paid_proof": int(row["awaiting_paid_proof"] or 0),
     }
 
 @app.get("/orders")
@@ -649,3 +674,9 @@ def gitsha():
         "ok": True,
         "railway_commit": os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("RAILWAY_GIT_COMMIT") or "unknown",
     }
+
+
+
+
+
+
