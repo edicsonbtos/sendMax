@@ -29,12 +29,15 @@ async def verify_api_key(api_key: str = Depends(api_key_header)):
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET"],
-    allow_headers=["X-API-KEY"],
-)
-
-@app.get("/health")
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://sendmax-bot.vercel.app"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)@app.get("/health")
 def health():
     return {"ok": True, "service": "backoffice-api", "version": "0.5.1"}
 
@@ -748,3 +751,4 @@ def diag_db_roles(api_key: str = Depends(verify_api_key)):
     ro = fetch_one("SELECT current_user AS u", (), rw=False)
     rw = fetch_one("SELECT current_user AS u", (), rw=True)
     return {"ro_user": ro["u"] if ro else None, "rw_user": rw["u"] if rw else None}
+
