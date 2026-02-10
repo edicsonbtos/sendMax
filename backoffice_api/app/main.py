@@ -982,3 +982,70 @@ def origin_wallets_current_balances(api_key: str = Depends(verify_api_key)):
         })
 
     return {"ok": True, "items": items}
+
+@app.get("/metrics/company-overview")
+def metrics_company_overview(api_key: str = Depends(verify_api_key)):
+    # 1) Orders + profit (similar a /metrics/overview pero agregamos más)
+    row = fetch_one(
+        """
+        SELECT
+          COUNT(*) AS total_orders,
+          COUNT(*) FILTER (WHERE status IN ('CREADA','EN_PROCESO')) AS pending_orders,
+          COUNT(*) FILTER (WHERE status='PAGADA') AS completed_orders,
+          COALESCE(SUM(profit_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_usd
+        FROM orders
+        """
+    )
+
+    # 2) Caja pendiente (billeteras origen): acumulado = total_in - total_out
+    w = fetch_all(
+        """
+        WITH ins AS (
+          SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS total_in
+          FROM origin_receipts_daily
+          GROUP BY origin_country, fiat_currency
+        ),
+        outs AS (
+          SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS total_out
+          FROM origin_sweeps
+          GROUP BY origin_country, fiat_currency
+        )
+        SELECT
+          COALESCE(ins.origin_country, outs.origin_country) AS origin_country,
+          COALESCE(ins.fiat_currency, outs.fiat_currency) AS fiat_currency,
+          COALESCE(ins.total_in, 0) - COALESCE(outs.total_out, 0) AS current_balance
+        FROM ins
+        FULL OUTER JOIN outs
+          ON ins.origin_country=outs.origin_country AND ins.fiat_currency=outs.fiat_currency
+        """
+    )
+
+    wallets = []
+    pending_total = 0.0
+    for r in w:
+        bal = float(r["current_balance"] or 0)
+        wallets.append({
+            "origin_country": r["origin_country"],
+            "fiat_currency": r["fiat_currency"],
+            "current_balance": bal,
+        })
+        if bal > 0:
+            pending_total += bal
+
+    top_pending = sorted([x for x in wallets if x["current_balance"] > 0], key=lambda x: x["current_balance"], reverse=True)[:10]
+
+    return {
+        "ok": True,
+        "orders": {
+            "total_orders": int(row["total_orders"] or 0),
+            "pending_orders": int(row["pending_orders"] or 0),
+            "completed_orders": int(row["completed_orders"] or 0),
+        },
+        "profit": {
+            "total_profit_usd": float(row["total_profit_usd"] or 0),
+        },
+        "origin_wallets": {
+            "pending_total": pending_total,
+            "top_pending": top_pending,
+        },
+    }
