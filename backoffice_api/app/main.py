@@ -985,7 +985,6 @@ def origin_wallets_current_balances(api_key: str = Depends(verify_api_key)):
 
 @app.get("/metrics/company-overview")
 def metrics_company_overview(api_key: str = Depends(verify_api_key)):
-    # 1) Orders + profit (similar a /metrics/overview pero agregamos más)
     row = fetch_one(
         """
         SELECT
@@ -997,7 +996,6 @@ def metrics_company_overview(api_key: str = Depends(verify_api_key)):
         """
     )
 
-    # 2) Caja pendiente (billeteras origen): acumulado = total_in - total_out
     w = fetch_all(
         """
         WITH ins AS (
@@ -1024,28 +1022,44 @@ def metrics_company_overview(api_key: str = Depends(verify_api_key)):
     pending_total = 0.0
     for r in w:
         bal = float(r["current_balance"] or 0)
-        wallets.append({
-            "origin_country": r["origin_country"],
-            "fiat_currency": r["fiat_currency"],
-            "current_balance": bal,
-        })
+        wallets.append({"origin_country": r["origin_country"], "fiat_currency": r["fiat_currency"], "current_balance": bal})
         if bal > 0:
             pending_total += bal
 
     top_pending = sorted([x for x in wallets if x["current_balance"] > 0], key=lambda x: x["current_balance"], reverse=True)[:10]
 
+    v_rows = fetch_all(
+        """
+        SELECT dest_currency, COALESCE(SUM(payout_dest),0) AS vol
+        FROM orders
+        WHERE status='PAGADA'
+        GROUP BY dest_currency
+        ORDER BY vol DESC
+        """
+    )
+    paid_by_dest_currency = [
+        {"dest_currency": r["dest_currency"], "volume": float(r["vol"] or 0)}
+        for r in v_rows
+        if r["dest_currency"] is not None
+    ]
+
+    v_row = fetch_one(
+        """
+        SELECT COALESCE(SUM(payout_dest), 0) AS vol
+        FROM orders
+        WHERE status='PAGADA' AND dest_currency IN ('USD','USDT')
+        """
+    )
+    paid_usd_usdt = float(v_row["vol"] or 0) if v_row else 0.0
+
     return {
         "ok": True,
         "orders": {
-            "total_orders": int(row["total_orders"] or 0),
-            "pending_orders": int(row["pending_orders"] or 0),
-            "completed_orders": int(row["completed_orders"] or 0),
+            "total_orders": int(row["total_orders"] or 0) if row else 0,
+            "pending_orders": int(row["pending_orders"] or 0) if row else 0,
+            "completed_orders": int(row["completed_orders"] or 0) if row else 0,
         },
-        "profit": {
-            "total_profit_usd": float(row["total_profit_usd"] or 0),
-        },
-        "origin_wallets": {
-            "pending_total": pending_total,
-            "top_pending": top_pending,
-        },
+        "profit": {"total_profit_usd": float(row["total_profit_usd"] or 0) if row else 0.0},
+        "origin_wallets": {"pending_total": pending_total, "top_pending": top_pending},
+        "volume": {"paid_usd_usdt": paid_usd_usdt, "paid_by_dest_currency": paid_by_dest_currency},
     }
