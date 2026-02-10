@@ -943,3 +943,42 @@ def origin_wallets_empty(payload: OriginEmptyIn, api_key: str = Depends(verify_a
     )
 
     return {"ok": True, "id": ins_row["id"] if ins_row else None, "emptied": current_balance}
+
+@app.get("/origin-wallets/current-balances")
+def origin_wallets_current_balances(api_key: str = Depends(verify_api_key)):
+    rows = fetch_all(
+        """
+        WITH ins AS (
+          SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS total_in
+          FROM origin_receipts_daily
+          GROUP BY origin_country, fiat_currency
+        ),
+        outs AS (
+          SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS total_out
+          FROM origin_sweeps
+          GROUP BY origin_country, fiat_currency
+        )
+        SELECT
+          COALESCE(ins.origin_country, outs.origin_country) AS origin_country,
+          COALESCE(ins.fiat_currency, outs.fiat_currency) AS fiat_currency,
+          COALESCE(ins.total_in, 0) AS total_in,
+          COALESCE(outs.total_out, 0) AS total_out,
+          COALESCE(ins.total_in, 0) - COALESCE(outs.total_out, 0) AS current_balance
+        FROM ins
+        FULL OUTER JOIN outs
+          ON ins.origin_country=outs.origin_country AND ins.fiat_currency=outs.fiat_currency
+        ORDER BY origin_country, fiat_currency
+        """
+    )
+
+    items = []
+    for r in rows:
+        items.append({
+            "origin_country": r["origin_country"],
+            "fiat_currency": r["fiat_currency"],
+            "total_in": float(r["total_in"] or 0),
+            "total_out": float(r["total_out"] or 0),
+            "current_balance": float(r["current_balance"] or 0),
+        })
+
+    return {"ok": True, "items": items}
