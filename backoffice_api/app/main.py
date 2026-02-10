@@ -755,3 +755,191 @@ def diag_db_roles(api_key: str = Depends(verify_api_key)):
     return {"ro_user": ro["u"] if ro else None, "rw_user": rw["u"] if rw else None}
 
 
+
+@app.get("/origin-wallets/balances2")
+def origin_wallets_balances2(
+    day: str = Query(..., description="YYYY-MM-DD"),
+    api_key: str = Depends(verify_api_key),
+):
+    from datetime import date as _date, timedelta
+    try:
+        d = _date.fromisoformat(day)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid day format. Use YYYY-MM-DD")
+
+    prev = d - timedelta(days=1)
+
+    rows = fetch_all(
+        """
+        WITH opening AS (
+          SELECT origin_country, fiat_currency, COALESCE(net_amount_at_close, 0) AS opening_balance
+          FROM origin_wallet_closures
+          WHERE day=%s
+        ),
+        ins AS (
+          SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS in_today
+          FROM origin_receipts_daily
+          WHERE day=%s
+          GROUP BY origin_country, fiat_currency
+        ),
+        outs AS (
+          SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS out_today
+          FROM origin_sweeps
+          WHERE day=%s
+          GROUP BY origin_country, fiat_currency
+        ),
+        keys AS (
+          SELECT origin_country, fiat_currency FROM opening
+          UNION SELECT origin_country, fiat_currency FROM ins
+          UNION SELECT origin_country, fiat_currency FROM outs
+        )
+        SELECT
+          k.origin_country,
+          k.fiat_currency,
+          COALESCE(o.opening_balance, 0) AS opening_balance,
+          COALESCE(i.in_today, 0) AS in_today,
+          COALESCE(o2.out_today, 0) AS out_today,
+          COALESCE(o.opening_balance, 0) + COALESCE(i.in_today, 0) - COALESCE(o2.out_today, 0) AS current_balance
+        FROM keys k
+        LEFT JOIN opening o ON o.origin_country=k.origin_country AND o.fiat_currency=k.fiat_currency
+        LEFT JOIN ins i ON i.origin_country=k.origin_country AND i.fiat_currency=k.fiat_currency
+        LEFT JOIN outs o2 ON o2.origin_country=k.origin_country AND o2.fiat_currency=k.fiat_currency
+        ORDER BY k.origin_country, k.fiat_currency
+        """,
+        (prev, d, d),
+    )
+
+    items = []
+    for r in rows:
+        items.append({
+            "origin_country": r["origin_country"],
+            "fiat_currency": r["fiat_currency"],
+            "opening_balance": float(r["opening_balance"] or 0),
+            "in_today": float(r["in_today"] or 0),
+            "out_today": float(r["out_today"] or 0),
+            "current_balance": float(r["current_balance"] or 0),
+        })
+
+    return {"ok": True, "day": day, "prev_day": str(prev), "items": items}
+
+class OriginWithdrawIn(BaseModel):
+    day: str
+    origin_country: str
+    fiat_currency: str
+    amount_fiat: float
+    created_by_telegram_id: int | None = None
+    note: str | None = None
+    external_ref: str | None = None
+
+@app.post("/origin-wallets/withdraw")
+def origin_wallets_withdraw(payload: OriginWithdrawIn, api_key: str = Depends(verify_api_key)):
+    from datetime import date as _date, timedelta
+    try:
+        d = _date.fromisoformat(payload.day)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid day format. Use YYYY-MM-DD")
+
+    if payload.amount_fiat <= 0:
+        raise HTTPException(status_code=400, detail="amount_fiat must be > 0")
+
+    # calcular saldo actual (opening + in_today - out_today)
+    prev = d - timedelta(days=1)
+    row = fetch_one(
+        """
+        WITH opening AS (
+          SELECT COALESCE(net_amount_at_close, 0) AS opening_balance
+          FROM origin_wallet_closures
+          WHERE day=%s AND origin_country=%s AND fiat_currency=%s
+        ),
+        ins AS (
+          SELECT COALESCE(SUM(amount_fiat),0) AS in_today
+          FROM origin_receipts_daily
+          WHERE day=%s AND origin_country=%s AND fiat_currency=%s
+        ),
+        outs AS (
+          SELECT COALESCE(SUM(amount_fiat),0) AS out_today
+          FROM origin_sweeps
+          WHERE day=%s AND origin_country=%s AND fiat_currency=%s
+        )
+        SELECT
+          COALESCE((SELECT opening_balance FROM opening), 0)
+          + COALESCE((SELECT in_today FROM ins), 0)
+          - COALESCE((SELECT out_today FROM outs), 0) AS current_balance
+        """,
+        (prev, payload.origin_country, payload.fiat_currency, d, payload.origin_country, payload.fiat_currency, d, payload.origin_country, payload.fiat_currency),
+    )
+    current_balance = float(row["current_balance"] or 0) if row else 0.0
+
+    if payload.amount_fiat > current_balance:
+        raise HTTPException(status_code=400, detail=f"Insufficient funds. current_balance={current_balance}")
+
+    # crear sweep (RW)
+    ins_row = fetch_one(
+        """
+        INSERT INTO origin_sweeps (day, origin_country, fiat_currency, amount_fiat, created_by_telegram_id, note, external_ref)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)
+        RETURNING id
+        """,
+        (d, payload.origin_country, payload.fiat_currency, payload.amount_fiat, payload.created_by_telegram_id, payload.note, payload.external_ref),
+        rw=True,
+    )
+
+    return {"ok": True, "id": ins_row["id"] if ins_row else None, "withdrawn": payload.amount_fiat, "current_balance_before": current_balance}
+
+class OriginEmptyIn(BaseModel):
+    day: str
+    origin_country: str
+    fiat_currency: str
+    created_by_telegram_id: int | None = None
+    note: str | None = None
+    external_ref: str | None = None
+
+@app.post("/origin-wallets/empty")
+def origin_wallets_empty(payload: OriginEmptyIn, api_key: str = Depends(verify_api_key)):
+    from datetime import date as _date, timedelta
+    try:
+        d = _date.fromisoformat(payload.day)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid day format. Use YYYY-MM-DD")
+
+    prev = d - timedelta(days=1)
+    row = fetch_one(
+        """
+        WITH opening AS (
+          SELECT COALESCE(net_amount_at_close, 0) AS opening_balance
+          FROM origin_wallet_closures
+          WHERE day=%s AND origin_country=%s AND fiat_currency=%s
+        ),
+        ins AS (
+          SELECT COALESCE(SUM(amount_fiat),0) AS in_today
+          FROM origin_receipts_daily
+          WHERE day=%s AND origin_country=%s AND fiat_currency=%s
+        ),
+        outs AS (
+          SELECT COALESCE(SUM(amount_fiat),0) AS out_today
+          FROM origin_sweeps
+          WHERE day=%s AND origin_country=%s AND fiat_currency=%s
+        )
+        SELECT
+          COALESCE((SELECT opening_balance FROM opening), 0)
+          + COALESCE((SELECT in_today FROM ins), 0)
+          - COALESCE((SELECT out_today FROM outs), 0) AS current_balance
+        """,
+        (prev, payload.origin_country, payload.fiat_currency, d, payload.origin_country, payload.fiat_currency, d, payload.origin_country, payload.fiat_currency),
+    )
+    current_balance = float(row["current_balance"] or 0) if row else 0.0
+
+    if current_balance <= 0:
+        return {"ok": True, "emptied": 0.0, "message": "Already empty"}
+
+    ins_row = fetch_one(
+        """
+        INSERT INTO origin_sweeps (day, origin_country, fiat_currency, amount_fiat, created_by_telegram_id, note, external_ref)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)
+        RETURNING id
+        """,
+        (d, payload.origin_country, payload.fiat_currency, current_balance, payload.created_by_telegram_id, payload.note, payload.external_ref),
+        rw=True,
+    )
+
+    return {"ok": True, "id": ins_row["id"] if ins_row else None, "emptied": current_balance}
