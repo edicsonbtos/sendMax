@@ -388,7 +388,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
             exec_sell = sell_dest_snapshot
             logger.warning(f"Orden #{public_id}: Binance no disponible, usando snapshot para profit_real")
 
-        # 3. Sponsor split (usa profit TEÓRICO para pagar al operador - consistente)
+        # 3. Sponsor split (usa profit REAL para pagar al operador)
         sponsor_id = None
         try:
             with psycopg.connect(settings.DATABASE_URL) as rconn:
@@ -399,13 +399,16 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         except Exception:
             sponsor_id = None
 
+        # Usar profit REAL para distribución de ganancias
+        profit_para_distribuir = profit_real
+
         if sponsor_id:
-            op_share = _q8(profit_usdt * Decimal("0.45"))
-            sp_share = _q8(profit_usdt * Decimal("0.10"))
+            op_share = _q8(profit_para_distribuir * Decimal("0.45"))
+            sp_share = _q8(profit_para_distribuir * Decimal("0.10"))
             memo_op = "Profit orden (45%)"
             memo_sp = "Comisión sponsor (10%)"
         else:
-            op_share = _q8(profit_usdt * Decimal("0.50"))
+            op_share = _q8(profit_para_distribuir * Decimal("0.50"))
             sp_share = Decimal("0")
             memo_op = "Profit orden (50%)"
             memo_sp = None
