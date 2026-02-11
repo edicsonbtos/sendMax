@@ -12,7 +12,7 @@ from telegram.ext import ContextTypes
 from src.config.settings import settings
 from src.telegram_app.ui.keyboards import main_menu_keyboard
 from src.telegram_app.ui.inline_buttons import support_whatsapp_button
-from src.telegram_app.handlers.rates import show_rates, rates_country_router
+from src.telegram_app.handlers.rates import show_rates
 from src.telegram_app.handlers.payment_methods import enter_payment_methods, handle_payment_methods_country
 from src.telegram_app.handlers.admin_panel import open_admin_panel, admin_panel_router
 from src.telegram_app.handlers.referrals import enter_referrals, referrals_router
@@ -57,9 +57,6 @@ MENU_BUTTONS = {
     BTN_ADMIN_RESET_YES,
     BTN_ADMIN_RESET_CANCEL,
     BTN_ADMIN_MENU,
-    # botones del mini-modo de tasas
-    "🌍 Ver por país",
-    "⬅️ Volver",
 }
 
 
@@ -112,61 +109,56 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if st != "APPROVED":
         if text in MENU_BUTTONS:
             await update.message.reply_text(
-                "🧾 Verificación requerida.\n\n"
+                "⚠️ Verificación requerida.\n\n"
                 "Completa tu verificación paso a paso.\n"
                 "Si no ves preguntas, escribe /start."
             )
         return
 
     def _clear_menu_modes() -> None:
-        for k in ("pm_mode", "summary_mode", "rates_mode", "ref_mode"):
+        for k in ("pm_mode", "summary_mode", "ref_mode"):
             context.user_data.pop(k, None)
 
-
-    # Si el usuario toca un botón principal, forzamos cambio de módulo (evita cross-talk por modes activos)
-    if text in {BTN_REFERRALS, BTN_SUMMARY, BTN_PAYMENT_METHODS, BTN_RATES, BTN_WALLET, BTN_ADMIN}:
-        if text == BTN_ADMIN:
-            if _is_admin(update):
-                _clear_menu_modes()
-                await open_admin_panel(update, context)
-            return
-
-        if text == BTN_REFERRALS:
+    # Botones principales con limpieza de modos
+    if text == BTN_ADMIN:
+        if _is_admin(update):
             _clear_menu_modes()
-            await enter_referrals(update, context)
-            return
+            await open_admin_panel(update, context)
+        return
 
-        if text == BTN_SUMMARY:
-            _clear_menu_modes()
-            await enter_summary(update, context)
-            return
+    if text == BTN_REFERRALS:
+        _clear_menu_modes()
+        await enter_referrals(update, context)
+        return
 
-        if text == BTN_PAYMENT_METHODS:
-            _clear_menu_modes()
-            await enter_payment_methods(update, context)
-            return
+    if text == BTN_SUMMARY:
+        _clear_menu_modes()
+        await enter_summary(update, context)
+        return
 
-        if text == BTN_RATES:
-            _clear_menu_modes()
-            await show_rates(update, context)
-            return
+    if text == BTN_PAYMENT_METHODS:
+        _clear_menu_modes()
+        await enter_payment_methods(update, context)
+        return
 
-        if text == BTN_WALLET:
-            _clear_menu_modes()
-            await wallet_menu(update, context)
-            return
+    if text == BTN_RATES:
+        _clear_menu_modes()
+        await show_rates(update, context)
+        return
 
+    if text == BTN_WALLET:
+        _clear_menu_modes()
+        await wallet_menu(update, context)
+        return
+
+    if text == BTN_HELP:
+        await update.message.reply_text(
+            "Soporte Sendmax\nPulsa el botón para abrir WhatsApp:",
+            reply_markup=support_whatsapp_button(settings.SUPPORT_WHATSAPP_NUMBER),
+        )
+        return
 
     # Routers de estado
-    # Tasas por país (mini-modo)
-    if context.user_data.get("rates_mode") or text in {"🌍 Ver por país", "⬅️ Volver"}:
-        await rates_country_router(update, context)
-        # si el router consume el flujo, salimos
-        if context.user_data.get("rates_mode"):
-            return
-        if text in {"🌍 Ver por país", "⬅️ Volver"}:
-            return
-
     if context.user_data.get("ref_mode"):
         await referrals_router(update, context)
         return
@@ -188,45 +180,6 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         }:
             await admin_panel_router(update, context)
             return
-
-    # Botones principales
-    if text == BTN_ADMIN:
-        if not _is_admin(update):
-            return
-        await open_admin_panel(update, context)
-        return
-
-    if text == BTN_REFERRALS:
-        _clear_menu_modes()
-        await enter_referrals(update, context)
-        return
-
-    if text == BTN_SUMMARY:
-        _clear_menu_modes()
-        await enter_summary(update, context)
-        return
-
-    if text == BTN_PAYMENT_METHODS:
-        _clear_menu_modes()
-        await enter_payment_methods(update, context)
-        return
-
-    if text == BTN_HELP:
-        await update.message.reply_text(
-            "Soporte Sendmax\nPulsa el botón para abrir WhatsApp:",
-            reply_markup=support_whatsapp_button(settings.SUPPORT_WHATSAPP_NUMBER),
-        )
-        return
-
-    if text == BTN_RATES:
-        _clear_menu_modes()
-        await show_rates(update, context)
-        return
-
-    if text == BTN_WALLET:
-        _clear_menu_modes()
-        await wallet_menu(update, context)
-        return
 
     # Nuevo envío lo maneja el ConversationHandler por regex
     if text == BTN_NEW_ORDER:

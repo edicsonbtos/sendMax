@@ -74,12 +74,12 @@ async def referrals_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         return
 
-    if text == "📊 Resumen" or text == "🧾 Resumen" or text == "📌 Resumen" or text == "📋 Resumen":
+    if text == "📋 Mis referidos" or text == "🧾 Resumen" or text == "📌 Resumen" or text == "📋 Resumen":
         total = count_referrals(me.id)
         recent = list_recent_referrals(me.id, limit=10)
 
         lines = []
-        lines.append("📊 Resumen de referidos")
+        lines.append("📋 Mis referidos de referidos")
         lines.append(f"Total: {total}")
 
         if recent:
