@@ -1,0 +1,2417 @@
+﻿
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\.env.local
+{'='*80}
+   1: NEXT_PUBLIC_BACKOFFICE_API_BASE=https://api-max-production.up.railway.app
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\eslint.config.mjs
+{'='*80}
+   1: import { defineConfig, globalIgnores } from "eslint/config";
+   2: import nextVitals from "eslint-config-next/core-web-vitals";
+   3: import nextTs from "eslint-config-next/typescript";
+   4: 
+   5: const eslintConfig = defineConfig([
+   6:   ...nextVitals,
+   7:   ...nextTs,
+   8:   // Override default ignores of eslint-config-next.
+   9:   globalIgnores([
+  10:     // Default ignores of eslint-config-next:
+  11:     ".next/**",
+  12:     "out/**",
+  13:     "build/**",
+  14:     "next-env.d.ts",
+  15:   ]),
+  16: ]);
+  17: 
+  18: export default eslintConfig;
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\package.json
+{'='*80}
+   1: {
+   2:   "name": "backoffice_web",
+   3:   "version": "0.1.0",
+   4:   "private": true,
+   5:   "scripts": {
+   6:     "dev": "next dev",
+   7:     "build": "next build",
+   8:     "start": "next start",
+   9:     "lint": "eslint"
+  10:   },
+  11:   "dependencies": {
+  12:     "@emotion/react": "^11.14.0",
+  13:     "@emotion/styled": "^11.14.1",
+  14:     "@mui/icons-material": "^7.3.7",
+  15:     "@mui/lab": "^7.0.1-beta.21",
+  16:     "@mui/material": "^7.3.7",
+  17:     "@mui/material-nextjs": "^7.3.7",
+  18:     "@mui/system": "^7.3.7",
+  19:     "next": "16.1.6",
+  20:     "react": "19.2.3",
+  21:     "react-dom": "19.2.3",
+  22:     "recharts": "^3.7.0"
+  23:   },
+  24:   "devDependencies": {
+  25:     "@types/node": "^20",
+  26:     "@types/react": "^19",
+  27:     "@types/react-dom": "^19",
+  28:     "babel-plugin-react-compiler": "1.0.0",
+  29:     "eslint": "^9",
+  30:     "eslint-config-next": "16.1.6",
+  31:     "typescript": "^5"
+  32:   }
+  33: }
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\src\app\daily-close\page.tsx
+{'='*80}
+   1: 'use client';
+   2: 
+   3: import React, { useState, useEffect, useCallback } from 'react';
+   4: import {
+   5:   Box,
+   6:   Typography,
+   7:   Card,
+   8:   CardContent,
+   9:   Stack,
+  10:   Button,
+  11:   TextField,
+  12:   Alert,
+  13:   CircularProgress,
+  14:   Table,
+  15:   TableBody,
+  16:   TableCell,
+  17:   TableContainer,
+  18:   TableHead,
+  19:   TableRow,
+  20:   Divider,
+  21:   Chip,
+  22:   Dialog,
+  23:   DialogTitle,
+  24:   DialogContent,
+  25:   DialogActions,
+  26: } from '@mui/material';
+  27: import {
+  28:   Download as DownloadIcon,
+  29:   Lock as LockIcon,
+  30:   CheckCircle as CheckIcon,
+  31:   Refresh as RefreshIcon,
+  32:   TrendingUp as InIcon,
+  33:   TrendingDown as OutIcon,
+  34:   AccountBalance as BalanceIcon,
+  35:   Warning as WarningIcon,
+  36: } from '@mui/icons-material';
+  37: import { useAuth } from '@/components/AuthProvider';
+  38: import { apiRequest } from '@/lib/api';
+  39: 
+  40: interface CloseReportItem {
+  41:   country: string;
+  42:   currency: string;
+  43:   total_in: number;
+  44:   total_out: number;
+  45:   net_balance: number;
+  46: }
+  47: 
+  48: interface CloseReportResponse {
+  49:   report?: CloseReportItem[];
+  50:   items?: CloseReportItem[];
+  51:   data?: CloseReportItem[];
+  52: }
+  53: 
+  54: interface CloseResponse {
+  55:   status: string;
+  56:   day: string;
+  57:   message: string;
+  58:   closed_at?: string;
+  59: }
+  60: 
+  61: export default function DailyClosePage() {
+  62:   const { apiKey } = useAuth();
+  63:   const [loading, setLoading] = useState(false);
+  64:   const [error, setError] = useState('');
+  65:   const [selectedDay, setSelectedDay] = useState('');
+  66:   const [report, setReport] = useState<CloseReportItem[]>([]);
+  67:   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  68:   const [closeLoading, setCloseLoading] = useState(false);
+  69:   const [closeResult, setCloseResult] = useState<CloseResponse | null>(null);
+  70: 
+  71:   useEffect(() => {
+  72:     const today = new Date();
+  73:     today.setDate(today.getDate() - 1);
+  74:     const formatted = today.toISOString().split('T')[0];
+  75:     setSelectedDay(formatted);
+  76:   }, []);
+  77: 
+  78:   const fetchReport = useCallback(async () => {
+  79:     if (!selectedDay) return;
+  80:     setLoading(true);
+  81:     setError('');
+  82:     setCloseResult(null);
+  83:     try {
+  84:       const data = await apiRequest<CloseReportResponse | CloseReportItem[]>(`/origin-wallets/close-report?day=${selectedDay}`);
+  85:       const reportArray = Array.isArray(data) ? data : (data.report || data.items || data.data || []);
+  86:       setReport(reportArray);
+  87:     } catch (err: unknown) {
+  88:       const message = err instanceof Error ? err.message : 'Error desconocido';
+  89:       setError(message);
+  90:       setReport([]);
+  91:     } finally {
+  92:       setLoading(false);
+  93:     }
+  94:   }, [selectedDay]);
+  95: 
+  96:   useEffect(() => {
+  97:     if (selectedDay && apiKey) {
+  98:       fetchReport();
+  99:     }
+ 100:   }, [selectedDay, apiKey, fetchReport]);
+ 101: 
+ 102:   const handleCloseDay = async () => {
+ 103:     setCloseLoading(true);
+ 104:     setError('');
+ 105:     try {
+ 106:       const result = await apiRequest<CloseResponse>('/origin-wallets/close', {
+ 107:         method: 'POST',
+ 108:         body: JSON.stringify({ day: selectedDay }),
+ 109:       });
+ 110:       setCloseResult(result);
+ 111:       setCloseDialogOpen(false);
+ 112:       fetchReport();
+ 113:     } catch (err: unknown) {
+ 114:       const message = err instanceof Error ? err.message : 'Error desconocido';
+ 115:       setError(message);
+ 116:     } finally {
+ 117:       setCloseLoading(false);
+ 118:     }
+ 119:   };
+ 120: 
+ 121:   const exportCSV = () => {
+ 122:     if (!Array.isArray(report) || report.length === 0) return;
+ 123:     const headers = ['Pais', 'Moneda', 'Entradas', 'Salidas', 'Balance Neto'];
+ 124:     const rows = report.map(r => [
+ 125:       r.country,
+ 126:       r.currency,
+ 127:       (r.total_in || 0).toFixed(2),
+ 128:       (r.total_out || 0).toFixed(2),
+ 129:       (r.net_balance || 0).toFixed(2),
+ 130:     ]);
+ 131:     const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+ 132:     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+ 133:     const link = document.createElement('a');
+ 134:     link.href = URL.createObjectURL(blob);
+ 135:     link.download = `cierre_${selectedDay}.csv`;
+ 136:     link.click();
+ 137:   };
+ 138: 
+ 139:   const safeReport = Array.isArray(report) ? report : [];
+ 140:   const totalIn = safeReport.reduce((sum, r) => sum + (r.total_in || 0), 0);
+ 141:   const totalOut = safeReport.reduce((sum, r) => sum + (r.total_out || 0), 0);
+ 142:   const totalNet = safeReport.reduce((sum, r) => sum + (r.net_balance || 0), 0);
+ 143: 
+ 144:   return (
+ 145:     <Box className="fade-in">
+ 146:       {/* Header */}
+ 147:       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+ 148:         <Box>
+ 149:           <Typography variant="h4" sx={{ fontWeight: 800 }}>
+ 150:             Cierre Diario
+ 151:           </Typography>
+ 152:           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
+ 153:             Reporte de cierre y consolidacion por dia
+ 154:           </Typography>
+ 155:         </Box>
+ 156:         <Button
+ 157:           variant="contained"
+ 158:           startIcon={<RefreshIcon />}
+ 159:           onClick={fetchReport}
+ 160:           disabled={loading}
+ 161:         >
+ 162:           Actualizar
+ 163:         </Button>
+ 164:       </Stack>
+ 165: 
+ 166:       {/* Filtros */}
+ 167:       <Card sx={{ mb: 3 }}>
+ 168:         <CardContent sx={{ p: 2.5 }}>
+ 169:           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="flex-end">
+ 170:             <TextField
+ 171:               type="date"
+ 172:               label="Dia a cerrar"
+ 173:               value={selectedDay}
+ 174:               onChange={(e) => setSelectedDay(e.target.value)}
+ 175:               InputLabelProps={{ shrink: true }}
+ 176:               sx={{ width: 220 }}
+ 177:               size="small"
+ 178:             />
+ 179:             <Button variant="outlined" onClick={fetchReport} disabled={loading}>
+ 180:               Consultar Reporte
+ 181:             </Button>
+ 182:             <Button
+ 183:               variant="outlined"
+ 184:               startIcon={<DownloadIcon />}
+ 185:               onClick={exportCSV}
+ 186:               disabled={safeReport.length === 0}
+ 187:             >
+ 188:               Exportar CSV
+ 189:             </Button>
+ 190:             <Box sx={{ flex: 1 }} />
+ 191:             <Chip
+ 192:               label={selectedDay}
+ 193:               size="small"
+ 194:               sx={{ backgroundColor: '#EFEAFF', color: '#4B2E83', fontWeight: 700 }}
+ 195:             />
+ 196:           </Stack>
+ 197:         </CardContent>
+ 198:       </Card>
+ 199: 
+ 200:       {error && (
+ 201:         <Alert severity="error" sx={{ mb: 3 }}>
+ 202:           {error}
+ 203:         </Alert>
+ 204:       )}
+ 205: 
+ 206:       {closeResult && (
+ 207:         <Alert
+ 208:           severity={closeResult.status === 'already_closed' ? 'info' : 'success'}
+ 209:           sx={{ mb: 3 }}
+ 210:           icon={<CheckIcon />}
+ 211:         >
+ 212:           <strong>{closeResult.message}</strong>
+ 213:           {closeResult.closed_at && (
+ 214:             <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+ 215:               Cerrado el: {new Date(closeResult.closed_at).toLocaleString('es-VE')}
+ 216:             </Typography>
+ 217:           )}
+ 218:         </Alert>
+ 219:       )}
+ 220: 
+ 221:       {loading ? (
+ 222:         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+ 223:           <CircularProgress sx={{ color: '#4B2E83' }} />
+ 224:         </Box>
+ 225:       ) : (
+ 226:         <>
+ 227:           {/* Resumen KPIs */}
+ 228:           <Stack direction="row" spacing={2.5} sx={{ mb: 3, flexWrap: 'wrap', gap: 2 }}>
+ 229:             <Card sx={{ flex: '1 1 calc(33.33% - 16px)', minWidth: 220 }}>
+ 230:               <CardContent sx={{ p: 2.5 }}>
+ 231:                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+ 232:                   <Box>
+ 233:                     <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.8rem' }}>
+ 234:                       Total Entradas
+ 235:                     </Typography>
+ 236:                     <Typography variant="h5" sx={{ fontWeight: 800, color: '#16A34A', mt: 0.75 }}>
+ 237:                       ${totalIn.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 238:                     </Typography>
+ 239:                   </Box>
+ 240:                   <Box sx={{ backgroundColor: '#16A34A12', borderRadius: '14px', p: 1.25, display: 'flex' }}>
+ 241:                     <InIcon sx={{ color: '#16A34A', fontSize: 24 }} />
+ 242:                   </Box>
+ 243:                 </Stack>
+ 244:               </CardContent>
+ 245:             </Card>
+ 246: 
+ 247:             <Card sx={{ flex: '1 1 calc(33.33% - 16px)', minWidth: 220 }}>
+ 248:               <CardContent sx={{ p: 2.5 }}>
+ 249:                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+ 250:                   <Box>
+ 251:                     <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.8rem' }}>
+ 252:                       Total Salidas
+ 253:                     </Typography>
+ 254:                     <Typography variant="h5" sx={{ fontWeight: 800, color: '#DC2626', mt: 0.75 }}>
+ 255:                       ${totalOut.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 256:                     </Typography>
+ 257:                   </Box>
+ 258:                   <Box sx={{ backgroundColor: '#DC262612', borderRadius: '14px', p: 1.25, display: 'flex' }}>
+ 259:                     <OutIcon sx={{ color: '#DC2626', fontSize: 24 }} />
+ 260:                   </Box>
+ 261:                 </Stack>
+ 262:               </CardContent>
+ 263:             </Card>
+ 264: 
+ 265:             <Card sx={{ flex: '1 1 calc(33.33% - 16px)', minWidth: 220 }}>
+ 266:               <CardContent sx={{ p: 2.5 }}>
+ 267:                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+ 268:                   <Box>
+ 269:                     <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.8rem' }}>
+ 270:                       Balance Neto
+ 271:                     </Typography>
+ 272:                     <Typography variant="h5" sx={{ fontWeight: 800, color: totalNet >= 0 ? '#2563EB' : '#DC2626', mt: 0.75 }}>
+ 273:                       ${totalNet.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 274:                     </Typography>
+ 275:                   </Box>
+ 276:                   <Box sx={{ backgroundColor: '#2563EB12', borderRadius: '14px', p: 1.25, display: 'flex' }}>
+ 277:                     <BalanceIcon sx={{ color: '#2563EB', fontSize: 24 }} />
+ 278:                   </Box>
+ 279:                 </Stack>
+ 280:               </CardContent>
+ 281:             </Card>
+ 282:           </Stack>
+ 283: 
+ 284:           {/* Tabla detalle */}
+ 285:           <Card sx={{ mb: 3 }}>
+ 286:             <CardContent sx={{ p: 0 }}>
+ 287:               <Box sx={{ p: 2.5 }}>
+ 288:                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
+ 289:                   Detalle por Pais / Moneda
+ 290:                 </Typography>
+ 291:                 <Typography variant="body2" sx={{ color: '#64748B', mt: 0.25 }}>
+ 292:                   Resumen del dia {selectedDay}
+ 293:                 </Typography>
+ 294:               </Box>
+ 295: 
+ 296:               <Divider />
+ 297: 
+ 298:               <TableContainer sx={{ maxHeight: 480 }}>
+ 299:                 <Table stickyHeader>
+ 300:                   <TableHead>
+ 301:                     <TableRow>
+ 302:                       <TableCell>Pais</TableCell>
+ 303:                       <TableCell>Moneda</TableCell>
+ 304:                       <TableCell align="right">Entradas</TableCell>
+ 305:                       <TableCell align="right">Salidas</TableCell>
+ 306:                       <TableCell align="right">Balance Neto</TableCell>
+ 307:                     </TableRow>
+ 308:                   </TableHead>
+ 309:                   <TableBody>
+ 310:                     {safeReport.length === 0 ? (
+ 311:                       <TableRow>
+ 312:                         <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+ 313:                           <Typography variant="body2" color="text.secondary">
+ 314:                             No hay datos para este dia
+ 315:                           </Typography>
+ 316:                         </TableCell>
+ 317:                       </TableRow>
+ 318:                     ) : (
+ 319:                       safeReport.map((item, idx) => (
+ 320:                         <TableRow key={idx} hover>
+ 321:                           <TableCell sx={{ fontWeight: 600 }}>{item.country}</TableCell>
+ 322:                           <TableCell>
+ 323:                             <Chip label={item.currency} size="small" sx={{ fontWeight: 700 }} />
+ 324:                           </TableCell>
+ 325:                           <TableCell align="right" sx={{ color: '#16A34A', fontWeight: 600 }}>
+ 326:                             ${(item.total_in || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 327:                           </TableCell>
+ 328:                           <TableCell align="right" sx={{ color: '#DC2626', fontWeight: 600 }}>
+ 329:                             ${(item.total_out || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 330:                           </TableCell>
+ 331:                           <TableCell align="right" sx={{ fontWeight: 800, color: item.net_balance >= 0 ? '#2563EB' : '#DC2626' }}>
+ 332:                             ${(item.net_balance || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 333:                           </TableCell>
+ 334:                         </TableRow>
+ 335:                       ))
+ 336:                     )}
+ 337:                   </TableBody>
+ 338:                 </Table>
+ 339:               </TableContainer>
+ 340:             </CardContent>
+ 341:           </Card>
+ 342: 
+ 343:           {/* Boton de cierre */}
+ 344:           <Card sx={{ backgroundColor: '#FFF5E6', border: '1px solid #F59E0B' }}>
+ 345:             <CardContent sx={{ p: 3 }}>
+ 346:               <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems="center" spacing={2}>
+ 347:                 <Stack direction="row" spacing={2} alignItems="center">
+ 348:                   <Box sx={{ backgroundColor: '#F59E0B15', borderRadius: '14px', p: 1.25, display: 'flex' }}>
+ 349:                     <WarningIcon sx={{ color: '#F59E0B', fontSize: 28 }} />
+ 350:                   </Box>
+ 351:                   <Box>
+ 352:                     <Typography variant="h6" sx={{ fontWeight: 700, color: '#92400E' }}>
+ 353:                       Accion de Cierre
+ 354:                     </Typography>
+ 355:                     <Typography variant="body2" sx={{ color: '#92400E', opacity: 0.8 }}>
+ 356:                       El cierre es <strong>idempotente</strong>. Si ya fue cerrado, no se duplicara.
+ 357:                     </Typography>
+ 358:                   </Box>
+ 359:                 </Stack>
+ 360:                 <Button
+ 361:                   variant="contained"
+ 362:                   size="large"
+ 363:                   startIcon={<LockIcon />}
+ 364:                   onClick={() => setCloseDialogOpen(true)}
+ 365:                   disabled={safeReport.length === 0}
+ 366:                   sx={{
+ 367:                     backgroundColor: '#4B2E83',
+ 368:                     px: 4,
+ 369:                     py: 1.5,
+ 370:                     '&:hover': { backgroundColor: '#5A37A0' },
+ 371:                   }}
+ 372:                 >
+ 373:                   Cerrar Dia {selectedDay}
+ 374:                 </Button>
+ 375:               </Stack>
+ 376:             </CardContent>
+ 377:           </Card>
+ 378:         </>
+ 379:       )}
+ 380: 
+ 381:       {/* Dialog confirmacion */}
+ 382:       <Dialog open={closeDialogOpen} onClose={() => setCloseDialogOpen(false)}>
+ 383:         <DialogTitle sx={{ fontWeight: 700 }}>Confirmar Cierre Diario</DialogTitle>
+ 384:         <DialogContent>
+ 385:           <Stack spacing={2} sx={{ mt: 1 }}>
+ 386:             <Alert severity="warning">
+ 387:               Estas a punto de cerrar el dia <strong>{selectedDay}</strong>.
+ 388:             </Alert>
+ 389:             <Typography variant="body2" color="text.secondary">
+ 390:               El cierre registrara los balances finales de cada pais y moneda para este dia.
+ 391:               Si ya fue cerrado anteriormente, se devolvera el resultado existente sin duplicar.
+ 392:             </Typography>
+ 393:           </Stack>
+ 394:         </DialogContent>
+ 395:         <DialogActions sx={{ p: 2.5 }}>
+ 396:           <Button onClick={() => setCloseDialogOpen(false)}>Cancelar</Button>
+ 397:           <Button
+ 398:             variant="contained"
+ 399:             onClick={handleCloseDay}
+ 400:             disabled={closeLoading}
+ 401:             startIcon={<LockIcon />}
+ 402:             sx={{ backgroundColor: '#4B2E83', '&:hover': { backgroundColor: '#5A37A0' } }}
+ 403:           >
+ 404:             {closeLoading ? 'Cerrando...' : 'Confirmar Cierre'}
+ 405:           </Button>
+ 406:         </DialogActions>
+ 407:       </Dialog>
+ 408:     </Box>
+ 409:   );
+ 410: }
+ 411: 
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\src\app\layout.tsx
+{'='*80}
+   1: import type { Metadata } from "next";
+   2: import { Inter } from "next/font/google";
+   3: import "./globals.css";
+   4: import { AppRouterCacheProvider } from '@mui/material-nextjs/v14-appRouter';
+   5: import { ThemeProvider } from '@mui/material/styles';
+   6: import CssBaseline from '@mui/material/CssBaseline';
+   7: import Box from '@mui/material/Box';
+   8: import theme from './theme';
+   9: import Sidebar from '@/components/Sidebar';
+  10: import { AuthProvider } from '@/components/AuthProvider';
+  11: 
+  12: const inter = Inter({
+  13:   subsets: ["latin"],
+  14:   display: "swap",
+  15:   variable: "--font-inter",
+  16: });
+  17: 
+  18: export const metadata: Metadata = {
+  19:   title: "Sendmax Backoffice",
+  20:   description: "Panel de administracion Sendmax - Gestion de ordenes, billeteras y cierres",
+  21:   icons: {
+  22:     icon: "/logo.png",
+  23:   },
+  24: };
+  25: 
+  26: export default function RootLayout({
+  27:   children,
+  28: }: Readonly<{
+  29:   children: React.ReactNode;
+  30: }>) {
+  31:   return (
+  32:     <html lang="es" className={inter.variable}>
+  33:       <body className={inter.className}>
+  34:         <AppRouterCacheProvider>
+  35:           <ThemeProvider theme={theme}>
+  36:             <CssBaseline />
+  37:             <AuthProvider>
+  38:               <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+  39:                 <Sidebar />
+  40:                 <Box
+  41:                   component="main"
+  42:                   sx={{
+  43:                     flexGrow: 1,
+  44:                     backgroundColor: 'background.default',
+  45:                     minHeight: '100vh',
+  46:                     overflow: 'auto',
+  47:                   }}
+  48:                 >
+  49:                   <Box
+  50:                     sx={{
+  51:                       maxWidth: 1400,
+  52:                       mx: 'auto',
+  53:                       p: { xs: 2, sm: 3, md: 4 },
+  54:                       pt: { xs: 3, sm: 4 },
+  55:                     }}
+  56:                   >
+  57:                     {children}
+  58:                   </Box>
+  59:                 </Box>
+  60:               </Box>
+  61:             </AuthProvider>
+  62:           </ThemeProvider>
+  63:         </AppRouterCacheProvider>
+  64:       </body>
+  65:     </html>
+  66:   );
+  67: }
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\src\app\orders\[id]\page.tsx
+{'='*80}
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\src\app\orders\page.tsx
+{'='*80}
+   1: 'use client';
+   2: 
+   3: import React, { useState, useEffect, useCallback } from 'react';
+   4: import { useRouter } from 'next/navigation';
+   5: import {
+   6:   Box,
+   7:   Typography,
+   8:   Card,
+   9:   Table,
+  10:   TableBody,
+  11:   TableCell,
+  12:   TableContainer,
+  13:   TableHead,
+  14:   TableRow,
+  15:   Chip,
+  16:   CircularProgress,
+  17:   Alert,
+  18:   TextField,
+  19:   Stack,
+  20:   Button,
+  21:   IconButton,
+  22:   Tooltip,
+  23:   MenuItem,
+  24:   Select,
+  25:   FormControl,
+  26:   InputLabel,
+  27:   InputAdornment,
+  28: } from '@mui/material';
+  29: import {
+  30:   Visibility as ViewIcon,
+  31:   Refresh as RefreshIcon,
+  32:   Search as SearchIcon,
+  33:   Download as DownloadIcon,
+  34:   TrendingUp as GainIcon,
+  35:   Close as ClearIcon,
+  36: } from '@mui/icons-material';
+  37: import { useAuth } from '@/components/AuthProvider';
+  38: import { apiRequest } from '@/lib/api';
+  39: 
+  40: interface Order {
+  41:   public_id: number | string;
+  42:   status: string;
+  43:   origin_country: string;
+  44:   dest_country: string;
+  45:   amount_origin: number;
+  46:   origin_currency: string;
+  47:   payout_dest: number;
+  48:   dest_currency: string;
+  49:   profit_usdt: number;
+  50:   created_at: string;
+  51:   updated_at?: string;
+  52: }
+  53: 
+  54: interface OrdersResponse {
+  55:   count: number;
+  56:   orders: Order[];
+  57: }
+  58: 
+  59: const statusColors: Record<string, 'default' | 'warning' | 'info' | 'success' | 'error'> = {
+  60:   pending_kyc: 'warning',
+  61:   pending_origin: 'warning',
+  62:   pending_dest: 'info',
+  63:   completed: 'success',
+  64:   cancelled: 'error',
+  65:   PAGADA: 'success',
+  66:   CANCELADA: 'error',
+  67:   PENDIENTE: 'warning',
+  68:   EN_PROCESO: 'info',
+  69: };
+  70: 
+  71: const statusLabels: Record<string, string> = {
+  72:   pending_kyc: 'KYC Pendiente',
+  73:   pending_origin: 'Pago Origen',
+  74:   pending_dest: 'Pago Destino',
+  75:   completed: 'Completada',
+  76:   cancelled: 'Cancelada',
+  77:   PAGADA: 'Pagada',
+  78:   CANCELADA: 'Cancelada',
+  79:   PENDIENTE: 'Pendiente',
+  80:   EN_PROCESO: 'En Proceso',
+  81: };
+  82: 
+  83: export default function OrdersPage() {
+  84:   const router = useRouter();
+  85:   const { apiKey } = useAuth();
+  86:   const [orders, setOrders] = useState<Order[]>([]);
+  87:   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
+  88:   const [loading, setLoading] = useState(true);
+  89:   const [error, setError] = useState('');
+  90:   const [limit, setLimit] = useState(100);
+  91:   const [searchTerm, setSearchTerm] = useState('');
+  92:   const [statusFilter, setStatusFilter] = useState('all');
+  93:   const [countryFilter, setCountryFilter] = useState('all');
+  94: 
+  95:   const fetchOrders = useCallback(async () => {
+  96:     setLoading(true);
+  97:     setError('');
+  98:     try {
+  99:       const data = await apiRequest<OrdersResponse>(`/orders?limit=${limit}`);
+ 100:       const ordersArray = Array.isArray(data?.orders) ? data.orders : [];
+ 101:       setOrders(ordersArray);
+ 102:       setFilteredOrders(ordersArray);
+ 103:     } catch (err: unknown) {
+ 104:       const message = err instanceof Error ? err.message : 'Error desconocido';
+ 105:       setError(message);
+ 106:       setOrders([]);
+ 107:       setFilteredOrders([]);
+ 108:     } finally {
+ 109:       setLoading(false);
+ 110:     }
+ 111:   }, [limit]);
+ 112: 
+ 113:   useEffect(() => {
+ 114:     if (apiKey) {
+ 115:       fetchOrders();
+ 116:     }
+ 117:   }, [apiKey, fetchOrders]);
+ 118: 
+ 119:   // Filtrado local
+ 120:   useEffect(() => {
+ 121:     let filtered = [...orders];
+ 122: 
+ 123:     // Busqueda
+ 124:     if (searchTerm) {
+ 125:       filtered = filtered.filter((order) => {
+ 126:         const search = searchTerm.toLowerCase();
+ 127:         return (
+ 128:           order.public_id.toString().includes(search) ||
+ 129:           order.origin_country?.toLowerCase().includes(search) ||
+ 130:           order.dest_country?.toLowerCase().includes(search) ||
+ 131:           order.status?.toLowerCase().includes(search)
+ 132:         );
+ 133:       });
+ 134:     }
+ 135: 
+ 136:     // Filtro status
+ 137:     if (statusFilter !== 'all') {
+ 138:       filtered = filtered.filter((order) => order.status === statusFilter);
+ 139:     }
+ 140: 
+ 141:     // Filtro pais
+ 142:     if (countryFilter !== 'all') {
+ 143:       filtered = filtered.filter(
+ 144:         (order) => order.origin_country === countryFilter || order.dest_country === countryFilter
+ 145:       );
+ 146:     }
+ 147: 
+ 148:     setFilteredOrders(filtered);
+ 149:   }, [searchTerm, statusFilter, countryFilter, orders]);
+ 150: 
+ 151:   const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+ 152:     const val = parseInt(e.target.value) || 100;
+ 153:     setLimit(val);
+ 154:   };
+ 155: 
+ 156:   const clearFilters = () => {
+ 157:     setSearchTerm('');
+ 158:     setStatusFilter('all');
+ 159:     setCountryFilter('all');
+ 160:   };
+ 161: 
+ 162:   const exportCSV = () => {
+ 163:     const headers = ['ID', 'Estado', 'Origen', 'Destino', 'Monto Origen', 'Payout Destino', 'Ganancia', 'Fecha'];
+ 164:     const rows = filteredOrders.map(o => [
+ 165:       o.public_id,
+ 166:       o.status,
+ 167:       o.origin_country,
+ 168:       o.dest_country,
+ 169:       o.amount_origin,
+ 170:       o.payout_dest,
+ 171:       o.profit_usdt || 0,
+ 172:       new Date(o.created_at).toLocaleDateString('es-VE'),
+ 173:     ]);
+ 174:     const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+ 175:     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+ 176:     const link = document.createElement('a');
+ 177:     link.href = URL.createObjectURL(blob);
+ 178:     link.download = `ordenes_${new Date().toISOString().split('T')[0]}.csv`;
+ 179:     link.click();
+ 180:   };
+ 181: 
+ 182:   // Obtener valores unicos para filtros
+ 183:   const uniqueStatuses = Array.from(new Set(orders.map(o => o.status).filter(Boolean)));
+ 184:   const uniqueCountries = Array.from(
+ 185:     new Set([
+ 186:       ...orders.map(o => o.origin_country).filter(Boolean),
+ 187:       ...orders.map(o => o.dest_country).filter(Boolean),
+ 188:     ])
+ 189:   ).sort();
+ 190: 
+ 191:   const totalProfit = filteredOrders.reduce((sum, o) => sum + (o.profit_usdt || 0), 0);
+ 192: 
+ 193:   return (
+ 194:     <Box className="fade-in">
+ 195:       {/* Header */}
+ 196:       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+ 197:         <Box>
+ 198:           <Typography variant="h4" sx={{ fontWeight: 700 }}>
+ 199:             Ordenes
+ 200:           </Typography>
+ 201:           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
+ 202:             {filteredOrders.length} de {orders.length} ordenes
+ 203:             {totalProfit > 0 && ` · Ganancia total: $${totalProfit.toFixed(2)}`}
+ 204:           </Typography>
+ 205:         </Box>
+ 206:         <Stack direction="row" spacing={1}>
+ 207:           <Button
+ 208:             variant="outlined"
+ 209:             startIcon={<DownloadIcon />}
+ 210:             onClick={exportCSV}
+ 211:             disabled={filteredOrders.length === 0}
+ 212:             size="small"
+ 213:           >
+ 214:             CSV
+ 215:           </Button>
+ 216:           <Button
+ 217:             variant="contained"
+ 218:             startIcon={<RefreshIcon />}
+ 219:             onClick={fetchOrders}
+ 220:             disabled={loading}
+ 221:           >
+ 222:             Actualizar
+ 223:           </Button>
+ 224:         </Stack>
+ 225:       </Stack>
+ 226: 
+ 227:       {/* Filters Bar */}
+ 228:       <Card sx={{ mb: 3, p: 2 }}>
+ 229:         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="flex-end">
+ 230:           <TextField
+ 231:             size="small"
+ 232:             placeholder="Buscar por ID, pais, status..."
+ 233:             value={searchTerm}
+ 234:             onChange={(e) => setSearchTerm(e.target.value)}
+ 235:             sx={{ flex: 1, minWidth: 200 }}
+ 236:             InputProps={{
+ 237:               startAdornment: (
+ 238:                 <InputAdornment position="start">
+ 239:                   <SearchIcon sx={{ color: '#64748B', fontSize: 20 }} />
+ 240:                 </InputAdornment>
+ 241:               ),
+ 242:             }}
+ 243:           />
+ 244: 
+ 245:           <FormControl size="small" sx={{ minWidth: 150 }}>
+ 246:             <InputLabel>Status</InputLabel>
+ 247:             <Select
+ 248:               value={statusFilter}
+ 249:               onChange={(e) => setStatusFilter(e.target.value)}
+ 250:               label="Status"
+ 251:             >
+ 252:               <MenuItem value="all">Todos</MenuItem>
+ 253:               {uniqueStatuses.map(status => (
+ 254:                 <MenuItem key={status} value={status}>
+ 255:                   {statusLabels[status] || status}
+ 256:                 </MenuItem>
+ 257:               ))}
+ 258:             </Select>
+ 259:           </FormControl>
+ 260: 
+ 261:           <FormControl size="small" sx={{ minWidth: 150 }}>
+ 262:             <InputLabel>Pais</InputLabel>
+ 263:             <Select
+ 264:               value={countryFilter}
+ 265:               onChange={(e) => setCountryFilter(e.target.value)}
+ 266:               label="Pais"
+ 267:             >
+ 268:               <MenuItem value="all">Todos</MenuItem>
+ 269:               {uniqueCountries.map(country => (
+ 270:                 <MenuItem key={country} value={country}>
+ 271:                   {country}
+ 272:                 </MenuItem>
+ 273:               ))}
+ 274:             </Select>
+ 275:           </FormControl>
+ 276: 
+ 277:           <TextField
+ 278:             size="small"
+ 279:             type="number"
+ 280:             label="Limite"
+ 281:             value={limit}
+ 282:             onChange={handleLimitChange}
+ 283:             sx={{ width: 100 }}
+ 284:           />
+ 285: 
+ 286:           {(searchTerm || statusFilter !== 'all' || countryFilter !== 'all') && (
+ 287:             <Button
+ 288:               size="small"
+ 289:               startIcon={<ClearIcon />}
+ 290:               onClick={clearFilters}
+ 291:               sx={{ color: '#64748B' }}
+ 292:             >
+ 293:               Limpiar
+ 294:             </Button>
+ 295:           )}
+ 296:         </Stack>
+ 297:       </Card>
+ 298: 
+ 299:       {error && (
+ 300:         <Alert severity="error" sx={{ mb: 3 }}>
+ 301:           {error}
+ 302:         </Alert>
+ 303:       )}
+ 304: 
+ 305:       {loading ? (
+ 306:         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+ 307:           <CircularProgress sx={{ color: '#4B2E83' }} />
+ 308:         </Box>
+ 309:       ) : (
+ 310:         <Card>
+ 311:           <TableContainer sx={{ maxHeight: 600 }}>
+ 312:             <Table stickyHeader>
+ 313:               <TableHead>
+ 314:                 <TableRow>
+ 315:                   <TableCell>ID</TableCell>
+ 316:                   <TableCell>Estado</TableCell>
+ 317:                   <TableCell>Origen</TableCell>
+ 318:                   <TableCell>Destino</TableCell>
+ 319:                   <TableCell align="right">Monto Origen</TableCell>
+ 320:                   <TableCell align="right">Payout Destino</TableCell>
+ 321:                   <TableCell align="right">Ganancia</TableCell>
+ 322:                   <TableCell>Fecha</TableCell>
+ 323:                   <TableCell align="center">Acciones</TableCell>
+ 324:                 </TableRow>
+ 325:               </TableHead>
+ 326:               <TableBody>
+ 327:                 {filteredOrders.length === 0 ? (
+ 328:                   <TableRow>
+ 329:                     <TableCell colSpan={9} align="center" sx={{ py: 6 }}>
+ 330:                       <Typography variant="body2" color="text.secondary">
+ 331:                         {orders.length === 0
+ 332:                           ? 'No hay ordenes para mostrar'
+ 333:                           : 'No hay resultados con los filtros actuales'}
+ 334:                       </Typography>
+ 335:                     </TableCell>
+ 336:                   </TableRow>
+ 337:                 ) : (
+ 338:                   filteredOrders.map((order) => (
+ 339:                     <TableRow
+ 340:                       key={order.public_id}
+ 341:                       hover
+ 342:                       sx={{
+ 343:                         cursor: 'pointer',
+ 344:                         '&:hover': { backgroundColor: '#FAF8FF' },
+ 345:                       }}
+ 346:                       onClick={() => router.push(`/orders/${order.public_id}`)}
+ 347:                     >
+ 348:                       <TableCell>
+ 349:                         <Typography
+ 350:                           sx={{
+ 351:                             fontFamily: 'monospace',
+ 352:                             fontSize: '0.875rem',
+ 353:                             fontWeight: 600,
+ 354:                             color: '#4B2E83',
+ 355:                           }}
+ 356:                         >
+ 357:                           #{order.public_id}
+ 358:                         </Typography>
+ 359:                       </TableCell>
+ 360:                       <TableCell>
+ 361:                         <Chip
+ 362:                           label={statusLabels[order.status] || order.status}
+ 363:                           color={statusColors[order.status] || 'default'}
+ 364:                           size="small"
+ 365:                           sx={{ fontWeight: 600 }}
+ 366:                         />
+ 367:                       </TableCell>
+ 368:                       <TableCell>
+ 369:                         <Stack direction="row" alignItems="center" spacing={0.5}>
+ 370:                           <Typography variant="body2">{order.origin_country}</Typography>
+ 371:                         </Stack>
+ 372:                       </TableCell>
+ 373:                       <TableCell>
+ 374:                         <Stack direction="row" alignItems="center" spacing={0.5}>
+ 375:                           <Typography variant="body2">{order.dest_country}</Typography>
+ 376:                         </Stack>
+ 377:                       </TableCell>
+ 378:                       <TableCell align="right">
+ 379:                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
+ 380:                           {order.amount_origin?.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 381:                         </Typography>
+ 382:                         <Typography variant="caption" sx={{ color: '#64748B' }}>
+ 383:                           {order.origin_currency}
+ 384:                         </Typography>
+ 385:                       </TableCell>
+ 386:                       <TableCell align="right">
+ 387:                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
+ 388:                           {order.payout_dest?.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 389:                         </Typography>
+ 390:                         <Typography variant="caption" sx={{ color: '#64748B' }}>
+ 391:                           {order.dest_currency}
+ 392:                         </Typography>
+ 393:                       </TableCell>
+ 394:                       <TableCell align="right">
+ 395:                         <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
+ 396:                           {order.profit_usdt > 0 && <GainIcon sx={{ fontSize: 14, color: '#16A34A' }} />}
+ 397:                           <Typography
+ 398:                             variant="body2"
+ 399:                             sx={{
+ 400:                               color: order.profit_usdt > 0 ? '#16A34A' : '#64748B',
+ 401:                               fontWeight: 600,
+ 402:                             }}
+ 403:                           >
+ 404:                             ${order.profit_usdt?.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 405:                           </Typography>
+ 406:                         </Stack>
+ 407:                       </TableCell>
+ 408:                       <TableCell>
+ 409:                         <Typography variant="body2">
+ 410:                           {new Date(order.created_at).toLocaleDateString('es-VE')}
+ 411:                         </Typography>
+ 412:                         <Typography variant="caption" sx={{ color: '#64748B' }}>
+ 413:                           {new Date(order.created_at).toLocaleTimeString('es-VE', {
+ 414:                             hour: '2-digit',
+ 415:                             minute: '2-digit',
+ 416:                           })}
+ 417:                         </Typography>
+ 418:                       </TableCell>
+ 419:                       <TableCell align="center">
+ 420:                         <Tooltip title="Ver detalle">
+ 421:                           <IconButton
+ 422:                             size="small"
+ 423:                             onClick={(e) => {
+ 424:                               e.stopPropagation();
+ 425:                               router.push(`/orders/${order.public_id}`);
+ 426:                             }}
+ 427:                           >
+ 428:                             <ViewIcon fontSize="small" />
+ 429:                           </IconButton>
+ 430:                         </Tooltip>
+ 431:                       </TableCell>
+ 432:                     </TableRow>
+ 433:                   ))
+ 434:                 )}
+ 435:               </TableBody>
+ 436:             </Table>
+ 437:           </TableContainer>
+ 438:         </Card>
+ 439:       )}
+ 440:     </Box>
+ 441:   );
+ 442: }
+ 443: 
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\src\app\origin\page.tsx
+{'='*80}
+   1: 'use client';
+   2: 
+   3: import React, { useState, useEffect, useCallback, ReactElement } from 'react';
+   4: import {
+   5:   Box,
+   6:   Typography,
+   7:   Card,
+   8:   CardContent,
+   9:   Stack,
+  10:   Button,
+  11:   TextField,
+  12:   Alert,
+  13:   CircularProgress,
+  14:   Table,
+  15:   TableBody,
+  16:   TableCell,
+  17:   TableContainer,
+  18:   TableHead,
+  19:   TableRow,
+  20:   Dialog,
+  21:   DialogTitle,
+  22:   DialogContent,
+  23:   DialogActions,
+  24:   Divider,
+  25:   Chip,
+  26:   Tooltip,
+  27:   IconButton,
+  28: } from '@mui/material';
+  29: import {
+  30:   TrendingUp as InIcon,
+  31:   TrendingDown as OutIcon,
+  32:   AccountBalance as BalanceIcon,
+  33:   Send as SendIcon,
+  34:   Refresh as RefreshIcon,
+  35:   InfoOutlined as InfoIcon,
+  36: } from '@mui/icons-material';
+  37: import { useAuth } from '@/components/AuthProvider';
+  38: import { apiRequest } from '@/lib/api';
+  39: 
+  40: interface DailyMovement {
+  41:   country: string;
+  42:   currency: string;
+  43:   total_in: number;
+  44:   total_out: number;
+  45:   net_balance: number;
+  46: }
+  47: 
+  48: interface BalanceResponse {
+  49:   movements?: DailyMovement[];
+  50:   items?: DailyMovement[];
+  51:   data?: DailyMovement[];
+  52: }
+  53: 
+  54: interface SweepRequest {
+  55:   country: string;
+  56:   currency: string;
+  57:   amount: number;
+  58:   tx_hash: string;
+  59:   notes: string;
+  60: }
+  61: 
+  62: interface StatCardProps {
+  63:   title: string;
+  64:   value: string;
+  65:   icon: ReactElement;
+  66:   color: string;
+  67:   hint?: string;
+  68: }
+  69: 
+  70: function StatCard({ title, value, icon, color, hint }: StatCardProps) {
+  71:   return (
+  72:     <Card sx={{ flex: '1 1 calc(33.33% - 16px)', minWidth: 240 }}>
+  73:       <CardContent sx={{ p: 2.5 }}>
+  74:         <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+  75:           <Box>
+  76:             <Stack direction="row" spacing={1} alignItems="center">
+  77:               <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.8rem' }}>
+  78:                 {title}
+  79:               </Typography>
+  80:               {hint && (
+  81:                 <Tooltip title={hint}>
+  82:                   <IconButton size="small" sx={{ p: 0.25, color: '#94A3B8' }}>
+  83:                     <InfoIcon sx={{ fontSize: 16 }} />
+  84:                   </IconButton>
+  85:                 </Tooltip>
+  86:               )}
+  87:             </Stack>
+  88:             <Typography variant="h5" sx={{ fontWeight: 800, color: '#111827', mt: 0.75 }}>
+  89:               {value}
+  90:             </Typography>
+  91:           </Box>
+  92:           <Box
+  93:             sx={{
+  94:               backgroundColor: `${color}12`,
+  95:               borderRadius: '14px',
+  96:               p: 1.25,
+  97:               display: 'flex',
+  98:             }}
+  99:           >
+ 100:             {React.cloneElement(icon, { sx: { color, fontSize: 24 } })}
+ 101:           </Box>
+ 102:         </Stack>
+ 103:       </CardContent>
+ 104:     </Card>
+ 105:   );
+ 106: }
+ 107: 
+ 108: export default function OriginPage() {
+ 109:   const { apiKey } = useAuth();
+ 110:   const [loading, setLoading] = useState(true);
+ 111:   const [error, setError] = useState('');
+ 112:   const [movements, setMovements] = useState<DailyMovement[]>([]);
+ 113:   const [selectedDay, setSelectedDay] = useState('');
+ 114:   const [sweepDialogOpen, setSweepDialogOpen] = useState(false);
+ 115:   const [sweepForm, setSweepForm] = useState<SweepRequest>({
+ 116:     country: '',
+ 117:     currency: '',
+ 118:     amount: 0,
+ 119:     tx_hash: '',
+ 120:     notes: '',
+ 121:   });
+ 122:   const [sweepLoading, setSweepLoading] = useState(false);
+ 123:   const [sweepSuccess, setSweepSuccess] = useState('');
+ 124: 
+ 125:   useEffect(() => {
+ 126:     const today = new Date();
+ 127:     const formatted = today.toISOString().split('T')[0];
+ 128:     setSelectedDay(formatted);
+ 129:   }, []);
+ 130: 
+ 131:   const fetchBalance = useCallback(async () => {
+ 132:     if (!selectedDay) return;
+ 133:     setLoading(true);
+ 134:     setError('');
+ 135:     try {
+ 136:       const data = await apiRequest<BalanceResponse | DailyMovement[]>(`/origin-wallets/balance?day=${selectedDay}`);
+ 137:       const movArray = Array.isArray(data) ? data : (data.movements || data.items || data.data || []);
+ 138:       setMovements(movArray);
+ 139:     } catch (err: unknown) {
+ 140:       const message = err instanceof Error ? err.message : 'Error desconocido';
+ 141:       setError(message);
+ 142:       setMovements([]);
+ 143:     } finally {
+ 144:       setLoading(false);
+ 145:     }
+ 146:   }, [selectedDay]);
+ 147: 
+ 148:   useEffect(() => {
+ 149:     if (selectedDay && apiKey) {
+ 150:       fetchBalance();
+ 151:     }
+ 152:   }, [selectedDay, apiKey, fetchBalance]);
+ 153: 
+ 154:   const openSweepDialog = (country: string, currency: string) => {
+ 155:     setSweepForm({ country, currency, amount: 0, tx_hash: '', notes: '' });
+ 156:     setSweepDialogOpen(true);
+ 157:     setSweepSuccess('');
+ 158:   };
+ 159: 
+ 160:   const handleSweepSubmit = async () => {
+ 161:     setSweepLoading(true);
+ 162:     setError('');
+ 163:     setSweepSuccess('');
+ 164:     try {
+ 165:       await apiRequest('/origin-wallets/sweeps', {
+ 166:         method: 'POST',
+ 167:         body: JSON.stringify(sweepForm),
+ 168:       });
+ 169:       setSweepSuccess('Sweep registrado exitosamente');
+ 170:       setSweepDialogOpen(false);
+ 171:       fetchBalance();
+ 172:     } catch (err: unknown) {
+ 173:       const message = err instanceof Error ? err.message : 'Error desconocido';
+ 174:       setError(message);
+ 175:     } finally {
+ 176:       setSweepLoading(false);
+ 177:     }
+ 178:   };
+ 179: 
+ 180:   const safeMovements = Array.isArray(movements) ? movements : [];
+ 181:   const totalIn = safeMovements.reduce((sum, m) => sum + (m.total_in || 0), 0);
+ 182:   const totalOut = safeMovements.reduce((sum, m) => sum + (m.total_out || 0), 0);
+ 183:   const totalNet = safeMovements.reduce((sum, m) => sum + (m.net_balance || 0), 0);
+ 184: 
+ 185:   const netColor = totalNet >= 0 ? '#2563EB' : '#DC2626';
+ 186: 
+ 187:   return (
+ 188:     <Box className="fade-in">
+ 189:       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+ 190:         <Box>
+ 191:           <Typography variant="h4" sx={{ fontWeight: 800 }}>
+ 192:             Billeteras Origen
+ 193:           </Typography>
+ 194:           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
+ 195:             Entradas / salidas por pais y moneda (dia seleccionado)
+ 196:           </Typography>
+ 197:         </Box>
+ 198:         <Button
+ 199:           variant="contained"
+ 200:           startIcon={<RefreshIcon />}
+ 201:           onClick={fetchBalance}
+ 202:           disabled={loading}
+ 203:         >
+ 204:           Actualizar
+ 205:         </Button>
+ 206:       </Stack>
+ 207: 
+ 208:       <Card sx={{ mb: 3 }}>
+ 209:         <CardContent sx={{ p: 2.5 }}>
+ 210:           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="flex-end">
+ 211:             <TextField
+ 212:               type="date"
+ 213:               label="Dia"
+ 214:               value={selectedDay}
+ 215:               onChange={(e) => setSelectedDay(e.target.value)}
+ 216:               InputLabelProps={{ shrink: true }}
+ 217:               sx={{ width: 220 }}
+ 218:               size="small"
+ 219:             />
+ 220:             <Button variant="outlined" onClick={fetchBalance} disabled={loading}>
+ 221:               Consultar
+ 222:             </Button>
+ 223:             <Box sx={{ flex: 1 }} />
+ 224:             <Chip
+ 225:               label={`Filas: ${safeMovements.length}`}
+ 226:               size="small"
+ 227:               sx={{ backgroundColor: '#EFEAFF', color: '#4B2E83', fontWeight: 700 }}
+ 228:             />
+ 229:           </Stack>
+ 230:         </CardContent>
+ 231:       </Card>
+ 232: 
+ 233:       {error && (
+ 234:         <Alert severity="error" sx={{ mb: 3 }}>
+ 235:           {error}
+ 236:         </Alert>
+ 237:       )}
+ 238: 
+ 239:       {sweepSuccess && (
+ 240:         <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSweepSuccess('')}>
+ 241:           {sweepSuccess}
+ 242:         </Alert>
+ 243:       )}
+ 244: 
+ 245:       {loading ? (
+ 246:         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+ 247:           <CircularProgress sx={{ color: '#4B2E83' }} />
+ 248:         </Box>
+ 249:       ) : (
+ 250:         <>
+ 251:           <Stack direction="row" spacing={2.5} sx={{ mb: 3, flexWrap: 'wrap', gap: 2 }}>
+ 252:             <StatCard
+ 253:               title="Total Entradas"
+ 254:               value={`$${totalIn.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+ 255:               icon={<InIcon />}
+ 256:               color="#16A34A"
+ 257:               hint="Suma total de entradas del dia en USD aproximado"
+ 258:             />
+ 259:             <StatCard
+ 260:               title="Total Salidas"
+ 261:               value={`$${totalOut.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+ 262:               icon={<OutIcon />}
+ 263:               color="#DC2626"
+ 264:               hint="Suma total de sweeps/salidas del dia"
+ 265:             />
+ 266:             <StatCard
+ 267:               title="Balance Neto"
+ 268:               value={`$${totalNet.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+ 269:               icon={<BalanceIcon />}
+ 270:               color={netColor}
+ 271:               hint="Entradas - Salidas"
+ 272:             />
+ 273:           </Stack>
+ 274: 
+ 275:           <Card>
+ 276:             <CardContent sx={{ p: 0 }}>
+ 277:               <Box sx={{ p: 2.5 }}>
+ 278:                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
+ 279:                   Detalle por Pais / Moneda
+ 280:                 </Typography>
+ 281:                 <Typography variant="body2" sx={{ color: '#64748B', mt: 0.25 }}>
+ 282:                   Acciones: registrar sweep por fila
+ 283:                 </Typography>
+ 284:               </Box>
+ 285: 
+ 286:               <Divider />
+ 287: 
+ 288:               <TableContainer sx={{ maxHeight: 620 }}>
+ 289:                 <Table stickyHeader>
+ 290:                   <TableHead>
+ 291:                     <TableRow>
+ 292:                       <TableCell>Pais</TableCell>
+ 293:                       <TableCell>Moneda</TableCell>
+ 294:                       <TableCell align="right">Entradas</TableCell>
+ 295:                       <TableCell align="right">Salidas</TableCell>
+ 296:                       <TableCell align="right">Balance Neto</TableCell>
+ 297:                       <TableCell align="center">Accion</TableCell>
+ 298:                     </TableRow>
+ 299:                   </TableHead>
+ 300:                   <TableBody>
+ 301:                     {safeMovements.length === 0 ? (
+ 302:                       <TableRow>
+ 303:                         <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+ 304:                           <Typography variant="body2" color="text.secondary">
+ 305:                             No hay movimientos para este dia
+ 306:                           </Typography>
+ 307:                         </TableCell>
+ 308:                       </TableRow>
+ 309:                     ) : (
+ 310:                       safeMovements.map((mov, idx) => (
+ 311:                         <TableRow key={idx} hover>
+ 312:                           <TableCell sx={{ fontWeight: 600 }}>{mov.country}</TableCell>
+ 313:                           <TableCell>
+ 314:                             <Chip label={mov.currency} size="small" sx={{ fontWeight: 700 }} />
+ 315:                           </TableCell>
+ 316:                           <TableCell align="right" sx={{ color: '#16A34A', fontWeight: 600 }}>
+ 317:                             ${(mov.total_in || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 318:                           </TableCell>
+ 319:                           <TableCell align="right" sx={{ color: '#DC2626', fontWeight: 600 }}>
+ 320:                             ${(mov.total_out || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 321:                           </TableCell>
+ 322:                           <TableCell align="right" sx={{ fontWeight: 800, color: mov.net_balance >= 0 ? '#2563EB' : '#DC2626' }}>
+ 323:                             ${(mov.net_balance || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+ 324:                           </TableCell>
+ 325:                           <TableCell align="center">
+ 326:                             <Button
+ 327:                               size="small"
+ 328:                               variant="outlined"
+ 329:                               startIcon={<SendIcon />}
+ 330:                               onClick={() => openSweepDialog(mov.country, mov.currency)}
+ 331:                             >
+ 332:                               Registrar Sweep
+ 333:                             </Button>
+ 334:                           </TableCell>
+ 335:                         </TableRow>
+ 336:                       ))
+ 337:                     )}
+ 338:                   </TableBody>
+ 339:                 </Table>
+ 340:               </TableContainer>
+ 341:             </CardContent>
+ 342:           </Card>
+ 343:         </>
+ 344:       )}
+ 345: 
+ 346:       <Dialog open={sweepDialogOpen} onClose={() => setSweepDialogOpen(false)} maxWidth="sm" fullWidth>
+ 347:         <DialogTitle>Registrar Sweep (Salida a Binance)</DialogTitle>
+ 348:         <DialogContent>
+ 349:           <Stack spacing={2} sx={{ mt: 1 }}>
+ 350:             <TextField label="Pais" value={sweepForm.country} disabled fullWidth />
+ 351:             <TextField label="Moneda" value={sweepForm.currency} disabled fullWidth />
+ 352:             <TextField
+ 353:               label="Monto"
+ 354:               type="number"
+ 355:               value={sweepForm.amount}
+ 356:               onChange={(e) => setSweepForm({ ...sweepForm, amount: parseFloat(e.target.value) || 0 })}
+ 357:               fullWidth
+ 358:               required
+ 359:             />
+ 360:             <TextField
+ 361:               label="TX Hash"
+ 362:               value={sweepForm.tx_hash}
+ 363:               onChange={(e) => setSweepForm({ ...sweepForm, tx_hash: e.target.value })}
+ 364:               fullWidth
+ 365:               required
+ 366:             />
+ 367:             <TextField
+ 368:               label="Notas"
+ 369:               value={sweepForm.notes}
+ 370:               onChange={(e) => setSweepForm({ ...sweepForm, notes: e.target.value })}
+ 371:               fullWidth
+ 372:               multiline
+ 373:               rows={2}
+ 374:             />
+ 375:           </Stack>
+ 376:         </DialogContent>
+ 377:         <DialogActions>
+ 378:           <Button onClick={() => setSweepDialogOpen(false)}>Cancelar</Button>
+ 379:           <Button
+ 380:             variant="contained"
+ 381:             onClick={handleSweepSubmit}
+ 382:             disabled={sweepLoading || !sweepForm.amount || !sweepForm.tx_hash}
+ 383:           >
+ 384:             {sweepLoading ? 'Guardando...' : 'Registrar'}
+ 385:           </Button>
+ 386:         </DialogActions>
+ 387:       </Dialog>
+ 388:     </Box>
+ 389:   );
+ 390: }
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\src\app\page.tsx
+{'='*80}
+   1: 'use client';
+   2: 
+   3: import React, { useState, useEffect, useCallback, ReactElement } from 'react';
+   4: import {
+   5:   Box,
+   6:   Typography,
+   7:   Card,
+   8:   CardContent,
+   9:   TextField,
+  10:   Button,
+  11:   Alert,
+  12:   CircularProgress,
+  13:   Chip,
+  14:   Stack,
+  15:   Divider,
+  16:   IconButton,
+  17:   Tooltip,
+  18: } from '@mui/material';
+  19: import {
+  20:   TrendingUp as TrendingUpIcon,
+  21:   Receipt as ReceiptIcon,
+  22:   AccountBalance as WalletIcon,
+  23:   AttachMoney as MoneyIcon,
+  24:   Warning as WarningIcon,
+  25:   Refresh as RefreshIcon,
+  26:   Schedule as ClockIcon,
+  27: } from '@mui/icons-material';
+  28: import {
+  29:   AreaChart,
+  30:   Area,
+  31:   XAxis,
+  32:   YAxis,
+  33:   CartesianGrid,
+  34:   Tooltip as RechartsTooltip,
+  35:   ResponsiveContainer,
+  36:   BarChart,
+  37:   Bar,
+  38:   Cell,
+  39: } from 'recharts';
+  40: import { useAuth } from '@/components/AuthProvider';
+  41: import { apiRequest } from '@/lib/api';
+  42: 
+  43: interface Metrics {
+  44:   total_orders: number;
+  45:   pending_orders: number;
+  46:   completed_orders: number;
+  47:   total_volume_usd?: number;
+  48:   total_profit_usd?: number;
+  49: }
+  50: 
+  51: interface AlertItem {
+  52:   public_id: string;
+  53:   status: string;
+  54:   created_at: string;
+  55:   minutes_stuck: number;
+  56: }
+  57: 
+  58: interface ProfitDay {
+  59:   day: string;
+  60:   profit: number;
+  61:   orders_count?: number;
+  62: }
+  63: 
+  64: interface OrdersResponse {
+  65:   count: number;
+  66:   orders: OrderItem[];
+  67: }
+  68: 
+  69: interface OrderItem {
+  70:   public_id: number | string;
+  71:   status: string;
+  72:   profit_usdt: number | null;
+  73:   created_at: string;
+  74: }
+  75: 
+  76: interface StatCardProps {
+  77:   title: string;
+  78:   value: string | number;
+  79:   icon: ReactElement;
+  80:   color: string;
+  81:   subtitle?: string;
+  82: }
+  83: 
+  84: function StatCard({ title, value, icon, color, subtitle }: StatCardProps) {
+  85:   return (
+  86:     <Card sx={{ flex: '1 1 calc(25% - 16px)', minWidth: 200, position: 'relative', overflow: 'visible' }}>
+  87:       <CardContent sx={{ p: 2.5 }}>
+  88:         <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+  89:           <Box>
+  90:             <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.8rem', mb: 0.5 }}>
+  91:               {title}
+  92:             </Typography>
+  93:             <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827', lineHeight: 1.2 }}>
+  94:               {value}
+  95:             </Typography>
+  96:             {subtitle && (
+  97:               <Typography variant="caption" sx={{ color: '#64748B', mt: 0.5, display: 'block' }}>
+  98:                 {subtitle}
+  99:               </Typography>
+ 100:             )}
+ 101:           </Box>
+ 102:           <Box sx={{ backgroundColor: `${color}12`, borderRadius: '14px', p: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+ 103:             {React.cloneElement(icon, { sx: { color, fontSize: 26 } })}
+ 104:           </Box>
+ 105:         </Stack>
+ 106:       </CardContent>
+ 107:     </Card>
+ 108:   );
+ 109: }
+ 110: 
+ 111: const STATUS_COLORS: Record<string, string> = {
+ 112:   PAGADA: '#16A34A',
+ 113:   CANCELADA: '#DC2626',
+ 114:   PENDIENTE: '#F59E0B',
+ 115:   EN_PROCESO: '#2563EB',
+ 116:   pending_kyc: '#F59E0B',
+ 117:   pending_origin: '#F59E0B',
+ 118:   pending_dest: '#2563EB',
+ 119:   completed: '#16A34A',
+ 120:   cancelled: '#DC2626',
+ 121: };
+ 122: 
+ 123: export default function OverviewPage() {
+ 124:   const { apiKey, setApiKey, clearApiKey } = useAuth();
+ 125:   const [tempKey, setTempKey] = useState('');
+ 126:   const [metrics, setMetrics] = useState<Metrics | null>(null);
+ 127:   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+ 128:   const [profitDaily, setProfitDaily] = useState<ProfitDay[]>([]);
+ 129:   const [statusCounts, setStatusCounts] = useState<{ name: string; value: number; color: string }[]>([]);
+ 130:   const [loading, setLoading] = useState(false);
+ 131:   const [error, setError] = useState('');
+ 132:   const [lastUpdated, setLastUpdated] = useState<string>('');
+ 133: 
+ 134:   const fetchData = useCallback(async () => {
+ 135:     setLoading(true);
+ 136:     setError('');
+ 137: 
+ 138:     try {
+ 139:       const [metricsData, alertsData, profitData, ordersData] = await Promise.all([
+ 140:         apiRequest<Metrics>('/metrics/overview'),
+ 141:         apiRequest<{ alerts: AlertItem[] }>('/alerts/stuck-30m'),
+ 142:         apiRequest<ProfitDay[]>('/metrics/profit_daily?days=7').catch(() => []),
+ 143:         apiRequest<OrdersResponse>('/orders?limit=200').catch(() => ({ count: 0, orders: [] })),
+ 144:       ]);
+ 145: 
+ 146:       setMetrics(metricsData);
+ 147:       setAlerts(alertsData.alerts || []);
+ 148: 
+ 149:       const profitArray = Array.isArray(profitData) ? profitData : [];
+ 150:       setProfitDaily(
+ 151:         profitArray.map((d) => ({
+ 152:           ...d,
+ 153:           day: new Date(d.day).toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric' }),
+ 154:         }))
+ 155:       );
+ 156: 
+ 157:       const orders = Array.isArray(ordersData) ? ordersData : (ordersData.orders || []);
+ 158:       const counts: Record<string, number> = {};
+ 159:       orders.forEach((o: OrderItem) => {
+ 160:         const s = o.status || 'UNKNOWN';
+ 161:         counts[s] = (counts[s] || 0) + 1;
+ 162:       });
+ 163:       setStatusCounts(
+ 164:         Object.entries(counts).map(([name, value]) => ({
+ 165:           name,
+ 166:           value,
+ 167:           color: STATUS_COLORS[name] || '#6B7280',
+ 168:         }))
+ 169:       );
+ 170: 
+ 171:       setLastUpdated(new Date().toLocaleTimeString('es-VE'));
+ 172:     } catch (err: unknown) {
+ 173:       const message = err instanceof Error ? err.message : 'Error desconocido';
+ 174:       setError(message);
+ 175:       if (message === 'API_KEY_INVALID') {
+ 176:         clearApiKey();
+ 177:       }
+ 178:     } finally {
+ 179:       setLoading(false);
+ 180:     }
+ 181:   }, [clearApiKey]);
+ 182: 
+ 183:   useEffect(() => {
+ 184:     if (apiKey) {
+ 185:       fetchData();
+ 186:     }
+ 187:   }, [apiKey, fetchData]);
+ 188: 
+ 189:   const saveKey = () => {
+ 190:     setApiKey(tempKey);
+ 191:     setError('');
+ 192:   };
+ 193: 
+ 194:   if (!apiKey) {
+ 195:     return (
+ 196:       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
+ 197:         <Card sx={{ maxWidth: 480, width: '100%' }}>
+ 198:           <CardContent sx={{ p: 4 }}>
+ 199:             <Box sx={{ textAlign: 'center', mb: 3 }}>
+ 200:               <Box component="img" src="/logo.png" alt="Sendmax" sx={{ height: 48, width: 'auto', mb: 2 }} />
+ 201:               <Typography variant="h5" sx={{ fontWeight: 700, color: '#4B2E83', mb: 0.5 }}>
+ 202:                 Sendmax Backoffice
+ 203:               </Typography>
+ 204:               <Typography variant="body2" color="text.secondary">
+ 205:                 Ingresa tu API Key para acceder al panel de control
+ 206:               </Typography>
+ 207:             </Box>
+ 208:             <Divider sx={{ my: 2 }} />
+ 209:             <Stack spacing={2.5}>
+ 210:               <TextField
+ 211:                 fullWidth
+ 212:                 type="password"
+ 213:                 label="API Key"
+ 214:                 value={tempKey}
+ 215:                 onChange={(e) => setTempKey(e.target.value)}
+ 216:                 placeholder="sk_live_..."
+ 217:                 helperText="La clave se guarda localmente en tu navegador"
+ 218:                 onKeyDown={(e) => e.key === 'Enter' && tempKey && saveKey()}
+ 219:               />
+ 220:               <Button variant="contained" onClick={saveKey} disabled={!tempKey} size="large" fullWidth sx={{ py: 1.5 }}>
+ 221:                 Acceder al panel
+ 222:               </Button>
+ 223:             </Stack>
+ 224:             {error && (
+ 225:               <Alert severity="error" sx={{ mt: 2 }}>
+ 226:                 {error}
+ 227:               </Alert>
+ 228:             )}
+ 229:           </CardContent>
+ 230:         </Card>
+ 231:       </Box>
+ 232:     );
+ 233:   }
+ 234: 
+ 235:   return (
+ 236:     <Box className="fade-in">
+ 237:       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+ 238:         <Box>
+ 239:           <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827' }}>
+ 240:             Dashboard
+ 241:           </Typography>
+ 242:           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
+ 243:             Vista general de operaciones Sendmax
+ 244:             {lastUpdated && ` | Actualizado: ${lastUpdated}`}
+ 245:           </Typography>
+ 246:         </Box>
+ 247:         <Stack direction="row" spacing={1}>
+ 248:           <Tooltip title="Actualizar datos">
+ 249:             <IconButton onClick={fetchData} disabled={loading} sx={{ color: '#4B2E83' }}>
+ 250:               <RefreshIcon />
+ 251:             </IconButton>
+ 252:           </Tooltip>
+ 253:           <Button variant="outlined" size="small" onClick={clearApiKey}>
+ 254:             Cambiar Key
+ 255:           </Button>
+ 256:         </Stack>
+ 257:       </Stack>
+ 258: 
+ 259:       {error && (
+ 260:         <Alert severity="error" sx={{ mb: 3 }}>
+ 261:           {error}
+ 262:         </Alert>
+ 263:       )}
+ 264: 
+ 265:       {loading && (
+ 266:         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+ 267:           <CircularProgress sx={{ color: '#4B2E83' }} />
+ 268:         </Box>
+ 269:       )}
+ 270: 
+ 271:       {metrics && !loading && (
+ 272:         <>
+ 273:           <Stack direction="row" spacing={2.5} sx={{ mb: 4, flexWrap: 'wrap', gap: 2 }}>
+ 274:             <StatCard title="Total Ordenes" value={metrics.total_orders || 0} icon={<ReceiptIcon />} color="#4B2E83" subtitle="Historico total" />
+ 275:             <StatCard title="Pendientes" value={metrics.pending_orders || 0} icon={<TrendingUpIcon />} color="#F59E0B" subtitle="Requieren atencion" />
+ 276:             <StatCard
+ 277:               title="Volumen USD"
+ 278:               value={`$${(metrics.total_volume_usd || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+ 279:               icon={<WalletIcon />}
+ 280:               color="#2563EB"
+ 281:               subtitle="Total procesado"
+ 282:             />
+ 283:             <StatCard
+ 284:               title="Ganancia USD"
+ 285:               value={`$${(metrics.total_profit_usd || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+ 286:               icon={<MoneyIcon />}
+ 287:               color="#16A34A"
+ 288:               subtitle="Profit acumulado"
+ 289:             />
+ 290:           </Stack>
+ 291: 
+ 292:           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2.5} sx={{ mb: 4 }}>
+ 293:             <Card sx={{ flex: 2, minWidth: 0 }}>
+ 294:               <CardContent sx={{ p: 3 }}>
+ 295:                 <Typography variant="h6" sx={{ mb: 0.5 }}>
+ 296:                   Ganancia Diaria (7 dias)
+ 297:                 </Typography>
+ 298:                 <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>
+ 299:                   Profit USDT por dia
+ 300:                 </Typography>
+ 301:                 {profitDaily.length > 0 ? (
+ 302:                   <ResponsiveContainer width="100%" height={260}>
+ 303:                     <AreaChart data={profitDaily}>
+ 304:                       <defs>
+ 305:                         <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
+ 306:                           <stop offset="0%" stopColor="#4B2E83" stopOpacity={0.3} />
+ 307:                           <stop offset="100%" stopColor="#4B2E83" stopOpacity={0.02} />
+ 308:                         </linearGradient>
+ 309:                       </defs>
+ 310:                       <CartesianGrid strokeDasharray="3 3" stroke="#E9E3F7" vertical={false} />
+ 311:                       <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={{ stroke: '#E9E3F7' }} tickLine={false} />
+ 312:                       <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+ 313:                       <RechartsTooltip
+ 314:                         contentStyle={{ borderRadius: 12, border: '1px solid #E9E3F7', boxShadow: '0 8px 24px rgba(17,24,39,.06)', fontSize: 13 }}
+ 315:                         formatter={(value: number) => [`$${value.toFixed(2)}`, 'Ganancia']}
+ 316:                       />
+ 317:                       <Area type="monotone" dataKey="profit" stroke="#4B2E83" strokeWidth={2.5} fill="url(#profitGradient)" dot={{ fill: '#4B2E83', r: 4, strokeWidth: 2, stroke: '#FFFFFF' }} activeDot={{ r: 6, fill: '#4B2E83', stroke: '#FFFFFF', strokeWidth: 2 }} />
+ 318:                     </AreaChart>
+ 319:                   </ResponsiveContainer>
+ 320:                 ) : (
+ 321:                   <Box sx={{ py: 6, textAlign: 'center' }}>
+ 322:                     <Typography variant="body2" color="text.secondary">
+ 323:                       No hay datos de ganancia diaria disponibles
+ 324:                     </Typography>
+ 325:                   </Box>
+ 326:                 )}
+ 327:               </CardContent>
+ 328:             </Card>
+ 329: 
+ 330:             <Card sx={{ flex: 1, minWidth: 280 }}>
+ 331:               <CardContent sx={{ p: 3 }}>
+ 332:                 <Typography variant="h6" sx={{ mb: 0.5 }}>
+ 333:                   Ordenes por Status
+ 334:                 </Typography>
+ 335:                 <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>
+ 336:                   Distribucion actual
+ 337:                 </Typography>
+ 338:                 {statusCounts.length > 0 ? (
+ 339:                   <>
+ 340:                     <ResponsiveContainer width="100%" height={160}>
+ 341:                       <BarChart data={statusCounts} layout="vertical">
+ 342:                         <XAxis type="number" hide />
+ 343:                         <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#475569' }} axisLine={false} tickLine={false} width={90} />
+ 344:                         <RechartsTooltip contentStyle={{ borderRadius: 12, border: '1px solid #E9E3F7', fontSize: 13 }} />
+ 345:                         <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={20}>
+ 346:                           {statusCounts.map((entry, index) => (
+ 347:                             <Cell key={index} fill={entry.color} />
+ 348:                           ))}
+ 349:                         </Bar>
+ 350:                       </BarChart>
+ 351:                     </ResponsiveContainer>
+ 352:                     <Divider sx={{ my: 1.5 }} />
+ 353:                     <Stack spacing={1}>
+ 354:                       {statusCounts.map((s) => (
+ 355:                         <Stack key={s.name} direction="row" justifyContent="space-between" alignItems="center">
+ 356:                           <Stack direction="row" spacing={1} alignItems="center">
+ 357:                             <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: s.color }} />
+ 358:                             <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{s.name}</Typography>
+ 359:                           </Stack>
+ 360:                           <Chip label={s.value} size="small" sx={{ backgroundColor: `${s.color}15`, color: s.color, fontWeight: 700, fontSize: '0.75rem', height: 22 }} />
+ 361:                         </Stack>
+ 362:                       ))}
+ 363:                     </Stack>
+ 364:                   </>
+ 365:                 ) : (
+ 366:                   <Box sx={{ py: 6, textAlign: 'center' }}>
+ 367:                     <Typography variant="body2" color="text.secondary">Sin datos</Typography>
+ 368:                   </Box>
+ 369:                 )}
+ 370:               </CardContent>
+ 371:             </Card>
+ 372:           </Stack>
+ 373: 
+ 374:           {alerts.length > 0 && (
+ 375:             <Card sx={{ border: '1px solid #F59E0B', backgroundColor: '#FFFBF0' }}>
+ 376:               <CardContent sx={{ p: 3 }}>
+ 377:                 <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
+ 378:                   <WarningIcon sx={{ color: '#F59E0B' }} />
+ 379:                   <Typography variant="h6">Alertas Activas</Typography>
+ 380:                   <Chip label={`${alerts.length} orden${alerts.length > 1 ? 'es' : ''}`} size="small" sx={{ backgroundColor: '#FFF5E6', color: '#F59E0B', fontWeight: 700, border: '1px solid #F59E0B' }} />
+ 381:                 </Stack>
+ 382:                 <Typography variant="body2" sx={{ color: '#64748B', mb: 2 }}>
+ 383:                   Ordenes estancadas por mas de 30 minutos sin cambio de status
+ 384:                 </Typography>
+ 385:                 <Stack spacing={1.5}>
+ 386:                   {alerts.map((alert) => (
+ 387:                     <Alert severity="warning" key={alert.public_id} sx={{ backgroundColor: '#FFF5E6', border: '1px solid #FBBF24' }}>
+ 388:                       <Stack direction="row" spacing={2} alignItems="center">
+ 389:                         <Chip label={`#${alert.public_id}`} size="small" sx={{ fontWeight: 700, fontFamily: 'monospace' }} />
+ 390:                         <Typography variant="body2">{alert.status}</Typography>
+ 391:                         <Chip icon={<ClockIcon sx={{ fontSize: 14 }} />} label={`${alert.minutes_stuck} min`} size="small" color="warning" variant="outlined" sx={{ fontWeight: 600 }} />
+ 392:                       </Stack>
+ 393:                     </Alert>
+ 394:                   ))}
+ 395:                 </Stack>
+ 396:               </CardContent>
+ 397:             </Card>
+ 398:           )}
+ 399:         </>
+ 400:       )}
+ 401:     </Box>
+ 402:   );
+ 403: }
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\src\app\theme.ts
+{'='*80}
+   1: 'use client';
+   2: import { createTheme, type Shadows } from '@mui/material/styles';
+   3: 
+   4: const baseShadows = [
+   5:   'none',
+   6:   '0 1px 3px rgba(17,24,39,.04)',
+   7:   '0 2px 6px rgba(17,24,39,.05)',
+   8:   '0 4px 12px rgba(17,24,39,.06)',
+   9:   '0 8px 24px rgba(17,24,39,.06)',
+  10:   '0 12px 32px rgba(17,24,39,.08)',
+  11:   '0 16px 40px rgba(17,24,39,.10)',
+  12:   '0 20px 48px rgba(17,24,39,.12)',
+  13:   '0 24px 56px rgba(17,24,39,.14)',
+  14:   ...Array(16).fill('0 24px 56px rgba(17,24,39,.14)'),
+  15: ] as Shadows;
+  16: 
+  17: const theme = createTheme({
+  18:   palette: {
+  19:     primary: {
+  20:       main: '#4B2E83',
+  21:       light: '#6B46C1',
+  22:       dark: '#3A2266',
+  23:       contrastText: '#FFFFFF',
+  24:     },
+  25:     secondary: {
+  26:       main: '#5A37A0',
+  27:       light: '#D8CCFF',
+  28:       dark: '#4B2E83',
+  29:     },
+  30:     background: {
+  31:       default: '#FAF8FF',
+  32:       paper: '#FFFFFF',
+  33:     },
+  34:     success: {
+  35:       main: '#16A34A',
+  36:       light: '#EAF7EF',
+  37:     },
+  38:     warning: {
+  39:       main: '#F59E0B',
+  40:       light: '#FFF5E6',
+  41:     },
+  42:     error: {
+  43:       main: '#DC2626',
+  44:       light: '#FDECEC',
+  45:     },
+  46:     info: {
+  47:       main: '#2563EB',
+  48:       light: '#EAF1FF',
+  49:     },
+  50:     text: {
+  51:       primary: '#111827',
+  52:       secondary: '#475569',
+  53:       disabled: '#64748B',
+  54:     },
+  55:     divider: '#E9E3F7',
+  56:   },
+  57:   typography: {
+  58:     fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  59:     h1: { fontWeight: 700, letterSpacing: '-0.02em' },
+  60:     h2: { fontWeight: 700, letterSpacing: '-0.02em' },
+  61:     h3: { fontWeight: 700, letterSpacing: '-0.01em' },
+  62:     h4: { fontWeight: 700, letterSpacing: '-0.01em' },
+  63:     h5: { fontWeight: 600 },
+  64:     h6: { fontWeight: 600 },
+  65:     subtitle1: { fontWeight: 500, color: '#475569' },
+  66:     subtitle2: { fontWeight: 500, color: '#64748B' },
+  67:     body1: { fontSize: '0.9375rem', lineHeight: 1.6 },
+  68:     body2: { fontSize: '0.8125rem', lineHeight: 1.5 },
+  69:     caption: { fontSize: '0.75rem', color: '#64748B' },
+  70:     button: { textTransform: 'none', fontWeight: 600 },
+  71:   },
+  72:   shape: {
+  73:     borderRadius: 12,
+  74:   },
+  75:   shadows: baseShadows,
+  76:   components: {
+  77:     MuiCssBaseline: {
+  78:       styleOverrides: {
+  79:         body: {
+  80:           backgroundColor: '#FAF8FF',
+  81:         },
+  82:       },
+  83:     },
+  84:     MuiCard: {
+  85:       styleOverrides: {
+  86:         root: {
+  87:           borderRadius: 16,
+  88:           boxShadow: '0 8px 24px rgba(17,24,39,.06)',
+  89:           border: '1px solid #E9E3F7',
+  90:           transition: 'box-shadow 0.2s ease, transform 0.2s ease',
+  91:           '&:hover': {
+  92:             boxShadow: '0 12px 32px rgba(17,24,39,.08)',
+  93:           },
+  94:         },
+  95:       },
+  96:     },
+  97:     MuiButton: {
+  98:       styleOverrides: {
+  99:         root: {
+ 100:           borderRadius: 12,
+ 101:           padding: '10px 24px',
+ 102:           fontWeight: 600,
+ 103:           fontSize: '0.875rem',
+ 104:         },
+ 105:         contained: {
+ 106:           boxShadow: '0 2px 8px rgba(75,46,131,.25)',
+ 107:           '&:hover': {
+ 108:             boxShadow: '0 4px 16px rgba(75,46,131,.35)',
+ 109:           },
+ 110:         },
+ 111:         outlined: {
+ 112:           borderColor: '#D8CCFF',
+ 113:           color: '#4B2E83',
+ 114:           '&:hover': {
+ 115:             borderColor: '#4B2E83',
+ 116:             backgroundColor: '#EFEAFF',
+ 117:           },
+ 118:         },
+ 119:       },
+ 120:     },
+ 121:     MuiTextField: {
+ 122:       styleOverrides: {
+ 123:         root: {
+ 124:           '& .MuiOutlinedInput-root': {
+ 125:             borderRadius: 12,
+ 126:             '& fieldset': {
+ 127:               borderColor: '#E9E3F7',
+ 128:             },
+ 129:             '&:hover fieldset': {
+ 130:               borderColor: '#D8CCFF',
+ 131:             },
+ 132:             '&.Mui-focused fieldset': {
+ 133:               borderColor: '#4B2E83',
+ 134:             },
+ 135:           },
+ 136:         },
+ 137:       },
+ 138:     },
+ 139:     MuiChip: {
+ 140:       styleOverrides: {
+ 141:         root: {
+ 142:           borderRadius: 8,
+ 143:           fontWeight: 600,
+ 144:           fontSize: '0.75rem',
+ 145:         },
+ 146:       },
+ 147:     },
+ 148:     MuiTableHead: {
+ 149:       styleOverrides: {
+ 150:         root: {
+ 151:           '& .MuiTableCell-head': {
+ 152:             backgroundColor: '#FAF8FF',
+ 153:             fontWeight: 600,
+ 154:             fontSize: '0.8125rem',
+ 155:             color: '#475569',
+ 156:             borderBottom: '2px solid #E9E3F7',
+ 157:           },
+ 158:         },
+ 159:       },
+ 160:     },
+ 161:     MuiTableCell: {
+ 162:       styleOverrides: {
+ 163:         root: {
+ 164:           borderBottom: '1px solid #F3F0FF',
+ 165:           padding: '14px 16px',
+ 166:           fontSize: '0.8125rem',
+ 167:         },
+ 168:       },
+ 169:     },
+ 170:     MuiTableRow: {
+ 171:       styleOverrides: {
+ 172:         root: {
+ 173:           '&:hover': {
+ 174:             backgroundColor: '#FAF8FF',
+ 175:           },
+ 176:         },
+ 177:       },
+ 178:     },
+ 179:     MuiDialog: {
+ 180:       styleOverrides: {
+ 181:         paper: {
+ 182:           borderRadius: 20,
+ 183:           boxShadow: '0 16px 40px rgba(17,24,39,.10)',
+ 184:         },
+ 185:       },
+ 186:     },
+ 187:     MuiAlert: {
+ 188:       styleOverrides: {
+ 189:         root: {
+ 190:           borderRadius: 12,
+ 191:         },
+ 192:       },
+ 193:     },
+ 194:     MuiDrawer: {
+ 195:       styleOverrides: {
+ 196:         paper: {
+ 197:           borderRight: '1px solid #E9E3F7',
+ 198:         },
+ 199:       },
+ 200:     },
+ 201:     MuiTooltip: {
+ 202:       styleOverrides: {
+ 203:         tooltip: {
+ 204:           borderRadius: 8,
+ 205:           fontSize: '0.75rem',
+ 206:         },
+ 207:       },
+ 208:     },
+ 209:   },
+ 210: });
+ 211: 
+ 212: export default theme;
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\src\components\AuthProvider.tsx
+{'='*80}
+   1: 'use client';
+   2: 
+   3: import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
+   4: import { useRouter, usePathname } from 'next/navigation';
+   5: import { Box, CircularProgress } from '@mui/material';
+   6: 
+   7: interface AuthContextType {
+   8:   apiKey: string | null;
+   9:   setApiKey: (key: string) => void;
+  10:   clearApiKey: () => void;
+  11:   isReady: boolean;
+  12: }
+  13: 
+  14: const AuthContext = createContext<AuthContextType>({
+  15:   apiKey: null,
+  16:   setApiKey: () => {},
+  17:   clearApiKey: () => {},
+  18:   isReady: false,
+  19: });
+  20: 
+  21: export const useAuth = () => useContext(AuthContext);
+  22: 
+  23: function getStoredKey(): string | null {
+  24:   if (typeof window === 'undefined') return null;
+  25:   return localStorage.getItem('BACKOFFICE_API_KEY');
+  26: }
+  27: 
+  28: export function AuthProvider({ children }: { children: ReactNode }) {
+  29:   const [apiKey, setApiKeyState] = useState<string | null>(getStoredKey);
+  30:   const [isReady] = useState(() => typeof window !== 'undefined');
+  31:   const router = useRouter();
+  32:   const pathname = usePathname();
+  33:   const redirected = useRef(false);
+  34: 
+  35:   useEffect(() => {
+  36:     if (isReady && !apiKey && pathname !== '/' && !redirected.current) {
+  37:       redirected.current = true;
+  38:       router.push('/');
+  39:     }
+  40:   }, [isReady, apiKey, pathname, router]);
+  41: 
+  42:   const setApiKey = (key: string) => {
+  43:     localStorage.setItem('BACKOFFICE_API_KEY', key);
+  44:     setApiKeyState(key);
+  45:   };
+  46: 
+  47:   const clearApiKey = () => {
+  48:     localStorage.removeItem('BACKOFFICE_API_KEY');
+  49:     setApiKeyState(null);
+  50:     router.push('/');
+  51:   };
+  52: 
+  53:   if (!isReady) {
+  54:     return (
+  55:       <Box sx={{
+  56:         display: 'flex',
+  57:         justifyContent: 'center',
+  58:         alignItems: 'center',
+  59:         height: '100vh',
+  60:         backgroundColor: '#FAF8FF'
+  61:       }}>
+  62:         <CircularProgress />
+  63:       </Box>
+  64:     );
+  65:   }
+  66: 
+  67:   return (
+  68:     <AuthContext.Provider value={{ apiKey, setApiKey, clearApiKey, isReady }}>
+  69:       {children}
+  70:     </AuthContext.Provider>
+  71:   );
+  72: }
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\src\components\Sidebar.tsx
+{'='*80}
+   1: 'use client';
+   2: 
+   3: import React from 'react';
+   4: import { usePathname, useRouter } from 'next/navigation';
+   5: import {
+   6:   Drawer,
+   7:   List,
+   8:   ListItem,
+   9:   ListItemButton,
+  10:   ListItemIcon,
+  11:   ListItemText,
+  12:   Box,
+  13:   Typography,
+  14:   Divider,
+  15:   Avatar,
+  16:   Stack,
+  17:   Chip,
+  18: } from '@mui/material';
+  19: import {
+  20:   Dashboard as DashboardIcon,
+  21:   Receipt as ReceiptIcon,
+  22:   AccountBalance as WalletIcon,
+  23:   EventNote as CalendarIcon,
+  24: } from '@mui/icons-material';
+  25: 
+  26: const drawerWidth = 264;
+  27: 
+  28: const menuItems = [
+  29:   { text: 'Overview', path: '/', icon: <DashboardIcon />, description: 'Dashboard principal' },
+  30:   { text: 'Ordenes', path: '/orders', icon: <ReceiptIcon />, description: 'Gestionar ordenes' },
+  31:   { text: 'Billeteras Origen', path: '/origin', icon: <WalletIcon />, description: 'Entradas y sweeps' },
+  32:   { text: 'Cierre Diario', path: '/daily-close', icon: <CalendarIcon />, description: 'Reportes y cierres' },
+  33: ];
+  34: 
+  35: export default function Sidebar() {
+  36:   const pathname = usePathname();
+  37:   const router = useRouter();
+  38: 
+  39:   return (
+  40:     <Drawer
+  41:       variant="permanent"
+  42:       sx={{
+  43:         width: drawerWidth,
+  44:         flexShrink: 0,
+  45:         '& .MuiDrawer-paper': {
+  46:           width: drawerWidth,
+  47:           boxSizing: 'border-box',
+  48:           background: 'linear-gradient(180deg, #FFFFFF 0%, #FAF8FF 100%)',
+  49:           borderRight: '1px solid #E9E3F7',
+  50:           display: 'flex',
+  51:           flexDirection: 'column',
+  52:         },
+  53:       }}
+  54:     >
+  55:       {/* Logo - clickeable para volver al inicio */}
+  56:       <Box
+  57:         onClick={() => router.push('/')}
+  58:         sx={{
+  59:           p: 2.5,
+  60:           display: 'flex',
+  61:           alignItems: 'center',
+  62:           gap: 1.5,
+  63:           cursor: 'pointer',
+  64:           transition: 'opacity 0.2s ease',
+  65:           '&:hover': { opacity: 0.8 },
+  66:         }}
+  67:       >
+  68:         <Box
+  69:           component="img"
+  70:           src="/logo.png"
+  71:           alt="Sendmax"
+  72:           sx={{
+  73:             height: 36,
+  74:             width: 'auto',
+  75:             objectFit: 'contain',
+  76:           }}
+  77:         />
+  78:         <Stack spacing={0}>
+  79:           <Typography
+  80:             variant="h6"
+  81:             sx={{
+  82:               fontWeight: 700,
+  83:               color: '#4B2E83',
+  84:               fontSize: '1.1rem',
+  85:               lineHeight: 1.2,
+  86:               letterSpacing: '-0.01em',
+  87:             }}
+  88:           >
+  89:             Sendmax
+  90:           </Typography>
+  91:           <Typography
+  92:             variant="caption"
+  93:             sx={{
+  94:               color: '#64748B',
+  95:               fontSize: '0.65rem',
+  96:               lineHeight: 1,
+  97:               letterSpacing: '0.05em',
+  98:               textTransform: 'uppercase',
+  99:             }}
+ 100:           >
+ 101:             Backoffice
+ 102:           </Typography>
+ 103:         </Stack>
+ 104:       </Box>
+ 105: 
+ 106:       <Divider sx={{ borderColor: '#E9E3F7', mx: 2 }} />
+ 107: 
+ 108:       {/* Menu items */}
+ 109:       <List sx={{ px: 1.5, py: 2, flex: 1 }}>
+ 110:         {menuItems.map((item) => {
+ 111:           const isActive = pathname === item.path;
+ 112:           return (
+ 113:             <ListItem key={item.path} disablePadding sx={{ mb: 0.5 }}>
+ 114:               <ListItemButton
+ 115:                 onClick={() => router.push(item.path)}
+ 116:                 sx={{
+ 117:                   borderRadius: '12px',
+ 118:                   py: 1.25,
+ 119:                   px: 1.5,
+ 120:                   backgroundColor: isActive ? '#EFEAFF' : 'transparent',
+ 121:                   border: isActive ? '1px solid #D8CCFF' : '1px solid transparent',
+ 122:                   '&:hover': {
+ 123:                     backgroundColor: isActive ? '#EFEAFF' : '#FAF8FF',
+ 124:                     border: isActive ? '1px solid #D8CCFF' : '1px solid #E9E3F7',
+ 125:                   },
+ 126:                   transition: 'all 0.2s ease',
+ 127:                 }}
+ 128:               >
+ 129:                 <ListItemIcon
+ 130:                   sx={{
+ 131:                     color: isActive ? '#4B2E83' : '#6B7280',
+ 132:                     minWidth: 36,
+ 133:                     '& .MuiSvgIcon-root': {
+ 134:                       fontSize: 20,
+ 135:                     },
+ 136:                   }}
+ 137:                 >
+ 138:                   {item.icon}
+ 139:                 </ListItemIcon>
+ 140:                 <ListItemText
+ 141:                   primary={item.text}
+ 142:                   secondary={!isActive ? item.description : undefined}
+ 143:                   primaryTypographyProps={{
+ 144:                     fontSize: '0.875rem',
+ 145:                     fontWeight: isActive ? 700 : 500,
+ 146:                     color: isActive ? '#4B2E83' : '#111827',
+ 147:                     lineHeight: 1.3,
+ 148:                   }}
+ 149:                   secondaryTypographyProps={{
+ 150:                     fontSize: '0.65rem',
+ 151:                     color: '#64748B',
+ 152:                     lineHeight: 1.2,
+ 153:                     mt: 0.25,
+ 154:                   }}
+ 155:                 />
+ 156:                 {isActive && (
+ 157:                   <Box
+ 158:                     sx={{
+ 159:                       width: 4,
+ 160:                       height: 24,
+ 161:                       borderRadius: 2,
+ 162:                       backgroundColor: '#4B2E83',
+ 163:                       ml: 1,
+ 164:                     }}
+ 165:                   />
+ 166:                 )}
+ 167:               </ListItemButton>
+ 168:             </ListItem>
+ 169:           );
+ 170:         })}
+ 171:       </List>
+ 172: 
+ 173:       <Divider sx={{ borderColor: '#E9E3F7', mx: 2 }} />
+ 174: 
+ 175:       {/* Footer */}
+ 176:       <Box sx={{ p: 2, pb: 2.5 }}>
+ 177:         <Stack direction="row" alignItems="center" spacing={1.5}>
+ 178:           <Avatar
+ 179:             sx={{
+ 180:               width: 32,
+ 181:               height: 32,
+ 182:               backgroundColor: '#EFEAFF',
+ 183:               color: '#4B2E83',
+ 184:               fontSize: '0.75rem',
+ 185:               fontWeight: 700,
+ 186:             }}
+ 187:           >
+ 188:             SM
+ 189:           </Avatar>
+ 190:           <Stack spacing={0}>
+ 191:             <Typography
+ 192:               variant="caption"
+ 193:               sx={{ color: '#111827', fontWeight: 600, fontSize: '0.75rem', lineHeight: 1.2 }}
+ 194:             >
+ 195:               Sendmax Admin
+ 196:             </Typography>
+ 197:             <Typography
+ 198:               variant="caption"
+ 199:               sx={{ color: '#64748B', fontSize: '0.65rem', lineHeight: 1.2 }}
+ 200:             >
+ 201:               Panel de control
+ 202:             </Typography>
+ 203:           </Stack>
+ 204:         </Stack>
+ 205:         <Chip
+ 206:           label="v1.0.0"
+ 207:           size="small"
+ 208:           sx={{
+ 209:             mt: 1.5,
+ 210:             backgroundColor: '#EFEAFF',
+ 211:             color: '#4B2E83',
+ 212:             fontWeight: 600,
+ 213:             fontSize: '0.65rem',
+ 214:             height: 20,
+ 215:           }}
+ 216:         />
+ 217:       </Box>
+ 218:     </Drawer>
+ 219:   );
+ 220: }
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\src\lib\api.ts
+{'='*80}
+   1: const API_BASE = process.env.NEXT_PUBLIC_BACKOFFICE_API_BASE || 'http://localhost:8000';
+   2: 
+   3: export function getApiKey(): string | null {
+   4:   if (typeof window === 'undefined') return null;
+   5:   return localStorage.getItem('BACKOFFICE_API_KEY');
+   6: }
+   7: 
+   8: export function setApiKey(key: string): void {
+   9:   if (typeof window === 'undefined') return;
+  10:   localStorage.setItem('BACKOFFICE_API_KEY', key);
+  11: }
+  12: 
+  13: export function clearApiKey(): void {
+  14:   if (typeof window === 'undefined') return;
+  15:   localStorage.removeItem('BACKOFFICE_API_KEY');
+  16: }
+  17: 
+  18: export async function apiRequest<T = unknown>(
+  19:   endpoint: string,
+  20:   options: RequestInit = {}
+  21: ): Promise<T> {
+  22:   const apiKey = getApiKey();
+  23: 
+  24:   if (!apiKey) {
+  25:     throw new Error('NO_API_KEY');
+  26:   }
+  27: 
+  28:   const response = await fetch(`${API_BASE}${endpoint}`, {
+  29:     ...options,
+  30:     headers: {
+  31:       'X-API-KEY': apiKey,
+  32:       'Content-Type': 'application/json',
+  33:       ...options.headers,
+  34:     },
+  35:   });
+  36: 
+  37:   if (!response.ok) {
+  38:     if (response.status === 401 || response.status === 403) {
+  39:       throw new Error('API_KEY_INVALID');
+  40:     }
+  41:     const errorText = await response.text();
+  42:     throw new Error(errorText || `HTTP ${response.status}`);
+  43:   }
+  44: 
+  45:   return response.json();
+  46: }
+  47: 
+  48: export { API_BASE };
+
+{'='*80}
+FILE: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_web\tsconfig.json
+{'='*80}
+   1: {
+   2:   "compilerOptions": {
+   3:     "target": "ES2017",
+   4:     "lib": [
+   5:       "dom",
+   6:       "dom.iterable",
+   7:       "esnext"
+   8:     ],
+   9:     "allowJs": true,
+  10:     "skipLibCheck": true,
+  11:     "strict": true,
+  12:     "noEmit": true,
+  13:     "esModuleInterop": true,
+  14:     "module": "esnext",
+  15:     "moduleResolution": "bundler",
+  16:     "resolveJsonModule": true,
+  17:     "isolatedModules": true,
+  18:     "jsx": "react-jsx",
+  19:     "incremental": true,
+  20:     "plugins": [
+  21:       {
+  22:         "name": "next"
+  23:       }
+  24:     ],
+  25:     "paths": {
+  26:       "@/*": [
+  27:         "./src/*"
+  28:       ]
+  29:     }
+  30:   },
+  31:   "include": [
+  32:     "next-env.d.ts",
+  33:     "**/*.ts",
+  34:     "**/*.tsx",
+  35:     ".next/types/**/*.ts",
+  36:     ".next/dev/types/**/*.ts",
+  37:     "**/*.mts"
+  38:   ],
+  39:   "exclude": [
+  40:     "node_modules"
+  41:   ]
+  42: }

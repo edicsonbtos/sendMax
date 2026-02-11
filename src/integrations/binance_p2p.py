@@ -1,4 +1,4 @@
-"""
+﻿"""
 Cliente simple para Binance P2P (endpoint público).
 
 Objetivo:
@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 import httpx
+from src.db.settings_store import get_setting_float
 
 
 BINANCE_P2P_URL = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
@@ -54,7 +55,7 @@ class BinanceP2PClient:
 
         payload = {
             "page": 1,
-            "rows": 10,
+            "rows": int(get_setting_float("p2p_rows","rows",10)),
             "payTypes": pay_types,
             "asset": asset,
             "fiat": fiat,

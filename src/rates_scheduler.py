@@ -6,6 +6,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from src.config.settings import settings
+from src.db.settings_store import get_setting_float, get_setting_json
 from src.integrations.binance_p2p import BinanceP2PClient
 from src.integrations.p2p_config import COUNTRIES
 from src.db.repositories.rates_baseline_repo import load_country_prices_for_version, latest_9am_version_id_today
@@ -109,16 +110,24 @@ class RatesScheduler:
         failed_now: list[str] = []
 
         try:
+            ref_map = get_setting_json("p2p_reference_amounts") or {}
+
+            def _trans_amount_for_fiat(fiat: str, fallback: float) -> float:
+                try:
+                    v = ref_map.get(fiat)
+                    return float(v) if v is not None else float(fallback)
+                except Exception:
+                    return float(fallback)
             for code, cfg in COUNTRIES.items():
                 if code not in baseline:
                     continue
 
                 try:
                     buy_q = client.fetch_first_price(
-                        fiat=cfg.fiat, trade_type="BUY", pay_methods=cfg.buy_methods[:1], trans_amount=cfg.trans_amount
+                        fiat=cfg.fiat, trade_type="BUY", pay_methods=cfg.buy_methods[:1], trans_amount=_trans_amount_for_fiat(cfg.fiat, cfg.trans_amount)
                     )
                     sell_q = client.fetch_first_price(
-                        fiat=cfg.fiat, trade_type="SELL", pay_methods=cfg.sell_methods[:1], trans_amount=cfg.trans_amount
+                        fiat=cfg.fiat, trade_type="SELL", pay_methods=cfg.sell_methods[:1], trans_amount=_trans_amount_for_fiat(cfg.fiat, cfg.trans_amount)
                     )
                     if not (buy_q.is_verified and sell_q.is_verified):
                         any_unverified_now = True
@@ -133,11 +142,15 @@ class RatesScheduler:
                 buy_base = Decimal(str(baseline[code]["buy"]))
                 sell_base = Decimal(str(baseline[code]["sell"]))
 
-                if buy_now >= (buy_base * Decimal("1.03")):
+                thr = Decimal(str(get_setting_float('pricing_fluctuation_threshold','percent', 0.03)))
+                buy_trigger = Decimal('1') + thr
+                sell_trigger = Decimal('1') - thr
+
+                if buy_now >= (buy_base * buy_trigger):
                     pct = (buy_now / buy_base - Decimal("1")) * Decimal("100")
                     triggers.append(f"BUY {code} +{pct.quantize(Decimal('0.01'))}%")
 
-                if sell_now <= (sell_base * Decimal("0.97")):
+                if sell_now <= (sell_base * sell_trigger):
                     pct = (Decimal("1") - sell_now / sell_base) * Decimal("100")
                     triggers.append(f"SELL {code} -{pct.quantize(Decimal('0.01'))}%")
 

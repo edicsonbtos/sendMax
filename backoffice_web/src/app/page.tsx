@@ -1,0 +1,426 @@
+﻿'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  TextField,
+  Button,
+  Alert,
+  CircularProgress,
+  Chip,
+  Stack,
+  Divider,
+  IconButton,
+  Tooltip,
+} from '@mui/material';
+import {
+  TrendingUp as TrendingUpIcon,
+  Receipt as ReceiptIcon,
+  AccountBalance as WalletIcon,
+  AttachMoney as MoneyIcon,
+  Warning as WarningIcon,
+  Refresh as RefreshIcon,
+  Schedule as ClockIcon,
+} from '@mui/icons-material';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Cell,
+} from 'recharts';
+import { useAuth } from '@/components/AuthProvider';
+import { apiRequest } from '@/lib/api';
+
+interface Metrics {
+  total_orders: number;
+  pending_orders: number;
+  completed_orders: number;
+  total_volume_usd?: number;
+  total_profit_usd?: number;
+}
+
+interface CompanyOverview {
+  ok: boolean;
+  orders: {
+    total_orders: number;
+    pending_orders: number;
+    completed_orders: number;
+  };
+  profit: {
+    total_profit_usd: number;
+  };
+  origin_wallets: {
+    pending_total: number;
+    top_pending: { origin_country: string; fiat_currency: string; current_balance: number }[];
+  };
+}
+
+interface AlertItem {
+  public_id: string;
+  status: string;
+  created_at: string;
+  minutes_stuck: number;
+}
+
+interface ProfitDay {
+  day: string;
+  profit: number;
+  orders_count?: number;
+}
+
+interface OrdersResponse {
+  count: number;
+  orders: OrderItem[];
+}
+
+interface OrderItem {
+  public_id: number | string;
+  status: string;
+  profit_usdt: number | null;
+  created_at: string;
+}
+
+type IconComponent = React.ElementType<{ sx?: object }>;
+
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  Icon: IconComponent;
+  color: string;
+  subtitle?: string;
+}
+
+function StatCard({ title, value, Icon, color, subtitle }: StatCardProps) {
+  return (
+    <Card sx={{ flex: '1 1 calc(25% - 16px)', minWidth: 200, position: 'relative', overflow: 'visible' }}>
+      <CardContent sx={{ p: 2.5 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+          <Box>
+            <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.8rem', mb: 0.5 }}>
+              {title}
+            </Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827', lineHeight: 1.2 }}>
+              {value}
+            </Typography>
+            {subtitle && (
+              <Typography variant="caption" sx={{ color: '#64748B', mt: 0.5, display: 'block' }}>
+                {subtitle}
+              </Typography>
+            )}
+          </Box>
+          <Box sx={{ backgroundColor: `${color}12`, borderRadius: '14px', p: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon sx={{ color, fontSize: 26 }} />
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  PAGADA: '#16A34A',
+  CANCELADA: '#DC2626',
+  PENDIENTE: '#F59E0B',
+  EN_PROCESO: '#2563EB',
+  pending_kyc: '#F59E0B',
+  pending_origin: '#F59E0B',
+  pending_dest: '#2563EB',
+  completed: '#16A34A',
+  cancelled: '#DC2626',
+};
+
+export default function OverviewPage() {
+  const { apiKey, setApiKey, clearApiKey } = useAuth();
+  const [tempKey, setTempKey] = useState('');
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [companyOverview, setCompanyOverview] = useState<CompanyOverview | null>(null);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [profitDaily, setProfitDaily] = useState<ProfitDay[]>([]);
+  const [statusCounts, setStatusCounts] = useState<{ name: string; value: number; color: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<string>('');
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const [metricsData, companyData, alertsData, profitData, ordersData] = await Promise.all([
+        apiRequest<Metrics>('/metrics/overview'),
+        apiRequest<CompanyOverview>('/metrics/company-overview'),
+        apiRequest<{ alerts: AlertItem[] }>('/alerts/stuck-30m'),
+        apiRequest<ProfitDay[]>('/metrics/profit_daily?days=7').catch(() => []),
+        apiRequest<OrdersResponse>('/orders?limit=100').catch(() => ({ count: 0, orders: [] })),
+      ]);
+
+      setMetrics(metricsData);
+      setCompanyOverview(companyData);
+      setAlerts(alertsData.alerts || []);
+
+      const profitArray = Array.isArray(profitData) ? profitData : [];
+      setProfitDaily(
+        profitArray.map((d) => ({
+          ...d,
+          day: new Date(d.day).toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric' }),
+        }))
+      );
+
+      const orders = Array.isArray(ordersData) ? ordersData : (ordersData.orders || []);
+      const counts: Record<string, number> = {};
+      orders.forEach((o: OrderItem) => {
+        const s = o.status || 'UNKNOWN';
+        counts[s] = (counts[s] || 0) + 1;
+      });
+      setStatusCounts(
+        Object.entries(counts).map(([name, value]) => ({
+          name,
+          value,
+          color: STATUS_COLORS[name] || '#6B7280',
+        }))
+      );
+
+      setLastUpdated(new Date().toLocaleTimeString('es-VE'));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      setError(message);
+      if (message === 'API_KEY_INVALID') {
+        clearApiKey();
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [clearApiKey]);
+
+  useEffect(() => {
+    if (apiKey) {
+      fetchData();
+    }
+  }, [apiKey, fetchData]);
+
+  const saveKey = () => {
+    setApiKey(tempKey);
+    setError('');
+  };
+
+  if (!apiKey) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
+        <Card sx={{ maxWidth: 480, width: '100%' }}>
+          <CardContent sx={{ p: 4 }}>
+            <Box sx={{ textAlign: 'center', mb: 3 }}>
+              <Box component="img" src="/logo.png" alt="Sendmax" sx={{ height: 48, width: 'auto', mb: 2 }} />
+              <Typography variant="h5" sx={{ fontWeight: 700, color: '#4B2E83', mb: 0.5 }}>
+                Sendmax Backoffice
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Ingresa tu API Key para acceder al panel de control
+              </Typography>
+            </Box>
+            <Divider sx={{ my: 2 }} />
+            <Stack spacing={2.5}>
+              <TextField
+                fullWidth
+                type="password"
+                label="API Key"
+                value={tempKey}
+                onChange={(e) => setTempKey(e.target.value)}
+                placeholder="sk_live_..."
+                helperText="La clave se guarda localmente en tu navegador"
+                onKeyDown={(e) => e.key === 'Enter' && tempKey && saveKey()}
+              />
+              <Button variant="contained" onClick={saveKey} disabled={!tempKey} size="large" fullWidth sx={{ py: 1.5 }}>
+                Acceder al panel
+              </Button>
+            </Stack>
+            {error && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {error}
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+    );
+  }
+
+  return (
+    <Box className="fade-in">
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827' }}>
+            Dashboard
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
+            {`Vista general de operaciones Sendmax${lastUpdated ? ` | Actualizado: ${lastUpdated}` : ''}`}
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1}>
+          <Tooltip title="Actualizar datos">
+            <IconButton onClick={fetchData} disabled={loading} sx={{ color: '#4B2E83' }}>
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+          <Button variant="outlined" size="small" onClick={clearApiKey}>
+            Cambiar Key
+          </Button>
+        </Stack>
+      </Stack>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress sx={{ color: '#4B2E83' }} />
+        </Box>
+      )}
+
+      {metrics && !loading && (
+        <>
+          <Stack direction="row" spacing={2.5} sx={{ mb: 4, flexWrap: 'wrap', gap: 2 }}>
+            <StatCard title="Total Ordenes" value={metrics.total_orders || 0} Icon={ReceiptIcon} color="#4B2E83" subtitle="Historico total" />
+            <StatCard title="Pendientes" value={metrics.pending_orders || 0} Icon={TrendingUpIcon} color="#F59E0B" subtitle="Requieren atencion" />
+            <StatCard
+              title="Volumen destino (Top moneda)"
+              value={`$${(() => { const top = companyOverview?.volume?.paid_by_dest_currency?.[0]; const vol = top?.volume ?? 0; const cur = top?.dest_currency ?? "-"; return `${cur} ${vol.toLocaleString("es-VE",{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; })()}`}
+              Icon={WalletIcon}
+              color="#2563EB"
+              subtitle="Pagadas: suma payout_dest por moneda"
+            />
+            <StatCard
+              title="Ganancia USD"
+              value={`$${(metrics.total_profit_usd || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              Icon={MoneyIcon}
+              color="#16A34A"
+              subtitle="Profit acumulado"
+            />
+          </Stack>
+
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2.5} sx={{ mb: 4 }}>
+            <Card sx={{ flex: 2, minWidth: 0 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ mb: 0.5 }}>
+                  Ganancia Diaria (7 dias)
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>
+                  Profit USDT por dia
+                </Typography>
+                {profitDaily.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <AreaChart data={profitDaily}>
+                      <defs>
+                        <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#4B2E83" stopOpacity={0.3} />
+                          <stop offset="100%" stopColor="#4B2E83" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E9E3F7" vertical={false} />
+                      <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={{ stroke: '#E9E3F7' }} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `$${v}`} />
+                      <RechartsTooltip
+                        contentStyle={{ borderRadius: 12, border: '1px solid #E9E3F7', boxShadow: '0 8px 24px rgba(17,24,39,.06)', fontSize: 13 }}
+                        formatter={(value: unknown) => { const n = typeof value === 'number' ? value : Number(value ?? 0); return ["$" + n.toFixed(2), 'Ganancia']; }}
+                      />
+                      <Area type="monotone" dataKey="profit" stroke="#4B2E83" strokeWidth={2.5} fill="url(#profitGradient)" dot={{ fill: '#4B2E83', r: 4, strokeWidth: 2, stroke: '#FFFFFF' }} activeDot={{ r: 6, fill: '#4B2E83', stroke: '#FFFFFF', strokeWidth: 2 }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <Box sx={{ py: 6, textAlign: 'center' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No hay datos de ganancia diaria disponibles
+                    </Typography>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card sx={{ flex: 1, minWidth: 280 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ mb: 0.5 }}>
+                  Ordenes por Status
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>
+                  Distribucion actual
+                </Typography>
+                {statusCounts.length > 0 ? (
+                  <>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <BarChart data={statusCounts} layout="vertical">
+                        <XAxis type="number" hide />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#475569' }} axisLine={false} tickLine={false} width={90} />
+                        <RechartsTooltip contentStyle={{ borderRadius: 12, border: '1px solid #E9E3F7', fontSize: 13 }} />
+                        <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={20}>
+                          {statusCounts.map((entry, index) => (
+                            <Cell key={index} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <Divider sx={{ my: 1.5 }} />
+                    <Stack spacing={1}>
+                      {statusCounts.map((s) => (
+                        <Stack key={s.name} direction="row" justifyContent="space-between" alignItems="center">
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: s.color }} />
+                            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{s.name}</Typography>
+                          </Stack>
+                          <Chip label={s.value} size="small" sx={{ backgroundColor: `${s.color}15`, color: s.color, fontWeight: 700, fontSize: '0.75rem', height: 22 }} />
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </>
+                ) : (
+                  <Box sx={{ py: 6, textAlign: 'center' }}>
+                    <Typography variant="body2" color="text.secondary">Sin datos</Typography>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          </Stack>
+
+          {alerts.length > 0 && (
+            <Card sx={{ border: '1px solid #F59E0B', backgroundColor: '#FFFBF0' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
+                  <WarningIcon sx={{ color: '#F59E0B' }} />
+                  <Typography variant="h6">Alertas Activas</Typography>
+                  <Chip label={`${alerts.length} orden${alerts.length > 1 ? 'es' : ''}`} size="small" sx={{ backgroundColor: '#FFF5E6', color: '#F59E0B', fontWeight: 700, border: '1px solid #F59E0B' }} />
+                </Stack>
+                <Typography variant="body2" sx={{ color: '#64748B', mb: 2 }}>
+                  Ordenes estancadas por mas de 30 minutos sin cambio de status
+                </Typography>
+                <Stack spacing={1.5}>
+                  {alerts.map((alert) => (
+                    <Alert severity="warning" key={alert.public_id} sx={{ backgroundColor: '#FFF5E6', border: '1px solid #FBBF24' }}>
+                      <Stack direction="row" spacing={2} alignItems="center">
+                        <Chip label={`#${alert.public_id}`} size="small" sx={{ fontWeight: 700, fontFamily: 'monospace' }} />
+                        <Typography variant="body2">{alert.status}</Typography>
+                        <Chip icon={<ClockIcon sx={{ fontSize: 14 }} />} label={`${alert.minutes_stuck} min`} size="small" color="warning" variant="outlined" sx={{ fontWeight: 600 }} />
+                      </Stack>
+                    </Alert>
+                  ))}
+                </Stack>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+    </Box>
+  );
+}
+
+
+

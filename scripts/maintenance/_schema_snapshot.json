@@ -1,0 +1,1683 @@
+{
+  "tables": [
+    "alembic_version",
+    "orders",
+    "origin_receipts_daily",
+    "p2p_country_prices",
+    "rate_versions",
+    "route_rates",
+    "user_contacts",
+    "users",
+    "wallet_ledger",
+    "wallets",
+    "withdrawals"
+  ],
+  "columns": [
+    {
+      "table_schema": "public",
+      "table_name": "alembic_version",
+      "column_name": "version_num",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('orders_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "public_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "operator_user_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "origin_country",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "dest_country",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "amount_origin",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "rate_version_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "commission_pct",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "rate_client",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "payout_dest",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "beneficiary_text",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "origin_payment_proof_file_id",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'CREADA'::text"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "dest_payment_proof_file_id",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "paid_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "cancel_reason",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "profit_usdt",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "awaiting_paid_proof",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "false"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "awaiting_paid_proof_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "awaiting_paid_proof_by",
+      "data_type": "bigint",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "origin_verified_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "origin_verified_by_telegram_id",
+      "data_type": "bigint",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "orders",
+      "column_name": "origin_verified_by_name",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('origin_receipts_daily_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "day",
+      "data_type": "date",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "origin_country",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "fiat_currency",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "amount_fiat",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "created_by_telegram_id",
+      "data_type": "bigint",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "note",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "approved_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "approved_by_telegram_id",
+      "data_type": "bigint",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "approved_note",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "origin_receipts_daily",
+      "column_name": "ref_order_public_id",
+      "data_type": "bigint",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "p2p_country_prices",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('p2p_country_prices_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "p2p_country_prices",
+      "column_name": "rate_version_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "p2p_country_prices",
+      "column_name": "country",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "p2p_country_prices",
+      "column_name": "fiat",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "p2p_country_prices",
+      "column_name": "buy_price",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "p2p_country_prices",
+      "column_name": "sell_price",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "p2p_country_prices",
+      "column_name": "methods_used",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "p2p_country_prices",
+      "column_name": "amount_ref",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "p2p_country_prices",
+      "column_name": "source",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'binance_p2p'::text"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "p2p_country_prices",
+      "column_name": "captured_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "p2p_country_prices",
+      "column_name": "is_verified",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "rate_versions",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('rate_versions_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "rate_versions",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "rate_versions",
+      "column_name": "kind",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "rate_versions",
+      "column_name": "reason",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "rate_versions",
+      "column_name": "effective_from",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "rate_versions",
+      "column_name": "effective_to",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "rate_versions",
+      "column_name": "is_active",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "route_rates",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('route_rates_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "route_rates",
+      "column_name": "rate_version_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "route_rates",
+      "column_name": "origin_country",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "route_rates",
+      "column_name": "dest_country",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "route_rates",
+      "column_name": "commission_pct",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "route_rates",
+      "column_name": "buy_origin",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "route_rates",
+      "column_name": "sell_dest",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "route_rates",
+      "column_name": "rate_base",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "route_rates",
+      "column_name": "rate_client",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "route_rates",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "user_contacts",
+      "column_name": "telegram_user_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('user_contacts_telegram_user_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "user_contacts",
+      "column_name": "first_seen_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "user_contacts",
+      "column_name": "last_seen_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('users_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "telegram_user_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "alias",
+      "data_type": "USER-DEFINED",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "role",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'operator'::text"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "is_active",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "sponsor_id",
+      "data_type": "bigint",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "full_name",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "phone",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "address_short",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "payout_country",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "payout_method_text",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "kyc_doc_file_id",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "kyc_selfie_file_id",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "kyc_status",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'PENDING'::text"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "kyc_submitted_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "kyc_reviewed_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "kyc_review_reason",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallet_ledger",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('wallet_ledger_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallet_ledger",
+      "column_name": "user_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallet_ledger",
+      "column_name": "amount_usdt",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallet_ledger",
+      "column_name": "type",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallet_ledger",
+      "column_name": "ref_order_public_id",
+      "data_type": "bigint",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallet_ledger",
+      "column_name": "memo",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallet_ledger",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallets",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('wallets_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallets",
+      "column_name": "user_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallets",
+      "column_name": "balance_usdt",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallets",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "wallets",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('withdrawals_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "user_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "amount_usdt",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'SOLICITADA'::text"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "dest_text",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "proof_file_id",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "country",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "fiat",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "fiat_amount",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "reject_reason",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "withdrawals",
+      "column_name": "resolved_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    }
+  ],
+  "indexes": [
+    {
+      "tablename": "alembic_version",
+      "indexname": "alembic_version_pkc",
+      "indexdef": "CREATE UNIQUE INDEX alembic_version_pkc ON public.alembic_version USING btree (version_num)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "ix_orders_awaiting_paid_proof",
+      "indexdef": "CREATE INDEX ix_orders_awaiting_paid_proof ON public.orders USING btree (awaiting_paid_proof)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "ix_orders_created_at",
+      "indexdef": "CREATE INDEX ix_orders_created_at ON public.orders USING btree (created_at)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "ix_orders_operator_user_id",
+      "indexdef": "CREATE INDEX ix_orders_operator_user_id ON public.orders USING btree (operator_user_id)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "ix_orders_origin_verified_at",
+      "indexdef": "CREATE INDEX ix_orders_origin_verified_at ON public.orders USING btree (origin_verified_at)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "ix_orders_status",
+      "indexdef": "CREATE INDEX ix_orders_status ON public.orders USING btree (status)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "orders_pkey",
+      "indexdef": "CREATE UNIQUE INDEX orders_pkey ON public.orders USING btree (id)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "orders_public_id_key",
+      "indexdef": "CREATE UNIQUE INDEX orders_public_id_key ON public.orders USING btree (public_id)"
+    },
+    {
+      "tablename": "origin_receipts_daily",
+      "indexname": "ix_origin_receipts_daily_day_country",
+      "indexdef": "CREATE INDEX ix_origin_receipts_daily_day_country ON public.origin_receipts_daily USING btree (day, origin_country)"
+    },
+    {
+      "tablename": "origin_receipts_daily",
+      "indexname": "origin_receipts_daily_pkey",
+      "indexdef": "CREATE UNIQUE INDEX origin_receipts_daily_pkey ON public.origin_receipts_daily USING btree (id)"
+    },
+    {
+      "tablename": "origin_receipts_daily",
+      "indexname": "ux_origin_receipts_daily_day_country_currency",
+      "indexdef": "CREATE UNIQUE INDEX ux_origin_receipts_daily_day_country_currency ON public.origin_receipts_daily USING btree (day, origin_country, fiat_currency)"
+    },
+    {
+      "tablename": "p2p_country_prices",
+      "indexname": "ix_p2p_prices_country",
+      "indexdef": "CREATE INDEX ix_p2p_prices_country ON public.p2p_country_prices USING btree (country)"
+    },
+    {
+      "tablename": "p2p_country_prices",
+      "indexname": "ix_p2p_prices_version",
+      "indexdef": "CREATE INDEX ix_p2p_prices_version ON public.p2p_country_prices USING btree (rate_version_id)"
+    },
+    {
+      "tablename": "p2p_country_prices",
+      "indexname": "p2p_country_prices_pkey",
+      "indexdef": "CREATE UNIQUE INDEX p2p_country_prices_pkey ON public.p2p_country_prices USING btree (id)"
+    },
+    {
+      "tablename": "rate_versions",
+      "indexname": "rate_versions_pkey",
+      "indexdef": "CREATE UNIQUE INDEX rate_versions_pkey ON public.rate_versions USING btree (id)"
+    },
+    {
+      "tablename": "route_rates",
+      "indexname": "ix_route_rates_route",
+      "indexdef": "CREATE INDEX ix_route_rates_route ON public.route_rates USING btree (origin_country, dest_country)"
+    },
+    {
+      "tablename": "route_rates",
+      "indexname": "ix_route_rates_version",
+      "indexdef": "CREATE INDEX ix_route_rates_version ON public.route_rates USING btree (rate_version_id)"
+    },
+    {
+      "tablename": "route_rates",
+      "indexname": "route_rates_pkey",
+      "indexdef": "CREATE UNIQUE INDEX route_rates_pkey ON public.route_rates USING btree (id)"
+    },
+    {
+      "tablename": "user_contacts",
+      "indexname": "ix_user_contacts_last_seen_at",
+      "indexdef": "CREATE INDEX ix_user_contacts_last_seen_at ON public.user_contacts USING btree (last_seen_at)"
+    },
+    {
+      "tablename": "user_contacts",
+      "indexname": "user_contacts_pkey",
+      "indexdef": "CREATE UNIQUE INDEX user_contacts_pkey ON public.user_contacts USING btree (telegram_user_id)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "ix_users_kyc_status",
+      "indexdef": "CREATE INDEX ix_users_kyc_status ON public.users USING btree (kyc_status)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "ix_users_payout_country",
+      "indexdef": "CREATE INDEX ix_users_payout_country ON public.users USING btree (payout_country)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "uq_users_alias",
+      "indexdef": "CREATE UNIQUE INDEX uq_users_alias ON public.users USING btree (alias)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "users_pkey",
+      "indexdef": "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "users_telegram_user_id_key",
+      "indexdef": "CREATE UNIQUE INDEX users_telegram_user_id_key ON public.users USING btree (telegram_user_id)"
+    },
+    {
+      "tablename": "wallet_ledger",
+      "indexname": "ix_wallet_ledger_order",
+      "indexdef": "CREATE INDEX ix_wallet_ledger_order ON public.wallet_ledger USING btree (ref_order_public_id)"
+    },
+    {
+      "tablename": "wallet_ledger",
+      "indexname": "ix_wallet_ledger_type",
+      "indexdef": "CREATE INDEX ix_wallet_ledger_type ON public.wallet_ledger USING btree (type)"
+    },
+    {
+      "tablename": "wallet_ledger",
+      "indexname": "ix_wallet_ledger_user",
+      "indexdef": "CREATE INDEX ix_wallet_ledger_user ON public.wallet_ledger USING btree (user_id)"
+    },
+    {
+      "tablename": "wallet_ledger",
+      "indexname": "wallet_ledger_pkey",
+      "indexdef": "CREATE UNIQUE INDEX wallet_ledger_pkey ON public.wallet_ledger USING btree (id)"
+    },
+    {
+      "tablename": "wallets",
+      "indexname": "wallets_pkey",
+      "indexdef": "CREATE UNIQUE INDEX wallets_pkey ON public.wallets USING btree (id)"
+    },
+    {
+      "tablename": "wallets",
+      "indexname": "wallets_user_id_key",
+      "indexdef": "CREATE UNIQUE INDEX wallets_user_id_key ON public.wallets USING btree (user_id)"
+    },
+    {
+      "tablename": "withdrawals",
+      "indexname": "ix_withdrawals_status",
+      "indexdef": "CREATE INDEX ix_withdrawals_status ON public.withdrawals USING btree (status)"
+    },
+    {
+      "tablename": "withdrawals",
+      "indexname": "ix_withdrawals_user",
+      "indexdef": "CREATE INDEX ix_withdrawals_user ON public.withdrawals USING btree (user_id)"
+    },
+    {
+      "tablename": "withdrawals",
+      "indexname": "withdrawals_pkey",
+      "indexdef": "CREATE UNIQUE INDEX withdrawals_pkey ON public.withdrawals USING btree (id)"
+    }
+  ],
+  "constraints": [
+    {
+      "table_name": "alembic_version",
+      "constraint_name": "2200_24576_1_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "alembic_version",
+      "constraint_name": "alembic_version_pkc",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "version_num"
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_10_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_11_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_12_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_13_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_14_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_15_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_1_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_20_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_2_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_3_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_4_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_5_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_6_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_7_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_8_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "2200_49153_9_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "fk_orders_operator_user",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "operator_user_id"
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "fk_orders_rate_version",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "rate_version_id"
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "orders_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id"
+    },
+    {
+      "table_name": "orders",
+      "constraint_name": "orders_public_id_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "public_id"
+    },
+    {
+      "table_name": "origin_receipts_daily",
+      "constraint_name": "2200_131075_1_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "origin_receipts_daily",
+      "constraint_name": "2200_131075_2_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "origin_receipts_daily",
+      "constraint_name": "2200_131075_3_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "origin_receipts_daily",
+      "constraint_name": "2200_131075_4_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "origin_receipts_daily",
+      "constraint_name": "2200_131075_5_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "origin_receipts_daily",
+      "constraint_name": "2200_131075_6_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "origin_receipts_daily",
+      "constraint_name": "origin_receipts_daily_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id"
+    },
+    {
+      "table_name": "p2p_country_prices",
+      "constraint_name": "2200_32780_10_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "p2p_country_prices",
+      "constraint_name": "2200_32780_11_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "p2p_country_prices",
+      "constraint_name": "2200_32780_1_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "p2p_country_prices",
+      "constraint_name": "2200_32780_2_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "p2p_country_prices",
+      "constraint_name": "2200_32780_3_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "p2p_country_prices",
+      "constraint_name": "2200_32780_4_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "p2p_country_prices",
+      "constraint_name": "2200_32780_5_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "p2p_country_prices",
+      "constraint_name": "2200_32780_6_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "p2p_country_prices",
+      "constraint_name": "2200_32780_9_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "p2p_country_prices",
+      "constraint_name": "fk_p2p_prices_version",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "rate_version_id"
+    },
+    {
+      "table_name": "p2p_country_prices",
+      "constraint_name": "p2p_country_prices_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id"
+    },
+    {
+      "table_name": "rate_versions",
+      "constraint_name": "2200_32769_1_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "rate_versions",
+      "constraint_name": "2200_32769_2_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "rate_versions",
+      "constraint_name": "2200_32769_3_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "rate_versions",
+      "constraint_name": "2200_32769_5_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "rate_versions",
+      "constraint_name": "2200_32769_7_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "rate_versions",
+      "constraint_name": "rate_versions_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id"
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "2200_32798_10_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "2200_32798_1_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "2200_32798_2_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "2200_32798_3_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "2200_32798_4_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "2200_32798_5_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "2200_32798_6_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "2200_32798_7_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "2200_32798_8_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "2200_32798_9_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "fk_route_rates_version",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "rate_version_id"
+    },
+    {
+      "table_name": "route_rates",
+      "constraint_name": "route_rates_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id"
+    },
+    {
+      "table_name": "user_contacts",
+      "constraint_name": "2200_90113_1_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "user_contacts",
+      "constraint_name": "2200_90113_2_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "user_contacts",
+      "constraint_name": "2200_90113_3_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "user_contacts",
+      "constraint_name": "user_contacts_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "telegram_user_id"
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "2200_24687_16_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "2200_24687_1_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "2200_24687_2_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "2200_24687_3_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "2200_24687_4_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "2200_24687_5_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "2200_24687_7_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "2200_24687_8_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "fk_users_sponsor",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "sponsor_id"
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "uq_users_alias",
+      "constraint_type": "UNIQUE",
+      "column_name": "alias"
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "users_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id"
+    },
+    {
+      "table_name": "users",
+      "constraint_name": "users_telegram_user_id_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "telegram_user_id"
+    },
+    {
+      "table_name": "wallet_ledger",
+      "constraint_name": "2200_65554_1_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "wallet_ledger",
+      "constraint_name": "2200_65554_2_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "wallet_ledger",
+      "constraint_name": "2200_65554_3_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "wallet_ledger",
+      "constraint_name": "2200_65554_4_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "wallet_ledger",
+      "constraint_name": "2200_65554_7_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "wallet_ledger",
+      "constraint_name": "fk_wallet_ledger_user",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "user_id"
+    },
+    {
+      "table_name": "wallet_ledger",
+      "constraint_name": "wallet_ledger_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id"
+    },
+    {
+      "table_name": "wallets",
+      "constraint_name": "2200_65537_1_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "wallets",
+      "constraint_name": "2200_65537_2_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "wallets",
+      "constraint_name": "2200_65537_3_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "wallets",
+      "constraint_name": "2200_65537_4_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "wallets",
+      "constraint_name": "2200_65537_5_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "wallets",
+      "constraint_name": "fk_wallets_user",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "user_id"
+    },
+    {
+      "table_name": "wallets",
+      "constraint_name": "wallets_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id"
+    },
+    {
+      "table_name": "wallets",
+      "constraint_name": "wallets_user_id_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "user_id"
+    },
+    {
+      "table_name": "withdrawals",
+      "constraint_name": "2200_65572_1_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "withdrawals",
+      "constraint_name": "2200_65572_2_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "withdrawals",
+      "constraint_name": "2200_65572_3_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "withdrawals",
+      "constraint_name": "2200_65572_4_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "withdrawals",
+      "constraint_name": "2200_65572_5_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "withdrawals",
+      "constraint_name": "2200_65572_7_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "withdrawals",
+      "constraint_name": "2200_65572_8_not_null",
+      "constraint_type": "CHECK",
+      "column_name": null
+    },
+    {
+      "table_name": "withdrawals",
+      "constraint_name": "fk_withdrawals_user",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "user_id"
+    },
+    {
+      "table_name": "withdrawals",
+      "constraint_name": "withdrawals_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from src.db.settings_store import get_setting_float
 
 
 class Settings(BaseSettings):
@@ -82,11 +83,32 @@ class Settings(BaseSettings):
         return raw.replace("\\n", "\n")
 
     def commission_pct(self, origin: str, dest: str) -> float:
-        if dest == "VENEZUELA" and origin == "USA":
-            return float(self.COMMISSION_USA_TO_VENEZUELA)
-        if dest == "VENEZUELA":
-            return float(self.COMMISSION_VENEZUELA)
-        return float(self.COMMISSION_DEFAULT)
+        """
+        Comisión (%):
+        1) intenta leer desde tabla settings (backoffice):
+           - margin_route_usa_venez.percent
+           - margin_dest_venez.percent
+           - margin_default.percent
+        2) fallback a .env (COMMISSION_*)
+        """
+        origin_u = (origin or "").upper()
+        dest_u = (dest or "").upper()
+
+        # Defaults desde .env
+        default_margin = float(self.COMMISSION_DEFAULT)
+        vene_margin = float(self.COMMISSION_VENEZUELA)
+        usa_ve_margin = float(self.COMMISSION_USA_TO_VENEZUELA)
+
+        # Overrides desde DB (settings)
+        default_margin = get_setting_float("margin_default", "percent", default_margin)
+        vene_margin = get_setting_float("margin_dest_venez", "percent", vene_margin)
+        usa_ve_margin = get_setting_float("margin_route_usa_venez", "percent", usa_ve_margin)
+
+        if dest_u == "VENEZUELA" and origin_u == "USA":
+            return float(usa_ve_margin)
+        if dest_u == "VENEZUELA":
+            return float(vene_margin)
+        return float(default_margin)
 
 
 settings = Settings()
