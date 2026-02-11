@@ -6,7 +6,7 @@ Versión refactorizada con routers modulares
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import diagnostics, metrics, orders, origin_wallets, settings, alerts
+from .routers import diagnostics, metrics, orders, origin_wallets, settings, alerts, corrections
 
 app = FastAPI(title="Sendmax Backoffice API", version="0.6.0")
 
@@ -30,3 +30,4 @@ app.include_router(orders.router)
 app.include_router(origin_wallets.router)
 app.include_router(settings.router)
 app.include_router(alerts.router)
+app.include_router(corrections.router)
