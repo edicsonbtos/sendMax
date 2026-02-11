@@ -28,41 +28,36 @@ from src.db.repositories.orders_repo import (
 from src.db.repositories.users_repo import get_telegram_id_by_user_id
 from src.db.repositories.wallet_repo import add_ledger_entry, add_ledger_entry_tx
 from src.db.repositories.origin_wallet_repo import add_origin_receipt_daily
+from src.integrations.binance_p2p import BinanceP2PClient
+from src.integrations.p2p_config import COUNTRIES
 
 logger = logging.getLogger(__name__)
 
-# Moneda fiat por país de ORIGEN (ajusta según tu operación)
 ORIGIN_FIAT_CURRENCY = {
     "PERU": "PEN",
     "CHILE": "CLP",
     "VENEZUELA": "VES",
     "COLOMBIA": "COP",
     "USA": "USD",
+    "MEXICO": "MXN",
+    "ARGENTINA": "ARS",
 }
 
 
-
 def _q8(d: Decimal) -> Decimal:
-    """Mantiene la precisión de 8 decimales para cálculos internos"""
     return d.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
 
 
 def _is_authorized(update: Update) -> bool:
-    """
-    Autoriza si es Admin Global O si la acción ocurre en el Grupo de Pagos.
-    """
     user_id = getattr(update.effective_user, "id", None)
     chat_id = getattr(update.effective_chat, "id", None)
 
     if settings.is_admin_id(user_id):
         return True
-
     if str(chat_id) == str(settings.PAYMENTS_TELEGRAM_CHAT_ID):
         return True
-
     if str(chat_id) == str(settings.ORIGIN_REVIEW_TELEGRAM_CHAT_ID):
         return True
-
     return False
 
 
@@ -70,12 +65,42 @@ def _order_actions_kb(public_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("⏳ EN PROCESO", callback_data=f"ord:proc:{public_id}"),
+                InlineKeyboardButton("⚙ EN PROCESO", callback_data=f"ord:proc:{public_id}"),
                 InlineKeyboardButton("✅ PAGADA", callback_data=f"ord:paid:{public_id}"),
             ],
             [InlineKeyboardButton("❌ CANCELAR", callback_data=f"ord:cancel:{public_id}")],
         ]
     )
+
+
+def _fetch_realtime_prices(origin_country: str, dest_country: str):
+    """Consulta precios actuales de Binance P2P para calcular profit real"""
+    origin_cfg = COUNTRIES.get(origin_country)
+    dest_cfg = COUNTRIES.get(dest_country)
+    
+    if not origin_cfg or not dest_cfg:
+        return None, None
+    
+    client = BinanceP2PClient()
+    try:
+        buy_quote = client.fetch_first_price(
+            fiat=origin_cfg.fiat,
+            trade_type="BUY",
+            pay_methods=origin_cfg.buy_methods,
+            trans_amount=origin_cfg.trans_amount,
+        )
+        sell_quote = client.fetch_first_price(
+            fiat=dest_cfg.fiat,
+            trade_type="SELL",
+            pay_methods=dest_cfg.sell_methods,
+            trans_amount=dest_cfg.trans_amount,
+        )
+        return Decimal(str(buy_quote.price)), Decimal(str(sell_quote.price))
+    except Exception as e:
+        logger.warning(f"No pude obtener precios real-time de Binance: {e}")
+        return None, None
+    finally:
+        client.close()
 
 
 async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -84,7 +109,7 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     orders = list_orders_by_status("CREADA", limit=10)
     if not orders:
-        await update.message.reply_text("✅ No hay órdenes pendientes por procesar.")
+        await update.message.reply_text("📭 No hay órdenes pendientes por procesar.")
         return
 
     await update.message.reply_text(
@@ -95,11 +120,26 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     for o in orders:
         text = (
             f"🆔 <b>#{o.public_id}</b>\n"
-            f"🏳️ {o.origin_country} -> {o.dest_country}\n"
-            f"💰 Recibe: {o.amount_origin}\n"
-            f"💵 Payout: {o.payout_dest:,.2f}\n"
+            f"➡️ {o.origin_country} -> {o.dest_country}\n"
+            f"💵 Recibe: {o.amount_origin}\n"
+            f"💸 Payout: {o.payout_dest:,.2f}\n"
         )
         await update.message.reply_text(text, reply_markup=_order_actions_kb(o.public_id), parse_mode="HTML")
+
+
+async def admin_awaiting_paid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_authorized(update):
+        return
+
+    orders = list_orders_awaiting_paid_proof_by(update.effective_user.id, limit=5)
+    if not orders:
+        await update.message.reply_text("No tienes órdenes esperando comprobante.")
+        return
+
+    for o in orders:
+        await update.message.reply_text(
+            f"⏳ Orden #{o.public_id} esperando comprobante de pago.\nSube la foto aquí."
+        )
 
 
 async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -109,7 +149,7 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
 
     if not _is_authorized(update):
         try:
-            await q.answer("🚫 Acceso denegado.", show_alert=True)
+            await q.answer("⛔ Acceso denegado.", show_alert=True)
         except Exception:
             pass
         return
@@ -125,10 +165,8 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
     except Exception:
         return
 
-
-    # ORIGIN REVIEW (nuevo grupo): callbacks de verificación de comprobante ORIGEN
+    # ORIGIN REVIEW callbacks
     if action in ("orig_ok", "orig_rej"):
-        # Solo aceptar estas acciones desde el chat ORIGIN_REVIEW
         chat_id = getattr(update.effective_chat, "id", None)
         if str(chat_id) != str(settings.ORIGIN_REVIEW_TELEGRAM_CHAT_ID):
             try:
@@ -156,13 +194,8 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
             except Exception:
                 pass
 
-            
-            # Registrar ingreso ORIGEN para auditoría/cierre diario (origin_receipts_daily)
             try:
                 from datetime import datetime, timedelta, timezone
-                from decimal import Decimal
-
-                # día en Venezuela (UTC-4)
                 VET = timezone(timedelta(hours=-4))
                 day_vet = datetime.now(tz=timezone.utc).astimezone(VET).date()
 
@@ -178,16 +211,14 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
                 )
             except Exception:
                 logger.exception("orig_ok: no pude insertar origin_receipts_daily para orden %s", public_id)
-# Notificar a PAYMENTS: enviar resumen (sin comprobante origen) con teclado actual
+
             try:
                 target_chat_id = int(settings.PAYMENTS_TELEGRAM_CHAT_ID)
                 origin = str(order.origin_country)
                 dest = str(order.dest_country)
-                origin_flag = COUNTRY_FLAGS.get(origin, origin)
-                dest_flag = COUNTRY_FLAGS.get(dest, dest)
 
                 summary = (
-                    "🆕 <b>ORDEN LISTA PARA PAGOS</b>\n\n"
+                    "📦 <b>ORDEN LISTA PARA PAGOS</b>\n\n"
                     f"🆔 <b>#{public_id}</b>\n"
                     f"Monto Origen: <b>{order.amount_origin} {origin}</b>\n"
                     f"Tasa: {format_rate_no_noise(order.rate_client)}\n"
@@ -202,12 +233,11 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
                     disable_web_page_preview=True,
                 )
 
-                # Beneficiario (ya escapado en new_order_flow cuando se envía, pero aquí es nuevo envío)
                 if (order.beneficiary_text or "").strip():
                     from src.telegram_app.utils.text_escape import esc_html
                     await context.bot.send_message(
                         chat_id=target_chat_id,
-                        text="👤 <b>Datos Beneficiario:</b>\n" + esc_html(order.beneficiary_text or ""),
+                        text="📝 <b>Datos Beneficiario:</b>\n" + esc_html(order.beneficiary_text or ""),
                         parse_mode="HTML",
                     )
             except Exception:
@@ -215,7 +245,6 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
 
             return
 
-        # action == orig_rej (por ahora cancela sin motivo; luego pedimos motivo con flow)
         if action == "orig_rej":
             ok = cancel_order(public_id, "ORIGEN RECHAZADO")
             try:
@@ -228,13 +257,12 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
                 pass
             return
 
-
     if action == "proc":
         ok = update_order_status(public_id, "EN_PROCESO")
         try:
-            await q.answer("✅ Marcada en Proceso")
+            await q.answer("⚙ Marcada en Proceso")
             if ok:
-                new_text = q.message.text + "\n\n🔄 Estado: EN PROCESO"
+                new_text = q.message.text + "\n\n⚙️ Estado: EN PROCESO"
                 await q.edit_message_text(new_text, reply_markup=_order_actions_kb(public_id))
         except Exception:
             pass
@@ -247,14 +275,13 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
                     try:
                         await context.bot.send_message(
                             chat_id=int(op_tid),
-                            text=f"⏳ Tu orden #{public_id} está siendo procesada...",
+                            text=f"⚙ Tu orden #{public_id} está siendo procesada...",
                         )
                     except Exception:
                         pass
         return
 
     if action == "paid":
-        # Seguridad: evita que un mismo operador tenga 2 órdenes en espera de comprobante
         already = list_orders_awaiting_paid_proof_by(getattr(update.effective_user, "id", 0) or 0, limit=2)
         if already and int(already[0].public_id) != int(public_id):
             try:
@@ -266,7 +293,7 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
                 f"Cierra esa primero antes de marcar otra como PAGADA."
             )
             return
-        # Persistir en DB (anti-caídas)
+
         ok = set_awaiting_paid_proof(
             public_id,
             by_telegram_user_id=getattr(update.effective_user, "id", None),
@@ -288,7 +315,7 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
         context.user_data["awaiting_cancel_reason_for"] = public_id
         try:
             await q.answer()
-            await q.message.reply_text(f"✍️ Escribe el motivo de cancelación para la #{public_id}:")
+            await q.message.reply_text(f"📝 Escribe el motivo de cancelación para la #{public_id}:")
         except Exception:
             pass
         return
@@ -301,14 +328,11 @@ def _pick_pending_order_id_from_db(by_telegram_user_id: int) -> int | None:
     return int(pending[0].public_id)
 
 
-
-
 async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Cierre de orden con comprobante de pago destino.
-    Seguridad/Consistencia:
-    - Selecciona pendiente por operador (awaiting_paid_proof_by).
-    - Operación atómica: order(PAGADA/profit/awaiting) + ledger + wallet en 1 transacción.
+    MEJORA: Consulta precios ACTUALES de Binance para profit_real_usdt.
+    Operación atómica: order(PAGADA/profit/awaiting) + ledger + wallet en 1 transacción.
     """
     if not _is_authorized(update):
         return
@@ -318,7 +342,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
 
     public_id = _pick_pending_order_id_from_db(update.effective_user.id)
     if not public_id:
-        await update.message.reply_text("ℹ️ No hay órdenes en espera de comprobante.")
+        await update.message.reply_text("⚠️ No hay órdenes en espera de comprobante.")
         return
 
     proof_file_id = update.message.photo[-1].file_id
@@ -326,25 +350,45 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
     try:
         order = get_order_by_public_id(public_id)
         if not order:
-            await update.message.reply_text("❌ Error: Orden no encontrada. (No limpio la espera para poder reintentar)")
+            await update.message.reply_text("❌ Error: Orden no encontrada.")
             return
 
+        # 1. Profit TEÓRICO (con tasa de cuando se creó la orden)
         rr = rates_repo.get_route_rate(
             rate_version_id=int(order.rate_version_id),
             origin_country=str(order.origin_country),
             dest_country=str(order.dest_country),
         )
         if not rr:
-            await update.message.reply_text("❌ No pude obtener route_rate para calcular profit_usdt.")
+            await update.message.reply_text("❌ No pude obtener route_rate para calcular profit.")
             return
 
         amount_origin = Decimal(str(order.amount_origin))
         payout_dest = Decimal(str(order.payout_dest))
-        buy_origin = Decimal(str(rr.buy_origin))
-        sell_dest = Decimal(str(rr.sell_dest))
-        profit_usdt = _q8((amount_origin / buy_origin) - (payout_dest / sell_dest))
+        buy_origin_snapshot = Decimal(str(rr.buy_origin))
+        sell_dest_snapshot = Decimal(str(rr.sell_dest))
+        profit_usdt = _q8((amount_origin / buy_origin_snapshot) - (payout_dest / sell_dest_snapshot))
 
-        # sponsor split (lectura fuera de la tx financiera principal)
+        # 2. Profit REAL (con precios actuales de Binance)
+        exec_buy, exec_sell = _fetch_realtime_prices(
+            str(order.origin_country), str(order.dest_country)
+        )
+        
+        if exec_buy and exec_sell:
+            profit_real = _q8((amount_origin / exec_buy) - (payout_dest / exec_sell))
+            logger.info(
+                f"Orden #{public_id}: profit_teorico={profit_usdt}, profit_real={profit_real}, "
+                f"buy_snap={buy_origin_snapshot}, buy_real={exec_buy}, "
+                f"sell_snap={sell_dest_snapshot}, sell_real={exec_sell}"
+            )
+        else:
+            # Fallback: si Binance falla, usar precios del snapshot
+            profit_real = profit_usdt
+            exec_buy = buy_origin_snapshot
+            exec_sell = sell_dest_snapshot
+            logger.warning(f"Orden #{public_id}: Binance no disponible, usando snapshot para profit_real")
+
+        # 3. Sponsor split (usa profit TEÓRICO para pagar al operador - consistente)
         sponsor_id = None
         try:
             with psycopg.connect(settings.DATABASE_URL) as rconn:
@@ -366,7 +410,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
             memo_op = "Profit orden (50%)"
             memo_sp = None
 
-        # ---- ATÓMICO: order + ledger + wallet ----
+        # 4. ATÓMICO: order + profit + execution_data + ledger + wallet
         with psycopg.connect(settings.DATABASE_URL) as conn:
             with conn.transaction():
                 ok_paid = mark_order_paid_tx(conn, int(public_id), proof_file_id)
@@ -376,6 +420,19 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
                 ok_profit = set_profit_usdt_tx(conn, int(public_id), profit_usdt)
                 if not ok_profit:
                     raise RuntimeError("No pude guardar profit_usdt (tx)")
+
+                # Guardar datos de ejecución real
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE orders 
+                        SET execution_price_buy = %s,
+                            execution_price_sell = %s,
+                            profit_real_usdt = %s
+                        WHERE public_id = %s
+                        """,
+                        (exec_buy, exec_sell, profit_real, int(public_id))
+                    )
 
                 if op_share != 0:
                     add_ledger_entry_tx(
@@ -403,15 +460,21 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
                 if not ok_clear:
                     raise RuntimeError("No pude limpiar awaiting_paid_proof (tx)")
 
-        # Confirmación en grupo
+        # 5. Confirmación con ambos profits
+        diff = profit_real - profit_usdt
+        diff_icon = "📈" if diff >= 0 else "📉"
+
         lines = [
             f"✅ <b>ORDEN #{public_id} CERRADA</b>",
             "",
-            f"💰 Profit: {profit_usdt:,.2f} USDT",
-            f"👤 Operador: {op_share:,.2f} USDT",
+            f"💰 Profit estimado: {profit_usdt:,.4f} USDT",
+            f"💰 Profit real: {profit_real:,.4f} USDT",
+            f"{diff_icon} Diferencia: {diff:,.4f} USDT",
+            "",
+            f"👤 Operador: {op_share:,.4f} USDT",
         ]
         if sponsor_id and sp_share != 0:
-            lines.append(f"🤝 Sponsor: {sp_share:,.2f} USDT")
+            lines.append(f"🤝 Sponsor: {sp_share:,.4f} USDT")
 
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
@@ -426,7 +489,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         try:
             await context.bot.send_message(
                 chat_id=int(op_tid),
-                text=f"✅ Orden #{public_id} PAGADA.\n¡Gracias! 🚀",
+                text=f"✅ Orden #{public_id} PAGADA.\n¡Gracias! 🎉",
             )
             await context.bot.send_photo(
                 chat_id=int(op_tid),
@@ -456,7 +519,6 @@ async def handle_cancel_reason_text(update: Update, context: ContextTypes.DEFAUL
     if ok:
         await update.message.reply_text(f"❌ Orden #{public_id} cancelada.\nMotivo: {reason}")
 
-        # Notificar al operador (best-effort)
         try:
             order = get_order_by_public_id(int(public_id))
             if order:
