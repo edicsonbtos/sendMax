@@ -129,7 +129,8 @@ export default function OriginWalletsPage() {
         body: JSON.stringify({
           origin_country: selectedWallet.origin_country,
           fiat_currency: selectedWallet.fiat_currency,
-          amount: parseFloat(withdrawAmount),
+          amount_fiat: parseFloat(withdrawAmount),
+          day: new Date().toISOString().split('T')[0],
           note: withdrawNote || 'Retiro desde backoffice',
         }),
       });
