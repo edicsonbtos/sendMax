@@ -1,4 +1,4 @@
-﻿"""Router: Origin Wallets, Sweeps, Balances y Cierre diario"""
+"""Router: Origin Wallets, Sweeps, Balances y Cierre diario"""
 
 from datetime import date as _date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query, Header, HTTPException
@@ -376,6 +376,33 @@ def origin_wallets_empty(payload: OriginEmptyIn, api_key: str = Depends(verify_a
     return {"ok": True, "id": ins_row["id"] if ins_row else None, "emptied": current_balance}
 
 
+
+
+class OriginDepositIn(BaseModel):
+    day: str
+    origin_country: str
+    fiat_currency: str
+    amount_fiat: float
+    created_by_telegram_id: int | None = None
+    note: str | None = None
+    external_ref: str | None = None
+
+
+@router.post("/origin-wallets/deposit")
+def create_origin_deposit(payload: OriginDepositIn, api_key: str = Depends(verify_api_key)):
+    """Registra un DEPOSITO manual de fondos en la billetera de origen."""
+    d = _parse_day(payload.day)
+    if payload.amount_fiat <= 0:
+        raise HTTPException(status_code=400, detail="amount_fiat must be > 0")
+    row = fetch_one(
+        """
+        INSERT INTO origin_receipts_daily (day, origin_country, fiat_currency, amount_fiat, created_by_telegram_id, note)
+        VALUES (%s,%s,%s,%s,%s,%s) RETURNING id
+        """,
+        (d, payload.origin_country, payload.fiat_currency, payload.amount_fiat, payload.created_by_telegram_id, payload.note or 'Deposito manual via Backoffice'),
+        rw=True,
+    )
+    return {"ok": True, "id": row["id"] if row else None, "deposited": payload.amount_fiat}
 @router.get("/origin-wallets/current-balances")
 def origin_wallets_current_balances(api_key: str = Depends(verify_api_key)):
     rows = fetch_all(
