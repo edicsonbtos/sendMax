@@ -44,6 +44,7 @@ export default function RootLayout({
                     backgroundColor: 'background.default',
                     minHeight: '100vh',
                     overflow: 'auto',
+                    width: { xs: '100%', md: 'calc(100% - 264px)' },
                   }}
                 >
                   <Box
@@ -51,7 +52,7 @@ export default function RootLayout({
                       maxWidth: 1400,
                       mx: 'auto',
                       p: { xs: 2, sm: 3, md: 4 },
-                      pt: { xs: 3, sm: 4 },
+                      pt: { xs: 7, sm: 4 },
                     }}
                   >
                     {children}
