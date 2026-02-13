@@ -1,4 +1,4 @@
-ï»¿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -38,12 +38,12 @@ def _pick_price_with_method_fallback(client: BinanceP2PClient, *, fiat: str, tra
 
 def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
     """
-    Genera una versiÃ³n completa de tasas:
-    - BUY/SELL por paÃ­s (con fallback de mÃ©todo)
+    Genera una versión completa de tasas:
+    - BUY/SELL por país (con fallback de método)
     - guarda p2p_country_prices (incluye is_verified)
     - calcula route_rates para todas combinaciones origin != dest
-    - activa esa versiÃ³n
-    - si un paÃ­s falla, se omite y se continÃºa
+    - activa esa versión
+    - si un país falla, se omite y se continúa
     """
     client = BinanceP2PClient()
     try:
@@ -78,9 +78,9 @@ def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
                 failed.append(code)
 
         if len(country_prices) < 2:
-            raise RuntimeError("No hay suficientes paÃ­ses con precios para generar rutas (>=2).")
+            raise RuntimeError("No hay suficientes países con precios para generar rutas (>=2).")
 
-        # Crear versiÃ³n activa
+        # Crear versión activa
         rates_repo.deactivate_all_rate_versions()
         version_id = rates_repo.create_rate_version(
             kind=kind,
@@ -90,7 +90,7 @@ def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
         )
         rates_repo.activate_rate_version(version_id)
 
-        # Guardar precios paÃ­s
+        # Guardar precios país
         for code, info in country_prices.items():
             rates_repo.insert_country_price(
                 rate_version_id=version_id,
@@ -115,7 +115,7 @@ def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
 
             pct = Decimal(str(settings.commission_pct(origin, dest)))
             rate_base = (sell_dest / buy_origin)
-            rate_client = rate_base * (Decimal("1.0") - pct / Decimal("100.0"))
+            rate_client = rate_base * (Decimal("1.0") - pct)
 
             rates_repo.insert_route_rate(
                 rate_version_id=version_id,
