@@ -1,2 +1,0 @@
-URL: https://backoffice-api-production-82ab.up.railway.app
-API Key: sendmax-backoffice-2024-prod-XkP9mW2nQ7vL

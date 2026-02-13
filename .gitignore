@@ -33,3 +33,8 @@ _add_*.py
 Thumbs.db
 
 openapi_snapshot.json
+
+# Maintenance scripts y archivos temporales
+scripts/maintenance/
+temp_*.py
+backoffice_web/temp_*.py
