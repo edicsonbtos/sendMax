@@ -1,5 +1,9 @@
 ﻿const API_BASE = process.env.NEXT_PUBLIC_BACKOFFICE_API_BASE || 'http://localhost:8000';
 
+if (typeof window !== 'undefined' && API_BASE === 'http://localhost:8000' && window.location.hostname !== 'localhost') {
+  console.error('[SENDMAX] NEXT_PUBLIC_BACKOFFICE_API_BASE no configurada - usando localhost como fallback');
+}
+
 export function getApiKey(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('BACKOFFICE_API_KEY');
