@@ -31,3 +31,5 @@ _add_*.py
 # OS
 .DS_Store
 Thumbs.db
+
+openapi_snapshot.json

@@ -14,7 +14,7 @@ import {
   TrendingUp as InIcon, TrendingDown as OutIcon,
   Warning as WarningIcon, Receipt as OrdersIcon,
   AttachMoney as ProfitIcon, HourglassEmpty as PendingIcon,
-  Info as InfoIcon, SwapVert as SwapIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import { useAuth } from '@/components/AuthProvider';
 import { apiRequest } from '@/lib/api';
@@ -939,3 +939,4 @@ export default function DailyClosePage() {
     </Box>
   );
 }
+
