@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -24,6 +24,7 @@ import {
   Warning as WarningIcon,
   Refresh as RefreshIcon,
   Schedule as ClockIcon,
+  Verified as VerifiedIcon,
 } from '@mui/icons-material';
 import {
   AreaChart,
@@ -40,12 +41,31 @@ import {
 import { useAuth } from '@/components/AuthProvider';
 import { apiRequest } from '@/lib/api';
 
+/* ---------------- Helpers ---------------- */
+const currencyDecimals = (currency: string) => (['COP', 'VES', 'CLP'].includes(currency) ? 0 : 2);
+
+const formatMoney = (amount: number, currency: string) => {
+  const d = currencyDecimals(currency);
+  return amount.toLocaleString('es-VE', { minimumFractionDigits: d, maximumFractionDigits: d });
+};
+
+const getCurrencySymbol = (currency: string) => {
+  const m: Record<string, string> = {
+    USD: '$', USDT: '$',
+    COP: 'COL$', VES: 'Bs.', CLP: 'CLP$', PEN: 'S/',
+    ARS: 'AR$', BRL: 'R$', MXN: 'MX$', BOB: 'Bs',
+  };
+  return m[currency] || currency;
+};
+
+/* ---------------- Types ---------------- */
 interface MetricsOverview {
   total_orders: number;
   pending_orders: number;
   completed_orders: number;
   total_volume_usd: number;
   total_profit_usd: number;
+  total_profit_real_usd?: number;
   status_counts: Record<string, number>;
   awaiting_paid_proof: number;
 }
@@ -53,14 +73,14 @@ interface MetricsOverview {
 interface CompanyOverview {
   ok: boolean;
   orders: { total_orders: number; pending_orders: number; completed_orders: number };
-  profit: { total_profit_usd: number };
+  profit: { total_profit_usd: number; total_profit_real_usd?: number };
   origin_wallets: {
-    pending_total: number;
+    pending_by_currency: Record<string, number>;
     top_pending: { origin_country: string; fiat_currency: string; current_balance: number }[];
   };
   volume: {
     paid_usd_usdt: number;
-    paid_by_dest_currency: { dest_currency: string; volume: number }[];
+    paid_by_dest_currency: { dest_currency: string; volume: number; count?: number }[];
   };
 }
 
@@ -84,6 +104,7 @@ interface ProfitDayRaw {
   day: string;
   total_orders: number;
   total_profit: number;
+  total_profit_real?: number;
   total_volume: number;
 }
 
@@ -95,6 +116,7 @@ interface ProfitDailyResponse {
 interface ProfitDay {
   day: string;
   profit: number;
+  profit_real: number;
   orders: number;
   volume: number;
 }
@@ -111,14 +133,14 @@ interface StatCardProps {
 
 function StatCard({ title, value, Icon, color, subtitle }: StatCardProps) {
   return (
-    <Card sx={{ flex: '1 1 calc(25% - 16px)', minWidth: 200, position: 'relative', overflow: 'visible' }}>
+    <Card sx={{ flex: '1 1 calc(25% - 16px)', minWidth: 200 }}>
       <CardContent sx={{ p: 2.5 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
           <Box>
             <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.8rem', mb: 0.5 }}>
               {title}
             </Typography>
-            <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827', lineHeight: 1.2 }}>
+            <Typography variant="h4" sx={{ fontWeight: 800, color: '#111827', lineHeight: 1.1 }}>
               {value}
             </Typography>
             {subtitle && (
@@ -148,14 +170,21 @@ const STATUS_COLORS: Record<string, string> = {
 export default function OverviewPage() {
   const { apiKey, setApiKey, clearApiKey } = useAuth();
   const [tempKey, setTempKey] = useState('');
+
   const [metrics, setMetrics] = useState<MetricsOverview | null>(null);
   const [companyOverview, setCompanyOverview] = useState<CompanyOverview | null>(null);
   const [alerts, setAlerts] = useState<StuckAlert[]>([]);
   const [profitDaily, setProfitDaily] = useState<ProfitDay[]>([]);
   const [statusCounts, setStatusCounts] = useState<{ name: string; value: number; color: string }[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState<string>('');
+
+  const pendingByCurrency = useMemo(() => {
+    const m = companyOverview?.origin_wallets?.pending_by_currency || {};
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [companyOverview]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -172,7 +201,7 @@ export default function OverviewPage() {
       setMetrics(metricsData);
       setCompanyOverview(companyData);
 
-      // Alerts - combine both stuck arrays
+      // Alerts
       const allAlerts: StuckAlert[] = [];
       if (alertsData) {
         if (alertsData.origin_verificando_stuck) allAlerts.push(...alertsData.origin_verificando_stuck);
@@ -180,26 +209,27 @@ export default function OverviewPage() {
       }
       setAlerts(allAlerts);
 
-      // Profit daily - map from API format
+      // Profit daily
       if (profitData?.profit_by_day) {
         setProfitDaily(
           profitData.profit_by_day.map((d) => ({
             day: new Date(d.day).toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric' }),
-            profit: d.total_profit,
-            orders: d.total_orders,
-            volume: d.total_volume,
+            profit: d.total_profit || 0,
+            profit_real: d.total_profit_real || 0,
+            orders: d.total_orders || 0,
+            volume: d.total_volume || 0,
           }))
         );
       }
 
-      // Status counts - from metrics API directly
+      // Status counts
       if (metricsData?.status_counts) {
         setStatusCounts(
           Object.entries(metricsData.status_counts)
-            .filter(([, value]) => value > 0)
+            .filter(([, value]) => (value || 0) > 0)
             .map(([name, value]) => ({
               name,
-              value,
+              value: Number(value || 0),
               color: STATUS_COLORS[name] || '#6B7280',
             }))
         );
@@ -246,7 +276,6 @@ export default function OverviewPage() {
                 label="API Key"
                 value={tempKey}
                 onChange={(e) => setTempKey(e.target.value)}
-                placeholder="sk_live_..."
                 helperText="La clave se guarda localmente en tu navegador"
                 onKeyDown={(e) => e.key === 'Enter' && tempKey && saveKey()}
               />
@@ -261,11 +290,14 @@ export default function OverviewPage() {
     );
   }
 
+  const profitTheoretical = metrics?.total_profit_usd || 0;
+  const profitReal = metrics?.total_profit_real_usd || 0;
+
   return (
     <Box className="fade-in">
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827' }}>Dashboard</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 800, color: '#111827' }}>Dashboard</Typography>
           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
             {`Vista general de operaciones Sendmax${lastUpdated ? ` | Actualizado: ${lastUpdated}` : ''}`}
           </Typography>
@@ -291,25 +323,22 @@ export default function OverviewPage() {
       {metrics && !loading && (
         <>
           <Stack direction="row" spacing={2.5} sx={{ mb: 4, flexWrap: 'wrap', gap: 2 }}>
-            <StatCard title="Total Ordenes" value={metrics.total_orders} Icon={ReceiptIcon} color="#4B2E83" subtitle={`${metrics.completed_orders} completadas`} />
+            <StatCard title="Total Ordenes" value={metrics.total_orders} Icon={ReceiptIcon} color="#4B2E83" subtitle={`${metrics.completed_orders} pagadas`} />
             <StatCard title="Pendientes" value={metrics.pending_orders} Icon={TrendingUpIcon} color="#F59E0B" subtitle={metrics.awaiting_paid_proof > 0 ? `${metrics.awaiting_paid_proof} esperando comprobante` : 'Requieren atencion'} />
+
             <StatCard
-              title="Volumen Top Destino"
-              value={(() => {
-                const top = companyOverview?.volume?.paid_by_dest_currency?.[0];
-                if (!top) return '$0';
-                return `${top.dest_currency} ${top.volume.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
-              })()}
-              Icon={WalletIcon}
-              color="#2563EB"
-              subtitle="Mayor moneda destino"
-            />
-            <StatCard
-              title="Ganancia USD"
-              value={`$${metrics.total_profit_usd.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+              title="Profit Teorico (USDT)"
+              value={`$${profitTheoretical.toFixed(2)}`}
               Icon={MoneyIcon}
               color="#16A34A"
-              subtitle="Profit acumulado USDT"
+              subtitle="SUM(orders.profit_usdt) pagadas"
+            />
+            <StatCard
+              title="Profit Real (USDT)"
+              value={`$${profitReal.toFixed(2)}`}
+              Icon={VerifiedIcon}
+              color="#2563EB"
+              subtitle="SUM(orders.profit_real_usdt) pagadas"
             />
           </Stack>
 
@@ -317,32 +346,44 @@ export default function OverviewPage() {
             <Card sx={{ flex: 2, minWidth: 0 }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" sx={{ mb: 0.5 }}>Ganancia Diaria (7 dias)</Typography>
-                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>Profit USDT por dia</Typography>
+                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>
+                  Teorico vs Real (si hay trades)
+                </Typography>
+
                 {profitDaily.length > 0 ? (
                   <ResponsiveContainer width="100%" height={260}>
                     <AreaChart data={profitDaily}>
                       <defs>
-                        <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#4B2E83" stopOpacity={0.3} />
-                          <stop offset="100%" stopColor="#4B2E83" stopOpacity={0.02} />
+                        <linearGradient id="profitTheo" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#16A34A" stopOpacity={0.22} />
+                          <stop offset="100%" stopColor="#16A34A" stopOpacity={0.02} />
+                        </linearGradient>
+                        <linearGradient id="profitReal" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#2563EB" stopOpacity={0.22} />
+                          <stop offset="100%" stopColor="#2563EB" stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
+
                       <CartesianGrid strokeDasharray="3 3" stroke="#E9E3F7" vertical={false} />
                       <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={{ stroke: '#E9E3F7' }} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `$${v}`} />
+
                       <RechartsTooltip
                         contentStyle={{ borderRadius: 12, border: '1px solid #E9E3F7', boxShadow: '0 8px 24px rgba(17,24,39,.06)', fontSize: 13 }}
-                        formatter={(value: unknown) => {
+                        formatter={(value?: unknown, name?: string) => {
                           const n = typeof value === 'number' ? value : Number(value ?? 0);
-                          return [`$${n.toFixed(2)}`, 'Ganancia'];
+                          const label = name === 'profit' ? 'Profit teorico' : name === 'profit_real' ? 'Profit real' : (name || '');
+                          return [`$${n.toFixed(2)}`, label];
                         }}
                       />
-                      <Area type="monotone" dataKey="profit" stroke="#4B2E83" strokeWidth={2.5} fill="url(#profitGradient)" dot={{ fill: '#4B2E83', r: 4, strokeWidth: 2, stroke: '#FFFFFF' }} activeDot={{ r: 6, fill: '#4B2E83', stroke: '#FFFFFF', strokeWidth: 2 }} />
+
+                      <Area type="monotone" dataKey="profit" stroke="#16A34A" strokeWidth={2.5} fill="url(#profitTheo)" dot={false} />
+                      <Area type="monotone" dataKey="profit_real" stroke="#2563EB" strokeWidth={2.5} fill="url(#profitReal)" dot={false} />
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
                   <Box sx={{ py: 6, textAlign: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">No hay datos de ganancia diaria</Typography>
+                    <Typography variant="body2" color="text.secondary">No hay datos</Typography>
                   </Box>
                 )}
               </CardContent>
@@ -352,21 +393,22 @@ export default function OverviewPage() {
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" sx={{ mb: 0.5 }}>Ordenes por Status</Typography>
                 <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>Distribucion actual</Typography>
+
                 {statusCounts.length > 0 ? (
                   <>
                     <ResponsiveContainer width="100%" height={160}>
                       <BarChart data={statusCounts} layout="vertical">
                         <XAxis type="number" hide />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#475569' }} axisLine={false} tickLine={false} width={120} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#475569' }} axisLine={false} tickLine={false} width={140} />
                         <RechartsTooltip contentStyle={{ borderRadius: 12, border: '1px solid #E9E3F7', fontSize: 13 }} />
                         <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={20}>
-                          {statusCounts.map((entry, index) => (
-                            <Cell key={index} fill={entry.color} />
-                          ))}
+                          {statusCounts.map((entry, index) => (<Cell key={index} fill={entry.color} />))}
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
+
                     <Divider sx={{ my: 1.5 }} />
+
                     <Stack spacing={1}>
                       {statusCounts.map((s) => (
                         <Stack key={s.name} direction="row" justifyContent="space-between" alignItems="center">
@@ -388,29 +430,45 @@ export default function OverviewPage() {
             </Card>
           </Stack>
 
-          {/* Wallets pendientes */}
-          {companyOverview?.origin_wallets?.top_pending && companyOverview.origin_wallets.top_pending.length > 0 && (
+          {/* Pending by currency */}
+          {pendingByCurrency.length > 0 && (
             <Card sx={{ mb: 4 }}>
               <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>Saldos Pendientes por Pais</Typography>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 800 }}>Saldos Pendientes (por moneda)</Typography>
+                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+                  {pendingByCurrency.map(([cur, amt]) => (
+                    <Chip
+                      key={cur}
+                      label={`${getCurrencySymbol(cur)} ${cur}: ${formatMoney(amt, cur)}`}
+                      sx={{ fontWeight: 800, backgroundColor: '#EFEAFF', color: '#4B2E83' }}
+                    />
+                  ))}
+                </Stack>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Top pending wallets */}
+          {companyOverview?.origin_wallets?.top_pending?.length ? (
+            <Card sx={{ mb: 4 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 800 }}>Top Billeteras con Saldo Pendiente</Typography>
                 <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', gap: 1 }}>
                   {companyOverview.origin_wallets.top_pending.map((w, i) => (
-                    <Card key={i} variant="outlined" sx={{ minWidth: 180, flex: '1 1 calc(25% - 16px)' }}>
+                    <Card key={i} variant="outlined" sx={{ minWidth: 200, flex: '1 1 calc(25% - 16px)' }}>
                       <CardContent sx={{ p: 2 }}>
-                        <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.8rem' }}>
-                          {w.origin_country}
+                        <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.8rem' }}>{w.origin_country}</Typography>
+                        <Typography variant="h5" sx={{ fontWeight: 800, color: '#111827', mt: 0.5 }}>
+                          {getCurrencySymbol(w.fiat_currency) + ' ' + formatMoney(w.current_balance, w.fiat_currency)}
                         </Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827', mt: 0.5 }}>
-                          {w.current_balance.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
-                        </Typography>
-                        <Chip label={w.fiat_currency} size="small" sx={{ mt: 0.5, fontWeight: 700 }} />
+                        <Chip label={w.fiat_currency} size="small" sx={{ mt: 0.5, fontWeight: 800 }} />
                       </CardContent>
                     </Card>
                   ))}
                 </Stack>
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
           {/* Alerts */}
           {alerts.length > 0 && (
@@ -418,24 +476,24 @@ export default function OverviewPage() {
               <CardContent sx={{ p: 3 }}>
                 <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
                   <WarningIcon sx={{ color: '#F59E0B' }} />
-                  <Typography variant="h6">Alertas Activas</Typography>
-                  <Chip label={`${alerts.length} orden${alerts.length > 1 ? 'es' : ''}`} size="small" sx={{ backgroundColor: '#FFF5E6', color: '#F59E0B', fontWeight: 700, border: '1px solid #F59E0B' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 800 }}>Alertas Activas</Typography>
+                  <Chip label={`${alerts.length} orden${alerts.length > 1 ? 'es' : ''}`} size="small" sx={{ backgroundColor: '#FFF5E6', color: '#F59E0B', fontWeight: 800, border: '1px solid #F59E0B' }} />
                 </Stack>
+
                 <Typography variant="body2" sx={{ color: '#64748B', mb: 2 }}>
                   Ordenes estancadas por mas de 30 minutos sin cambio de status
                 </Typography>
+
                 <Stack spacing={1.5}>
-                  {alerts.map((alert) => {
-                    const minutesStuck = Math.floor((Date.now() - new Date(alert.updated_at).getTime()) / 60000);
+                  {alerts.map((a) => {
+                    const minutesStuck = Math.floor((Date.now() - new Date(a.updated_at).getTime()) / 60000);
                     return (
-                      <Alert severity="warning" key={alert.public_id} sx={{ backgroundColor: '#FFF5E6', border: '1px solid #FBBF24' }}>
-                        <Stack direction="row" spacing={2} alignItems="center">
-                          <Chip label={`#${alert.public_id}`} size="small" sx={{ fontWeight: 700, fontFamily: 'monospace' }} />
-                          <Typography variant="body2">{alert.status}</Typography>
-                          <Typography variant="body2" sx={{ color: '#64748B' }}>
-                            {`${alert.origin_country} → ${alert.dest_country}`}
-                          </Typography>
-                          <Chip icon={<ClockIcon sx={{ fontSize: 14 }} />} label={`${minutesStuck} min`} size="small" color="warning" variant="outlined" sx={{ fontWeight: 600 }} />
+                      <Alert severity="warning" key={a.public_id} sx={{ backgroundColor: '#FFF5E6', border: '1px solid #FBBF24' }}>
+                        <Stack direction="row" spacing={2} alignItems="center" sx={{ flexWrap: 'wrap', gap: 1 }}>
+                          <Chip label={`#${a.public_id}`} size="small" sx={{ fontWeight: 800, fontFamily: 'monospace' }} />
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{a.status}</Typography>
+                          <Typography variant="body2" sx={{ color: '#64748B' }}>{`${a.origin_country} → ${a.dest_country}`}</Typography>
+                          <Chip icon={<ClockIcon sx={{ fontSize: 14 }} />} label={`${minutesStuck} min`} size="small" color="warning" variant="outlined" sx={{ fontWeight: 700 }} />
                         </Stack>
                       </Alert>
                     );

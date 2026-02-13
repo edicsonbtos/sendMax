@@ -13,8 +13,10 @@ import {
   Switch,
   FormControlLabel,
   Divider,
-  Grid,
-} from "@mui/material";
+  GridLegacy as Grid,
+  } from "@mui/material";
+
+
 import { apiRequest } from "@/lib/api";
 
 type SettingsItem = {
@@ -175,7 +177,7 @@ export default function SettingsPage() {
 
       <Grid container spacing={2}>
         {/* Márgenes */}
-        <Grid item xs={12} md={6}>
+        <Grid xs={12} md={6}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>
               Márgenes (Ganancia)
@@ -185,7 +187,7 @@ export default function SettingsPage() {
             </Typography>
 
             <Grid container spacing={2}>
-              <Grid item xs={12}>
+              <Grid xs={12}>
                 <TextField
                   label="Margen general (%)"
                   value={marginDefault}
@@ -196,7 +198,7 @@ export default function SettingsPage() {
                 />
               </Grid>
 
-              <Grid item xs={12}>
+              <Grid xs={12}>
                 <TextField
                   label="Margen destino Venezuela (%)"
                   value={marginDestVenez}
@@ -207,7 +209,7 @@ export default function SettingsPage() {
                 />
               </Grid>
 
-              <Grid item xs={12}>
+              <Grid xs={12}>
                 <TextField
                   label="Margen USA → Venezuela (%)"
                   value={marginRouteUsaVenez}
@@ -222,7 +224,7 @@ export default function SettingsPage() {
         </Grid>
 
         {/* Motor de tasas */}
-        <Grid item xs={12} md={6}>
+        <Grid xs={12} md={6}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>
               Motor de tasas
@@ -243,7 +245,7 @@ export default function SettingsPage() {
         </Grid>
 
         {/* Binance P2P */}
-        <Grid item xs={12}>
+        <Grid xs={12}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>
               Binance P2P
@@ -253,7 +255,7 @@ export default function SettingsPage() {
             </Typography>
 
             <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} md={4}>
+              <Grid xs={12} md={4}>
                 <TextField
                   label="Órdenes a revisar"
                   value={p2pRows}
@@ -264,7 +266,7 @@ export default function SettingsPage() {
                 />
               </Grid>
 
-              <Grid item xs={12} md={8}>
+              <Grid xs={12} md={8}>
                 <FormControlLabel
                   control={
                     <Switch
