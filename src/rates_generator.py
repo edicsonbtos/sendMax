@@ -1,4 +1,4 @@
-from __future__ import annotations
+ï»¿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -38,12 +38,12 @@ def _pick_price_with_method_fallback(client: BinanceP2PClient, *, fiat: str, tra
 
 def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
     """
-    Genera una versión completa de tasas:
-    - BUY/SELL por país (con fallback de método)
+    Genera una version completa de tasas:
+    - BUY/SELL por pais (con fallback de metodo)
     - guarda p2p_country_prices (incluye is_verified)
     - calcula route_rates para todas combinaciones origin != dest
-    - activa esa versión
-    - si un país falla, se omite y se continúa
+    - activa esa version
+    - si un pais falla, se omite y se continua
     """
     client = BinanceP2PClient()
     try:
@@ -78,9 +78,9 @@ def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
                 failed.append(code)
 
         if len(country_prices) < 2:
-            raise RuntimeError("No hay suficientes países con precios para generar rutas (>=2).")
+            raise RuntimeError("No hay suficientes paises con precios para generar rutas (>=2).")
 
-        # Crear versión activa
+        # Crear version activa
         rates_repo.deactivate_all_rate_versions()
         version_id = rates_repo.create_rate_version(
             kind=kind,
@@ -90,7 +90,7 @@ def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
         )
         rates_repo.activate_rate_version(version_id)
 
-        # Guardar precios país
+        # Guardar precios pais
         for code, info in country_prices.items():
             rates_repo.insert_country_price(
                 rate_version_id=version_id,
