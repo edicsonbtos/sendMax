@@ -76,15 +76,17 @@ def metrics_p2p_prices(
     limit: int = Query(default=20, le=100),
     api_key: str = Depends(verify_api_key),
 ):
-    """Ultimos precios P2P por pais."""
+    """Ultimos precios P2P por pais (de p2p_country_prices)."""
     if country:
         rows = fetch_all(
             """
-            SELECT country, fiat, buy_price, sell_price, spread_pct,
-                   source, captured_at, is_verified
-            FROM p2p_country_prices
-            WHERE country = %s
-            ORDER BY captured_at DESC
+            SELECT p.country, p.fiat, p.buy_price, p.sell_price,
+                   p.source, p.is_verified, p.methods_used, p.amount_ref,
+                   p.rate_version_id, v.created_at
+            FROM p2p_country_prices p
+            JOIN rate_versions v ON v.id = p.rate_version_id
+            WHERE p.country = %s
+            ORDER BY v.created_at DESC
             LIMIT %s
             """,
             (country.upper(), limit),
@@ -92,11 +94,13 @@ def metrics_p2p_prices(
     else:
         rows = fetch_all(
             """
-            SELECT DISTINCT ON (country)
-              country, fiat, buy_price, sell_price, spread_pct,
-              source, captured_at, is_verified
-            FROM p2p_country_prices
-            ORDER BY country, captured_at DESC
+            SELECT p.country, p.fiat, p.buy_price, p.sell_price,
+                   p.source, p.is_verified, p.methods_used, p.amount_ref,
+                   p.rate_version_id, v.created_at
+            FROM p2p_country_prices p
+            JOIN rate_versions v ON v.id = p.rate_version_id
+            WHERE v.is_active = true
+            ORDER BY p.country
             """,
         )
 
@@ -105,15 +109,22 @@ def metrics_p2p_prices(
 
     items = []
     for r in rows:
+        buy = float(r["buy_price"]) if r["buy_price"] is not None else None
+        sell = float(r["sell_price"]) if r["sell_price"] is not None else None
+        spread = None
+        if buy and sell and sell > 0:
+            spread = round(((buy - sell) / sell) * 100, 4)
         items.append({
             "country": r["country"],
             "fiat": r["fiat"],
-            "buy_price": float(r["buy_price"]) if r["buy_price"] is not None else None,
-            "sell_price": float(r["sell_price"]) if r["sell_price"] is not None else None,
-            "spread_pct": float(r["spread_pct"]) if r["spread_pct"] is not None else None,
+            "buy_price": buy,
+            "sell_price": sell,
+            "spread_pct": spread,
             "source": r.get("source"),
-            "captured_at": iso(r["captured_at"]),
+            "captured_at": iso(r.get("created_at")),
             "is_verified": bool(r.get("is_verified", False)),
+            "methods_used": r.get("methods_used"),
+            "rate_version_id": r.get("rate_version_id"),
         })
 
     return {"ok": True, "count": len(items), "items": items}
@@ -224,3 +235,4 @@ def metrics_company_overview(api_key: str = Depends(verify_api_key)):
             "paid_by_dest_currency": paid_by_dest_currency,
         },
     }
+
