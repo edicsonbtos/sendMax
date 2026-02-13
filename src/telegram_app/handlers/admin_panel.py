@@ -57,7 +57,7 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await admin_orders(update, context)
         return
 
-    if text == "🔄 Tasas ahora":
+    if text in ("🔄 Tasas ahora", "📈 Tasas", "📈 Tasas ahora"):
         # reutiliza /rates_now como función
         await rates_now(update, context)
         return
