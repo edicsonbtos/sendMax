@@ -1,4 +1,4 @@
-﻿"""Router: Métricas y Dashboard"""
+﻿"""Router: Metricas y Dashboard"""
 
 from fastapi import APIRouter, Depends, Query
 from ..db import fetch_one, fetch_all
@@ -13,29 +13,34 @@ def metrics_overview(api_key: str = Depends(verify_api_key)):
         """
         SELECT
           COUNT(*) FILTER (WHERE status='CREADA') AS creadas,
+          COUNT(*) FILTER (WHERE status='ORIGEN_VERIFICANDO') AS origen_verificando,
           COUNT(*) FILTER (WHERE status='EN_PROCESO') AS en_proceso,
           COUNT(*) FILTER (WHERE status='PAGADA') AS pagadas,
           COUNT(*) FILTER (WHERE status='CANCELADA') AS canceladas,
           COUNT(*) FILTER (WHERE awaiting_paid_proof=true) AS awaiting_paid_proof,
           COALESCE(SUM(profit_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_usd,
+          COALESCE(SUM(profit_real_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_real_usd,
           0::numeric AS total_volume_usd
         FROM orders
         """
     )
 
     creadas = int(row["creadas"] or 0)
+    origen_verificando = int(row["origen_verificando"] or 0)
     en_proceso = int(row["en_proceso"] or 0)
     pagadas = int(row["pagadas"] or 0)
     canceladas = int(row["canceladas"] or 0)
 
     return {
-        "total_orders": creadas + en_proceso + pagadas + canceladas,
-        "pending_orders": creadas + en_proceso,
+        "total_orders": creadas + origen_verificando + en_proceso + pagadas + canceladas,
+        "pending_orders": creadas + origen_verificando + en_proceso,
         "completed_orders": pagadas,
         "total_volume_usd": float(row["total_volume_usd"] or 0),
         "total_profit_usd": float(row["total_profit_usd"] or 0),
+        "total_profit_real_usd": float(row["total_profit_real_usd"] or 0),
         "status_counts": {
             "CREADA": creadas,
+            "ORIGEN_VERIFICANDO": origen_verificando,
             "EN_PROCESO": en_proceso,
             "PAGADA": pagadas,
             "CANCELADA": canceladas,
@@ -52,10 +57,66 @@ def profit_daily(days: int = Query(default=30, le=90), api_key: str = Depends(ve
 
 
 @router.get("/operators/ranking")
-def operators_ranking(days: int = Query(default=7, le=30), api_key: str = Depends(verify_api_key)):
+def operators_ranking(days: int = Query(default=7, le=90), api_key: str = Depends(verify_api_key)):
     from ..audit import get_operators_ranking
     data = get_operators_ranking(days)
-    return {"days": days, "operators": data}
+    return {"ok": True, "days": days, "operators": data}
+
+
+@router.get("/metrics/corridors")
+def metrics_corridors(days: int = Query(default=30, le=90), api_key: str = Depends(verify_api_key)):
+    from ..audit import get_corridors
+    data = get_corridors(days)
+    return {"ok": True, "days": days, "corridors": data}
+
+
+@router.get("/metrics/p2p-prices")
+def metrics_p2p_prices(
+    country: str = Query(default=None),
+    limit: int = Query(default=20, le=100),
+    api_key: str = Depends(verify_api_key),
+):
+    """Ultimos precios P2P por pais."""
+    if country:
+        rows = fetch_all(
+            """
+            SELECT country, fiat, buy_price, sell_price, spread_pct,
+                   source, captured_at, is_verified
+            FROM p2p_country_prices
+            WHERE country = %s
+            ORDER BY captured_at DESC
+            LIMIT %s
+            """,
+            (country.upper(), limit),
+        )
+    else:
+        rows = fetch_all(
+            """
+            SELECT DISTINCT ON (country)
+              country, fiat, buy_price, sell_price, spread_pct,
+              source, captured_at, is_verified
+            FROM p2p_country_prices
+            ORDER BY country, captured_at DESC
+            """,
+        )
+
+    def iso(x):
+        return x.isoformat() if x else None
+
+    items = []
+    for r in rows:
+        items.append({
+            "country": r["country"],
+            "fiat": r["fiat"],
+            "buy_price": float(r["buy_price"]) if r["buy_price"] is not None else None,
+            "sell_price": float(r["sell_price"]) if r["sell_price"] is not None else None,
+            "spread_pct": float(r["spread_pct"]) if r["spread_pct"] is not None else None,
+            "source": r.get("source"),
+            "captured_at": iso(r["captured_at"]),
+            "is_verified": bool(r.get("is_verified", False)),
+        })
+
+    return {"ok": True, "count": len(items), "items": items}
 
 
 @router.get("/metrics/company-overview")
@@ -64,9 +125,10 @@ def metrics_company_overview(api_key: str = Depends(verify_api_key)):
         """
         SELECT
           COUNT(*) AS total_orders,
-          COUNT(*) FILTER (WHERE status IN ('CREADA','EN_PROCESO')) AS pending_orders,
+          COUNT(*) FILTER (WHERE status IN ('CREADA','ORIGEN_VERIFICANDO','EN_PROCESO')) AS pending_orders,
           COUNT(*) FILTER (WHERE status='PAGADA') AS completed_orders,
-          COALESCE(SUM(profit_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_usd
+          COALESCE(SUM(profit_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_usd,
+          COALESCE(SUM(profit_real_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_real_usd
         FROM orders
         """
     )
@@ -94,18 +156,29 @@ def metrics_company_overview(api_key: str = Depends(verify_api_key)):
     )
 
     wallets = []
-    pending_total = 0.0
+    pending_by_currency = {}
     for r in w:
         bal = float(r["current_balance"] or 0)
-        wallets.append({"origin_country": r["origin_country"], "fiat_currency": r["fiat_currency"], "current_balance": bal})
+        cur = r["fiat_currency"]
+        wallets.append({
+            "origin_country": r["origin_country"],
+            "fiat_currency": cur,
+            "current_balance": bal,
+        })
         if bal > 0:
-            pending_total += bal
+            if cur not in pending_by_currency:
+                pending_by_currency[cur] = 0.0
+            pending_by_currency[cur] += bal
 
-    top_pending = sorted([x for x in wallets if x["current_balance"] > 0], key=lambda x: x["current_balance"], reverse=True)[:10]
+    top_pending = sorted(
+        [x for x in wallets if x["current_balance"] > 0],
+        key=lambda x: x["current_balance"],
+        reverse=True,
+    )[:10]
 
     v_rows = fetch_all(
         """
-        SELECT dest_currency, COALESCE(SUM(payout_dest),0) AS vol
+        SELECT dest_currency, COALESCE(SUM(payout_dest),0) AS vol, COUNT(*) AS cnt
         FROM orders
         WHERE status='PAGADA'
         GROUP BY dest_currency
@@ -113,7 +186,11 @@ def metrics_company_overview(api_key: str = Depends(verify_api_key)):
         """
     )
     paid_by_dest_currency = [
-        {"dest_currency": r["dest_currency"], "volume": float(r["vol"] or 0)}
+        {
+            "dest_currency": r["dest_currency"],
+            "volume": float(r["vol"] or 0),
+            "count": int(r["cnt"] or 0),
+        }
         for r in v_rows
         if r["dest_currency"] is not None
     ]
@@ -134,7 +211,16 @@ def metrics_company_overview(api_key: str = Depends(verify_api_key)):
             "pending_orders": int(row["pending_orders"] or 0) if row else 0,
             "completed_orders": int(row["completed_orders"] or 0) if row else 0,
         },
-        "profit": {"total_profit_usd": float(row["total_profit_usd"] or 0) if row else 0.0},
-        "origin_wallets": {"pending_total": pending_total, "top_pending": top_pending},
-        "volume": {"paid_usd_usdt": paid_usd_usdt, "paid_by_dest_currency": paid_by_dest_currency},
+        "profit": {
+            "total_profit_usd": float(row["total_profit_usd"] or 0) if row else 0.0,
+            "total_profit_real_usd": float(row["total_profit_real_usd"] or 0) if row else 0.0,
+        },
+        "origin_wallets": {
+            "pending_by_currency": pending_by_currency,
+            "top_pending": top_pending,
+        },
+        "volume": {
+            "paid_usd_usdt": paid_usd_usdt,
+            "paid_by_dest_currency": paid_by_dest_currency,
+        },
     }
