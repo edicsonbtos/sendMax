@@ -1,8 +1,6 @@
 ﻿const API_BASE = 'https://api-max-production.up.railway.app';
 
-if (typeof window !== 'undefined' && API_BASE === 'http://localhost:8000' && window.location.hostname !== 'localhost') {
-  console.error('[SENDMAX] NEXT_PUBLIC_BACKOFFICE_API_BASE no configurada - usando localhost como fallback');
-}
+// API hardcoded to production
 
 export function getApiKey(): string | null {
   if (typeof window === 'undefined') return null;
