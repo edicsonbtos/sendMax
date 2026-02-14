@@ -1,6 +1,6 @@
-"""
+ï»¿"""
 Sendmax Backoffice API
-Versión refactorizada con routers modulares
+Version refactorizada con routers modulares
 """
 
 from fastapi import FastAPI
