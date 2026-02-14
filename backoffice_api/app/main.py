@@ -1,6 +1,6 @@
-﻿"""
+"""
 Sendmax Backoffice API
-Versión refactorizada con routers modulares
+Versi�n refactorizada con routers modulares
 """
 
 from fastapi import FastAPI
@@ -17,6 +17,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "https://sendmax-bot.vercel.app",
+        "https://sendmax-web-production.up.railway.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
