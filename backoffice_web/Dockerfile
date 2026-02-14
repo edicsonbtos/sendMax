@@ -1,8 +1,7 @@
 ﻿FROM node:20-alpine AS builder
 WORKDIR /app
 
-ARG NEXT_PUBLIC_BACKOFFICE_API_BASE
-ENV NEXT_PUBLIC_BACKOFFICE_API_BASE=$NEXT_PUBLIC_BACKOFFICE_API_BASE
+ENV NEXT_PUBLIC_BACKOFFICE_API_BASE=https://api-max-production.up.railway.app
 
 COPY package*.json ./
 RUN npm install
