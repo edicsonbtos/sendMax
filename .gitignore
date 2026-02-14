@@ -38,3 +38,6 @@ openapi_snapshot.json
 scripts/maintenance/
 temp_*.py
 backoffice_web/temp_*.py
+
+# Permitir .env.production del frontend
+!backoffice_web/.env.production
