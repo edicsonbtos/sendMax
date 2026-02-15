@@ -1,20 +1,30 @@
-'use client';
+﻿'use client';
 
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Box, CircularProgress } from '@mui/material';
 
 interface AuthContextType {
+  token: string | null;
+  role: string | null;
+  fullName: string | null;
   apiKey: string | null;
   setApiKey: (key: string) => void;
   clearApiKey: () => void;
+  login: (token: string, role: string, name: string) => void;
+  logout: () => void;
   isReady: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
+  token: null,
+  role: null,
+  fullName: null,
   apiKey: null,
   setApiKey: () => {},
   clearApiKey: () => {},
+  login: () => {},
+  logout: () => {},
   isReady: false,
 });
 
@@ -23,26 +33,51 @@ export const useAuth = () => useContext(AuthContext);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const redirected = useRef(false);
 
-  // Importante: arrancar en "no listo" para que SSR y primer render del cliente coincidan
   const [isReady, setIsReady] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [fullName, setFullName] = useState<string | null>(null);
   const [apiKey, setApiKeyState] = useState<string | null>(null);
 
   useEffect(() => {
-    // Ya estamos en cliente: podemos leer localStorage
-    const stored = localStorage.getItem('BACKOFFICE_API_KEY');
-    setApiKeyState(stored);
+    const storedToken = localStorage.getItem('auth_token');
+    const storedRole = localStorage.getItem('auth_role');
+    const storedName = localStorage.getItem('auth_name');
+    const storedApiKey = localStorage.getItem('BACKOFFICE_API_KEY');
+
+    setToken(storedToken);
+    setRole(storedRole);
+    setFullName(storedName);
+    setApiKeyState(storedApiKey);
     setIsReady(true);
   }, []);
 
   useEffect(() => {
     if (!isReady) return;
-    if (!apiKey && pathname !== '/' && !redirected.current) {
-      redirected.current = true;
-      router.push('/');
+    if (!token && pathname !== '/login') {
+      router.push('/login');
     }
-  }, [isReady, apiKey, pathname, router]);
+  }, [isReady, token, pathname, router]);
+
+  const login = (newToken: string, newRole: string, newName: string) => {
+    localStorage.setItem('auth_token', newToken);
+    localStorage.setItem('auth_role', newRole);
+    localStorage.setItem('auth_name', newName);
+    setToken(newToken);
+    setRole(newRole);
+    setFullName(newName);
+  };
+
+  const logout = () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_role');
+    localStorage.removeItem('auth_name');
+    setToken(null);
+    setRole(null);
+    setFullName(null);
+    router.push('/login');
+  };
 
   const setApiKey = (key: string) => {
     localStorage.setItem('BACKOFFICE_API_KEY', key);
@@ -52,12 +87,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearApiKey = () => {
     localStorage.removeItem('BACKOFFICE_API_KEY');
     setApiKeyState(null);
-    router.push('/');
+    logout();
   };
 
-  const value = useMemo(() => ({ apiKey, setApiKey, clearApiKey, isReady }), [apiKey, isReady]);
+  const value = useMemo(
+    () => ({ token, role, fullName, apiKey, setApiKey, clearApiKey, login, logout, isReady }),
+    [token, role, fullName, apiKey, isReady]
+  );
 
-  // Mientras no está listo, renderizamos SIEMPRE lo mismo (evita mismatch)
   if (!isReady) {
     return (
       <Box

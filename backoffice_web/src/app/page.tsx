@@ -6,8 +6,6 @@ import {
   Typography,
   Card,
   CardContent,
-  TextField,
-  Button,
   Alert,
   CircularProgress,
   Chip,
@@ -19,7 +17,6 @@ import {
 import {
   TrendingUp as TrendingUpIcon,
   Receipt as ReceiptIcon,
-  AccountBalance as WalletIcon,
   AttachMoney as MoneyIcon,
   Warning as WarningIcon,
   Refresh as RefreshIcon,
@@ -41,7 +38,6 @@ import {
 import { useAuth } from '@/components/AuthProvider';
 import { apiRequest } from '@/lib/api';
 
-/* ---------------- Helpers ---------------- */
 const currencyDecimals = (currency: string) => (['COP', 'VES', 'CLP'].includes(currency) ? 0 : 2);
 
 const formatMoney = (amount: number, currency: string) => {
@@ -51,14 +47,13 @@ const formatMoney = (amount: number, currency: string) => {
 
 const getCurrencySymbol = (currency: string) => {
   const m: Record<string, string> = {
-    USD: '$', USDT: '$',
-    COP: 'COL$', VES: 'Bs.', CLP: 'CLP$', PEN: 'S/',
-    ARS: 'AR$', BRL: 'R$', MXN: 'MX$', BOB: 'Bs',
+    USD: '\$', USDT: '\$',
+    COP: 'COL\$', VES: 'Bs.', CLP: 'CLP\$', PEN: 'S/',
+    ARS: 'AR\$', BRL: 'R\$', MXN: 'MX\$', BOB: 'Bs',
   };
   return m[currency] || currency;
 };
 
-/* ---------------- Types ---------------- */
 interface MetricsOverview {
   total_orders: number;
   pending_orders: number;
@@ -149,7 +144,7 @@ function StatCard({ title, value, Icon, color, subtitle }: StatCardProps) {
               </Typography>
             )}
           </Box>
-          <Box sx={{ backgroundColor: `${color}12`, borderRadius: '14px', p: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Box sx={{ backgroundColor: color + '12', borderRadius: '14px', p: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon sx={{ color, fontSize: 26 }} />
           </Box>
         </Stack>
@@ -168,8 +163,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function OverviewPage() {
-  const { apiKey, setApiKey, clearApiKey } = useAuth();
-  const [tempKey, setTempKey] = useState('');
+  const { token, logout } = useAuth();
 
   const [metrics, setMetrics] = useState<MetricsOverview | null>(null);
   const [companyOverview, setCompanyOverview] = useState<CompanyOverview | null>(null);
@@ -201,7 +195,6 @@ export default function OverviewPage() {
       setMetrics(metricsData);
       setCompanyOverview(companyData);
 
-      // Alerts
       const allAlerts: StuckAlert[] = [];
       if (alertsData) {
         if (alertsData.origin_verificando_stuck) allAlerts.push(...alertsData.origin_verificando_stuck);
@@ -209,7 +202,6 @@ export default function OverviewPage() {
       }
       setAlerts(allAlerts);
 
-      // Profit daily
       if (profitData?.profit_by_day) {
         setProfitDaily(
           profitData.profit_by_day.map((d) => ({
@@ -222,7 +214,6 @@ export default function OverviewPage() {
         );
       }
 
-      // Status counts
       if (metricsData?.status_counts) {
         setStatusCounts(
           Object.entries(metricsData.status_counts)
@@ -239,59 +230,20 @@ export default function OverviewPage() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       setError(message);
-      if (message === 'API_KEY_INVALID') clearApiKey();
+      if (message === 'API_KEY_INVALID') logout();
     } finally {
       setLoading(false);
     }
-  }, [clearApiKey]);
+  }, [logout]);
 
   useEffect(() => {
-    if (apiKey) fetchData();
-  }, [apiKey, fetchData]);
-
-  const saveKey = () => {
-    setApiKey(tempKey);
-    setError('');
-  };
-
-  if (!apiKey) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
-        <Card sx={{ maxWidth: 480, width: '100%' }}>
-          <CardContent sx={{ p: 4 }}>
-            <Box sx={{ textAlign: 'center', mb: 3 }}>
-              <Box component="img" src="/logo.png" alt="Sendmax" sx={{ height: 48, width: 'auto', mb: 2 }} />
-              <Typography variant="h5" sx={{ fontWeight: 700, color: '#4B2E83', mb: 0.5 }}>
-                Sendmax Backoffice
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Ingresa tu API Key para acceder al panel de control
-              </Typography>
-            </Box>
-            <Divider sx={{ my: 2 }} />
-            <Stack spacing={2.5}>
-              <TextField
-                fullWidth
-                type="password"
-                label="API Key"
-                value={tempKey}
-                onChange={(e) => setTempKey(e.target.value)}
-                helperText="La clave se guarda localmente en tu navegador"
-                onKeyDown={(e) => e.key === 'Enter' && tempKey && saveKey()}
-              />
-              <Button variant="contained" onClick={saveKey} disabled={!tempKey} size="large" fullWidth sx={{ py: 1.5 }}>
-                Acceder al panel
-              </Button>
-            </Stack>
-            {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
-          </CardContent>
-        </Card>
-      </Box>
-    );
-  }
+    if (token) fetchData();
+  }, [token, fetchData]);
 
   const profitTheoretical = metrics?.total_profit_usd || 0;
   const profitReal = metrics?.total_profit_real_usd || 0;
+
+  if (!token) return null;
 
   return (
     <Box className="fade-in">
@@ -299,17 +251,14 @@ export default function OverviewPage() {
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800, color: '#111827' }}>Dashboard</Typography>
           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
-            {`Vista general de operaciones Sendmax${lastUpdated ? ` | Actualizado: ${lastUpdated}` : ''}`}
+            {'Vista general de operaciones Sendmax' + (lastUpdated ? ' | Actualizado: ' + lastUpdated : '')}
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1}>
-          <Tooltip title="Actualizar datos">
-            <IconButton onClick={fetchData} disabled={loading} sx={{ color: '#4B2E83' }}>
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
-          <Button variant="outlined" size="small" onClick={clearApiKey}>Cambiar Key</Button>
-        </Stack>
+        <Tooltip title="Actualizar datos">
+          <IconButton onClick={fetchData} disabled={loading} sx={{ color: '#4B2E83' }}>
+            <RefreshIcon />
+          </IconButton>
+        </Tooltip>
       </Stack>
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
@@ -323,23 +272,10 @@ export default function OverviewPage() {
       {metrics && !loading && (
         <>
           <Stack direction="row" spacing={2.5} sx={{ mb: 4, flexWrap: 'wrap', gap: 2 }}>
-            <StatCard title="Total Ordenes" value={metrics.total_orders} Icon={ReceiptIcon} color="#4B2E83" subtitle={`${metrics.completed_orders} pagadas`} />
-            <StatCard title="Pendientes" value={metrics.pending_orders} Icon={TrendingUpIcon} color="#F59E0B" subtitle={metrics.awaiting_paid_proof > 0 ? `${metrics.awaiting_paid_proof} esperando comprobante` : 'Requieren atencion'} />
-
-            <StatCard
-              title="Profit Teorico (USDT)"
-              value={`$${profitTheoretical.toFixed(2)}`}
-              Icon={MoneyIcon}
-              color="#16A34A"
-              subtitle="SUM(orders.profit_usdt) pagadas"
-            />
-            <StatCard
-              title="Profit Real (USDT)"
-              value={`$${profitReal.toFixed(2)}`}
-              Icon={VerifiedIcon}
-              color="#2563EB"
-              subtitle="SUM(orders.profit_real_usdt) pagadas"
-            />
+            <StatCard title="Total Ordenes" value={metrics.total_orders} Icon={ReceiptIcon} color="#4B2E83" subtitle={metrics.completed_orders + ' pagadas'} />
+            <StatCard title="Pendientes" value={metrics.pending_orders} Icon={TrendingUpIcon} color="#F59E0B" subtitle={metrics.awaiting_paid_proof > 0 ? metrics.awaiting_paid_proof + ' esperando comprobante' : 'Requieren atencion'} />
+            <StatCard title="Profit Teorico (USDT)" value={'\$' + profitTheoretical.toFixed(2)} Icon={MoneyIcon} color="#16A34A" subtitle="SUM(orders.profit_usdt) pagadas" />
+            <StatCard title="Profit Real (USDT)" value={'\$' + profitReal.toFixed(2)} Icon={VerifiedIcon} color="#2563EB" subtitle="SUM(orders.profit_real_usdt) pagadas" />
           </Stack>
 
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2.5} sx={{ mb: 4 }}>
@@ -363,20 +299,17 @@ export default function OverviewPage() {
                           <stop offset="100%" stopColor="#2563EB" stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
-
                       <CartesianGrid strokeDasharray="3 3" stroke="#E9E3F7" vertical={false} />
                       <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={{ stroke: '#E9E3F7' }} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `$${v}`} />
-
+                      <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => '\$' + v} />
                       <RechartsTooltip
                         contentStyle={{ borderRadius: 12, border: '1px solid #E9E3F7', boxShadow: '0 8px 24px rgba(17,24,39,.06)', fontSize: 13 }}
                         formatter={(value?: unknown, name?: string) => {
                           const n = typeof value === 'number' ? value : Number(value ?? 0);
                           const label = name === 'profit' ? 'Profit teorico' : name === 'profit_real' ? 'Profit real' : (name || '');
-                          return [`$${n.toFixed(2)}`, label];
+                          return ['\$' + n.toFixed(2), label];
                         }}
                       />
-
                       <Area type="monotone" dataKey="profit" stroke="#16A34A" strokeWidth={2.5} fill="url(#profitTheo)" dot={false} />
                       <Area type="monotone" dataKey="profit_real" stroke="#2563EB" strokeWidth={2.5} fill="url(#profitReal)" dot={false} />
                     </AreaChart>
@@ -416,7 +349,7 @@ export default function OverviewPage() {
                             <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: s.color }} />
                             <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{s.name}</Typography>
                           </Stack>
-                          <Chip label={s.value} size="small" sx={{ backgroundColor: `${s.color}15`, color: s.color, fontWeight: 700, fontSize: '0.75rem', height: 22 }} />
+                          <Chip label={s.value} size="small" sx={{ backgroundColor: s.color + '15', color: s.color, fontWeight: 700, fontSize: '0.75rem', height: 22 }} />
                         </Stack>
                       ))}
                     </Stack>
@@ -430,7 +363,6 @@ export default function OverviewPage() {
             </Card>
           </Stack>
 
-          {/* Pending by currency */}
           {pendingByCurrency.length > 0 && (
             <Card sx={{ mb: 4 }}>
               <CardContent sx={{ p: 3 }}>
@@ -439,7 +371,7 @@ export default function OverviewPage() {
                   {pendingByCurrency.map(([cur, amt]) => (
                     <Chip
                       key={cur}
-                      label={`${getCurrencySymbol(cur)} ${cur}: ${formatMoney(amt, cur)}`}
+                      label={getCurrencySymbol(cur) + ' ' + cur + ': ' + formatMoney(amt, cur)}
                       sx={{ fontWeight: 800, backgroundColor: '#EFEAFF', color: '#4B2E83' }}
                     />
                   ))}
@@ -448,7 +380,6 @@ export default function OverviewPage() {
             </Card>
           )}
 
-          {/* Top pending wallets */}
           {companyOverview?.origin_wallets?.top_pending?.length ? (
             <Card sx={{ mb: 4 }}>
               <CardContent sx={{ p: 3 }}>
@@ -470,14 +401,13 @@ export default function OverviewPage() {
             </Card>
           ) : null}
 
-          {/* Alerts */}
           {alerts.length > 0 && (
             <Card sx={{ border: '1px solid #F59E0B', backgroundColor: '#FFFBF0' }}>
               <CardContent sx={{ p: 3 }}>
                 <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
                   <WarningIcon sx={{ color: '#F59E0B' }} />
                   <Typography variant="h6" sx={{ fontWeight: 800 }}>Alertas Activas</Typography>
-                  <Chip label={`${alerts.length} orden${alerts.length > 1 ? 'es' : ''}`} size="small" sx={{ backgroundColor: '#FFF5E6', color: '#F59E0B', fontWeight: 800, border: '1px solid #F59E0B' }} />
+                  <Chip label={alerts.length + ' orden' + (alerts.length > 1 ? 'es' : '')} size="small" sx={{ backgroundColor: '#FFF5E6', color: '#F59E0B', fontWeight: 800, border: '1px solid #F59E0B' }} />
                 </Stack>
 
                 <Typography variant="body2" sx={{ color: '#64748B', mb: 2 }}>
@@ -490,10 +420,10 @@ export default function OverviewPage() {
                     return (
                       <Alert severity="warning" key={a.public_id} sx={{ backgroundColor: '#FFF5E6', border: '1px solid #FBBF24' }}>
                         <Stack direction="row" spacing={2} alignItems="center" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                          <Chip label={`#${a.public_id}`} size="small" sx={{ fontWeight: 800, fontFamily: 'monospace' }} />
+                          <Chip label={'#' + a.public_id} size="small" sx={{ fontWeight: 800, fontFamily: 'monospace' }} />
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>{a.status}</Typography>
-                          <Typography variant="body2" sx={{ color: '#64748B' }}>{`${a.origin_country} → ${a.dest_country}`}</Typography>
-                          <Chip icon={<ClockIcon sx={{ fontSize: 14 }} />} label={`${minutesStuck} min`} size="small" color="warning" variant="outlined" sx={{ fontWeight: 700 }} />
+                          <Typography variant="body2" sx={{ color: '#64748B' }}>{a.origin_country + ' > ' + a.dest_country}</Typography>
+                          <Chip icon={<ClockIcon sx={{ fontSize: 14 }} />} label={minutesStuck + ' min'} size="small" color="warning" variant="outlined" sx={{ fontWeight: 700 }} />
                         </Stack>
                       </Alert>
                     );

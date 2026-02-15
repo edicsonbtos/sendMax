@@ -50,11 +50,16 @@ export default function Sidebar() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { clearApiKey, apiKey } = useAuth();
+  const { logout, fullName, role, token } = useAuth();
 
   const handleNav = (path: string) => {
     router.push(path);
     if (isMobile) setMobileOpen(false);
+  };
+
+  const getInitials = (name: string | null) => {
+    if (!name) return 'SM';
+    return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   };
 
   const drawerContent = (
@@ -188,12 +193,12 @@ export default function Sidebar() {
 
       {/* Footer */}
       <Box sx={{ p: 2, pb: 2.5 }}>
-        {apiKey && (
+        {token && (
           <Button
             fullWidth
             variant="outlined"
             startIcon={<LogoutIcon />}
-            onClick={clearApiKey}
+            onClick={logout}
             sx={{
               mb: 1.5,
               borderColor: '#E9E3F7',
@@ -216,19 +221,19 @@ export default function Sidebar() {
               fontWeight: 700,
             }}
           >
-            SM
+            {getInitials(fullName)}
           </Avatar>
           <Stack spacing={0}>
             <Typography variant="caption" sx={{ color: '#111827', fontWeight: 600, fontSize: '0.75rem', lineHeight: 1.2 }}>
-              Sendmax Admin
+              {fullName || 'Admin'}
             </Typography>
             <Typography variant="caption" sx={{ color: '#64748B', fontSize: '0.65rem', lineHeight: 1.2 }}>
-              Panel de control
+              {role || 'admin'}
             </Typography>
           </Stack>
         </Stack>
         <Chip
-          label="v1.1.0"
+          label="v1.2.0"
           size="small"
           sx={{
             mt: 1.5,
@@ -245,7 +250,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile hamburger button */}
       {isMobile && (
         <IconButton
           onClick={() => setMobileOpen(true)}
@@ -264,7 +268,6 @@ export default function Sidebar() {
         </IconButton>
       )}
 
-      {/* Mobile drawer */}
       {isMobile ? (
         <Drawer
           variant="temporary"
@@ -283,7 +286,6 @@ export default function Sidebar() {
           {drawerContent}
         </Drawer>
       ) : (
-        /* Desktop drawer */
         <Drawer
           variant="permanent"
           sx={{
