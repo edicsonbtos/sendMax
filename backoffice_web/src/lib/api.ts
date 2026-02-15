@@ -1,4 +1,4 @@
-﻿const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+﻿const API_BASE = 'https://api-max-production.up.railway.app';
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -10,16 +10,6 @@ export function getApiKey(): string | null {
   return localStorage.getItem('BACKOFFICE_API_KEY');
 }
 
-export function setApiKey(key: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('BACKOFFICE_API_KEY', key);
-}
-
-export function clearApiKey(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem('BACKOFFICE_API_KEY');
-}
-
 export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
@@ -27,18 +17,19 @@ export async function apiRequest<T = unknown>(
   const token = getToken();
   const apiKey = getApiKey();
 
-  if (!apiKey) {
-    throw new Error('NO_API_KEY');
-  }
-
   const headers: Record<string, string> = {
-    'X-API-KEY': apiKey,
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
   };
 
+  // JWT (nuevo)
   if (token) {
     headers['Authorization'] = 'Bearer ' + token;
+  }
+
+  // API KEY (legacy, para endpoints actuales)
+  if (apiKey) {
+    headers['X-API-KEY'] = apiKey;
   }
 
   const response = await fetch(API_BASE + endpoint, {
@@ -47,16 +38,12 @@ export async function apiRequest<T = unknown>(
   });
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      throw new Error('API_KEY_INVALID');
-    }
-    const errorText = await response.text();
-    throw new Error(errorText || 'HTTP ' + response.status);
+    const txt = await response.text().catch(() => '');
+    // Propaga detalle si viene JSON con {"detail": "..."}
+    throw new Error(txt || ('HTTP ' + response.status));
   }
 
   return response.json();
 }
 
 export { API_BASE };
-
-
