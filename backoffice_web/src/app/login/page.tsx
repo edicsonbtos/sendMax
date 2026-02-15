@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Card, CardContent, Typography, TextField, Button, Alert, Stack, Divider, CircularProgress } from '@mui/material';
+import { useAuth } from '@/components/AuthProvider';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://apii-maxx-production.up.railway.app';
 
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,10 +30,7 @@ export default function LoginPage() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.detail || 'Credenciales invalidas');
 
-      localStorage.setItem('auth_token', data.access_token);
-      localStorage.setItem('auth_role', data.role);
-      localStorage.setItem('auth_name', data.full_name);
-
+      login(data.access_token, data.role, data.full_name);
       router.push('/');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error de conexion');
