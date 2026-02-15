@@ -1,4 +1,4 @@
-﻿const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api-max-production.up.railway.app';
+﻿const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://apii-maxx-production.up.railway.app';
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;

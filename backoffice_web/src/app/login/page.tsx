@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Card, CardContent, Typography, TextField, Button, Alert, Stack, Divider, CircularProgress } from '@mui/material';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api-max-production.up.railway.app';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://apii-maxx-production.up.railway.app';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');

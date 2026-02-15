@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import diagnostics, metrics, orders, origin_wallets, settings, alerts, corrections, auth
 
-app = FastAPI(title="Sendmax Backoffice API", version="0.7.0")
+app = FastAPI(title="Sendmax Backoffice API", version="0.7.1")
 
 # CORS
 app.add_middleware(
@@ -18,6 +18,7 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "https://sendmax-bot.vercel.app",
         "https://sendmax-web-production.up.railway.app",
+        "https://apii-maxx-production.up.railway.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
