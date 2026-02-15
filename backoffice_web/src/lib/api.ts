@@ -1,4 +1,4 @@
-﻿const API_BASE = 'https://api-max-production.up.railway.app';
+﻿const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
