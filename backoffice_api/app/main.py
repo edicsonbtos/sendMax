@@ -1,6 +1,6 @@
 ﻿"""
 Sendmax Backoffice API
-Version refactorizada con routers modulares
+Version con JWT Auth + CORS fix
 """
 
 from fastapi import FastAPI
@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import diagnostics, metrics, orders, origin_wallets, settings, alerts, corrections, auth
 
-app = FastAPI(title="Sendmax Backoffice API", version="0.6.1")
+app = FastAPI(title="Sendmax Backoffice API", version="0.7.0")
 
 # CORS
 app.add_middleware(
@@ -24,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Registrar routers
+# Routers
 app.include_router(auth.router)
 app.include_router(diagnostics.router)
 app.include_router(metrics.router)

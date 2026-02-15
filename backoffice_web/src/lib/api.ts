@@ -1,4 +1,4 @@
-﻿const API_BASE = 'https://api-max-production.up.railway.app';
+﻿const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api-max-production.up.railway.app';
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -22,12 +22,10 @@ export async function apiRequest<T = unknown>(
     ...(options.headers as Record<string, string> || {}),
   };
 
-  // JWT (nuevo)
   if (token) {
     headers['Authorization'] = 'Bearer ' + token;
   }
 
-  // API KEY (legacy, para endpoints actuales)
   if (apiKey) {
     headers['X-API-KEY'] = apiKey;
   }
@@ -38,9 +36,17 @@ export async function apiRequest<T = unknown>(
   });
 
   if (!response.ok) {
-    const txt = await response.text().catch(() => '');
-    // Propaga detalle si viene JSON con {"detail": "..."}
-    throw new Error(txt || ('HTTP ' + response.status));
+    if (response.status === 401 || response.status === 403) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_role');
+        localStorage.removeItem('auth_name');
+        window.location.href = '/login';
+      }
+      throw new Error('SESSION_EXPIRED');
+    }
+    const errorText = await response.text().catch(() => '');
+    throw new Error(errorText || 'HTTP ' + response.status);
   }
 
   return response.json();
