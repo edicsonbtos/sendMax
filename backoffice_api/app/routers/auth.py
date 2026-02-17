@@ -1,6 +1,7 @@
 ﻿"""
 Router de autenticacion para Backoffice.
 Endpoint: POST /auth/login
+Permite login de admin y operator.
 """
 
 from fastapi import APIRouter, HTTPException, status
@@ -27,6 +28,7 @@ class LoginResponse(BaseModel):
     token_type: str
     role: str
     full_name: str
+    user_id: int
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -47,10 +49,10 @@ def login(data: LoginRequest):
             detail="Email o password incorrectos",
         )
 
-    if user["role"] not in ("admin", "ADMIN"):
+    if user["role"] not in ("admin", "ADMIN", "operator"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acceso solo para administradores",
+            detail="Acceso no permitido para este rol",
         )
 
     if not user["is_active"]:
@@ -72,15 +74,20 @@ def login(data: LoginRequest):
         )
 
     token = create_access_token(
-        data={"sub": user["email"], "role": user["role"]},
+        data={
+            "sub": user["email"],
+            "role": user["role"],
+            "user_id": user["id"],
+        },
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
 
-    display_name = user["full_name"] or user["alias"] or "Admin"
+    display_name = user["full_name"] or user["alias"] or "Usuario"
 
     return LoginResponse(
         access_token=token,
         token_type="bearer",
         role=user["role"],
         full_name=display_name,
+        user_id=user["id"],
     )

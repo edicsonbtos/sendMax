@@ -21,26 +21,25 @@ async def verify_api_key(
     api_key: str = Security(api_key_header),
     token: str = Depends(oauth2_scheme),
 ):
-    # Skip health check
     if request.url.path == "/health":
-        return "health"
+        return {"auth": "health", "role": "admin", "user_id": None, "email": None}
 
-    # 1) Intentar JWT primero
+    # 1) JWT
     if token:
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             email = payload.get("sub")
             role = payload.get("role")
+            user_id = payload.get("user_id")
             if email:
-                return {"email": email, "role": role, "auth": "jwt"}
+                return {"email": email, "role": role, "user_id": user_id, "auth": "jwt"}
         except JWTError:
             pass
 
-    # 2) Fallback a API KEY (legacy)
+    # 2) API KEY (legacy)
     if api_key and EXPECTED_API_KEY and api_key == EXPECTED_API_KEY:
-        return {"auth": "api_key"}
+        return {"auth": "api_key", "role": "admin", "user_id": None, "email": None}
 
-    # 3) Ninguno valido
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No autorizado. Envie token JWT o X-API-KEY valido.",
