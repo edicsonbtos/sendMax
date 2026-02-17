@@ -76,7 +76,7 @@ const statusLabels: Record<string, string> = {
 
 export default function OrdersPage() {
   const router = useRouter();
-  const { apiKey } = useAuth();
+  const { token } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,8 +105,8 @@ export default function OrdersPage() {
   }, [limit]);
 
   useEffect(() => {
-    if (apiKey) fetchOrders();
-  }, [apiKey, fetchOrders]);
+    if (token) fetchOrders();
+  }, [token, fetchOrders]);
 
   useEffect(() => {
     let filtered = [...orders];
@@ -292,3 +292,4 @@ export default function OrdersPage() {
     </Box>
   );
 }
+

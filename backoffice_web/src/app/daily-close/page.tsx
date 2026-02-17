@@ -185,7 +185,7 @@ const isValidDay = (day: string) => /^\d{4}-\d{2}-\d{2}$/.test(day);
    ================================================================ */
 
 export default function DailyClosePage() {
-  const { apiKey } = useAuth();
+  const { token } = useAuth();
 
   const [selectedDay, setSelectedDay] = useState('');
   const [report, setReport] = useState<CloseReportItem[]>([]);
@@ -238,8 +238,8 @@ export default function DailyClosePage() {
   }, [selectedDay]);
 
   useEffect(() => {
-    if (selectedDay && apiKey && isValidDay(selectedDay)) fetchData();
-  }, [selectedDay, apiKey, fetchData]);
+    if (selectedDay && token && isValidDay(selectedDay)) fetchData();
+  }, [selectedDay, token, fetchData]);
 
   /* -- Derived ------------------------------------------------ */
   const sc = dailySummary?.status_counts;
@@ -939,4 +939,5 @@ export default function DailyClosePage() {
     </Box>
   );
 }
+
 

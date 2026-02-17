@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
@@ -115,7 +115,7 @@ const getCountryInfo = (country: string): { code: string; color: string } => {
 
 /* -- Componente ------------------------------------------- */
 export default function OriginWalletsPage() {
-  const { apiKey } = useAuth();
+  const { token } = useAuth();
 
   const [wallets, setWallets] = useState<WalletBalance[]>([]);
   const [sweeps, setSweeps] = useState<SweepItem[]>([]);
@@ -161,8 +161,8 @@ export default function OriginWalletsPage() {
   }, [today]);
 
   useEffect(() => {
-    if (apiKey) fetchData();
-  }, [apiKey, fetchData]);
+    if (token) fetchData();
+  }, [token, fetchData]);
 
   /* -- Wallets filtradas ---------------------------------- */
   const displayWallets = useMemo(() => {
@@ -764,3 +764,4 @@ export default function OriginWalletsPage() {
     </Box>
   );
 }
+

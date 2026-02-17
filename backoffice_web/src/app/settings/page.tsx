@@ -91,7 +91,7 @@ const CURRENCY_LABELS: Record<string, string> = {
 
 /* ============ Component ============ */
 export default function SettingsPage() {
-  const { apiKey } = useAuth();
+  const { token } = useAuth();
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -210,7 +210,7 @@ export default function SettingsPage() {
     }
   }
 
-  React.useEffect(() => { if (apiKey) load(); }, [apiKey]);
+  React.useEffect(() => { if (token) load(); }, [apiKey]);
 
   const marginFields = [
     { key: "margin_default", label: "Margen general", value: marginDefault, setter: setMarginDefault, helper: "Aplicado a todas las rutas por defecto" },

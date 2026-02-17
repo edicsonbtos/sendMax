@@ -173,7 +173,7 @@ const downloadCSV = (headers: string[], rows: (string | number)[][], filename: s
 
 /* ============ Component ============ */
 export default function MetricsPage() {
-  const { apiKey } = useAuth();
+  const { token } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [days, setDays] = useState(30);
@@ -228,7 +228,7 @@ export default function MetricsPage() {
     }
   }, [days]);
 
-  useEffect(() => { if (apiKey) fetchData(); }, [apiKey, fetchData]);
+  useEffect(() => { if (token) fetchData(); }, [token, fetchData]);
 
   const totalProfit = overview?.total_profit_usd || 0;
   const totalProfitReal = overview?.total_profit_real_usd || 0;
