@@ -23,7 +23,9 @@ from src.db.repositories.withdrawals_repo import WithdrawalsRepo
 
 
 def _reset_withdraw_state(context: ContextTypes.DEFAULT_TYPE) -> None:
-    _reset_withdraw_state(context)
+    context.user_data.pop("withdrawal ", None)
+    context.user_data.pop("withdraw_panel ", None)
+    context.user_data.pop("withdraw_mode ", None)
 
 MIN_WITHDRAW_USDT = Decimal("10")
 
@@ -189,7 +191,9 @@ async def on_cancel_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     q = update.callback_query
     await _safe_answer(q)
 
-    _reset_withdraw_state(context)
+    context.user_data.pop("withdrawal ", None)
+    context.user_data.pop("withdraw_panel ", None)
+    context.user_data.pop("withdraw_mode ", None)
 
     await q.message.reply_text("Operación cancelada.")
     return ConversationHandler.END
@@ -305,7 +309,9 @@ async def on_confirm_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
             await _edit_panel(update, context, f"❌ {str(e)}", reply_markup=_kb_cancel_inline())
             return W_AMOUNT
 
-    _reset_withdraw_state(context)
+    context.user_data.pop("withdrawal ", None)
+    context.user_data.pop("withdraw_panel ", None)
+    context.user_data.pop("withdraw_mode ", None)
 
     await q.message.reply_text("✅ Solicitud creada. Te avisaré cuando sea procesada.")
 
@@ -324,6 +330,8 @@ async def on_confirm_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def cancel_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    _reset_withdraw_state(context)
+    context.user_data.pop("withdrawal ", None)
+    context.user_data.pop("withdraw_panel ", None)
+    context.user_data.pop("withdraw_mode ", None)
     await update.message.reply_text("Operación cancelada.")
     return ConversationHandler.END

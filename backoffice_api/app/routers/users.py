@@ -8,6 +8,7 @@ Router de gestion de usuarios (admin only).
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
+import secrets
 
 from ..auth import verify_api_key
 from ..auth_jwt import get_password_hash
@@ -108,7 +109,7 @@ def toggle_user(user_id: int, auth=Depends(require_admin)):
 @router.put("/{user_id}/password")
 def reset_password(user_id: int, auth=Depends(require_admin)):
     """Reset password a un valor temporal."""
-    temp_pass = "Sendmax2026!"
+    temp_pass = secrets.token_urlsafe(10)
     hashed = get_password_hash(temp_pass)
 
     row = fetch_one(

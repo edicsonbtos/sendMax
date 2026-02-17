@@ -1,7 +1,9 @@
 ﻿from fastapi import Request, HTTPException, status
 import os
 
-API_KEY = os.getenv("BACKOFFICE_API_KEY", "dev-key-12345")
+API_KEY = os.getenv("BACKOFFICE_API_KEY")
+if not API_KEY:
+    raise RuntimeError("FALTA BACKOFFICE_API_KEY en variables de entorno")
 
 async def verify_api_key(request: Request):
     """Middleware para verificar X-API-KEY en headers"""

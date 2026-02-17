@@ -8,6 +8,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboard
 from telegram.ext import ContextTypes, CallbackQueryHandler
 
 import psycopg
+import asyncio
 from dotenv import load_dotenv
 
 from src.config.settings import settings
@@ -74,7 +75,7 @@ def _db_conn():
     return psycopg.connect(settings.DATABASE_URL)
 
 
-def _count_orders(operator_user_id: int, *, only_today: bool) -> dict[str, int]:
+async def _count_orders(operator_user_id: int, *, only_today: bool) -> dict[str, int]:
     if only_today:
         sql = """
             SELECT status, COUNT(*)
@@ -92,15 +93,18 @@ def _count_orders(operator_user_id: int, *, only_today: bool) -> dict[str, int]:
         """
 
     out = {"CREADA": 0, "EN_PROCESO": 0, "PAGADA": 0, "CANCELADA": 0}
-    with _db_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (operator_user_id,))
-            for status, cnt in cur.fetchall():
-                out[str(status)] = int(cnt)
+    def _query():
+        with _db_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (operator_user_id,))
+                return cur.fetchall()
+    rows = await asyncio.get_event_loop().run_in_executor(None, _query)
+    for status, cnt in rows:
+        out[str(status)] = int(cnt)
     return out
 
 
-def _latest_paid(operator_user_id: int, limit: int = 3):
+async def _latest_paid(operator_user_id: int, limit: int = 3):
     sql = """
         SELECT public_id, origin_country, dest_country, amount_origin, payout_dest
         FROM orders
@@ -108,10 +112,12 @@ def _latest_paid(operator_user_id: int, limit: int = 3):
         ORDER BY updated_at DESC
         LIMIT %s;
     """
-    with _db_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (operator_user_id, limit))
-            return cur.fetchall()
+    def _query():
+        with _db_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (operator_user_id, limit))
+                return cur.fetchall()
+    return await asyncio.get_event_loop().run_in_executor(None, _query)
 
 
 def _build_dashboard_text(user_alias: str, today_counts: dict[str, int], all_counts: dict[str, int], latest_paid_rows) -> str:
@@ -227,9 +233,9 @@ async def summary_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     if text == BTN_DASH:
-        today_counts = _count_orders(me.id, only_today=True)
-        all_counts = _count_orders(me.id, only_today=False)
-        latest_paid_rows = _latest_paid(me.id, limit=3)
+        today_counts = await _count_orders(me.id, only_today=True)
+        all_counts = await _count_orders(me.id, only_today=False)
+        latest_paid_rows = await _latest_paid(me.id, limit=3)
         await update.message.reply_text(_build_dashboard_text(me.alias, today_counts, all_counts, latest_paid_rows), reply_markup=_summary_keyboard())
         return
 
