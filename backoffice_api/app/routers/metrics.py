@@ -1,4 +1,4 @@
-﻿"""Router: Metricas y Dashboard"""
+"""Router: Metricas y Dashboard"""
 
 from fastapi import APIRouter, Depends, Query
 from ..db import fetch_one, fetch_all
@@ -19,7 +19,6 @@ def _op_filter(auth: dict):
 @router.get("/metrics/overview")
 def metrics_overview(auth: dict = Depends(verify_api_key)):
     wh, prm = _op_filter(auth)
-
     row = fetch_one(
         f"""
         SELECT
@@ -37,50 +36,48 @@ def metrics_overview(auth: dict = Depends(verify_api_key)):
         """,
         prm,
     )
-
     creadas = int(row["creadas"] or 0)
     origen_verificando = int(row["origen_verificando"] or 0)
     en_proceso = int(row["en_proceso"] or 0)
     pagadas = int(row["pagadas"] or 0)
     canceladas = int(row["canceladas"] or 0)
-
-    return {{
+    return {
         "total_orders": creadas + origen_verificando + en_proceso + pagadas + canceladas,
         "pending_orders": creadas + origen_verificando + en_proceso,
         "completed_orders": pagadas,
         "total_volume_usd": float(row["total_volume_usd"] or 0),
         "total_profit_usd": float(row["total_profit_usd"] or 0),
         "total_profit_real_usd": float(row["total_profit_real_usd"] or 0),
-        "status_counts": {{
+        "status_counts": {
             "CREADA": creadas,
             "ORIGEN_VERIFICANDO": origen_verificando,
             "EN_PROCESO": en_proceso,
             "PAGADA": pagadas,
             "CANCELADA": canceladas,
-        }},
+        },
         "awaiting_paid_proof": int(row["awaiting_paid_proof"] or 0),
-    }}
+    }
 
 
 @router.get("/metrics/profit_daily")
 def profit_daily(days: int = Query(default=30, le=90), auth: dict = Depends(verify_api_key)):
     from ..audit import get_profit_daily
     data = get_profit_daily(days)
-    return {{"days": days, "profit_by_day": data}}
+    return {"days": days, "profit_by_day": data}
 
 
 @router.get("/operators/ranking")
 def operators_ranking(days: int = Query(default=7, le=90), auth: dict = Depends(verify_api_key)):
     from ..audit import get_operators_ranking
     data = get_operators_ranking(days)
-    return {{"ok": True, "days": days, "operators": data}}
+    return {"ok": True, "days": days, "operators": data}
 
 
 @router.get("/metrics/corridors")
 def metrics_corridors(days: int = Query(default=30, le=90), auth: dict = Depends(verify_api_key)):
     from ..audit import get_corridors
     data = get_corridors(days)
-    return {{"ok": True, "days": days, "corridors": data}}
+    return {"ok": True, "days": days, "corridors": data}
 
 
 @router.get("/metrics/p2p-prices")
@@ -126,7 +123,7 @@ def metrics_p2p_prices(
         spread = None
         if buy and sell and sell > 0:
             spread = round(((buy - sell) / sell) * 100, 4)
-        items.append({{
+        items.append({
             "country": r["country"],
             "fiat": r["fiat"],
             "buy_price": buy,
@@ -137,15 +134,13 @@ def metrics_p2p_prices(
             "is_verified": bool(r.get("is_verified", False)),
             "methods_used": r.get("methods_used"),
             "rate_version_id": r.get("rate_version_id"),
-        }})
-
-    return {{"ok": True, "count": len(items), "items": items}}
+        })
+    return {"ok": True, "count": len(items), "items": items}
 
 
 @router.get("/metrics/company-overview")
 def metrics_company_overview(auth: dict = Depends(verify_api_key)):
     wh, prm = _op_filter(auth)
-
     row = fetch_one(
         f"""
         SELECT
@@ -183,15 +178,15 @@ def metrics_company_overview(auth: dict = Depends(verify_api_key)):
     )
 
     wallets = []
-    pending_by_currency = {{}}
+    pending_by_currency = {}
     for r in w:
         bal = float(r["current_balance"] or 0)
         cur = r["fiat_currency"]
-        wallets.append({{
+        wallets.append({
             "origin_country": r["origin_country"],
             "fiat_currency": cur,
             "current_balance": bal,
-        }})
+        })
         if bal > 0:
             if cur not in pending_by_currency:
                 pending_by_currency[cur] = 0.0
@@ -214,11 +209,11 @@ def metrics_company_overview(auth: dict = Depends(verify_api_key)):
         prm,
     )
     paid_by_dest_currency = [
-        {{
+        {
             "dest_currency": r["dest_currency"],
             "volume": float(r["vol"] or 0),
             "count": int(r["cnt"] or 0),
-        }}
+        }
         for r in v_rows
         if r["dest_currency"] is not None
     ]
@@ -233,23 +228,23 @@ def metrics_company_overview(auth: dict = Depends(verify_api_key)):
     )
     paid_usd_usdt = float(v_row["vol"] or 0) if v_row else 0.0
 
-    return {{
+    return {
         "ok": True,
-        "orders": {{
+        "orders": {
             "total_orders": int(row["total_orders"] or 0) if row else 0,
             "pending_orders": int(row["pending_orders"] or 0) if row else 0,
             "completed_orders": int(row["completed_orders"] or 0) if row else 0,
-        }},
-        "profit": {{
+        },
+        "profit": {
             "total_profit_usd": float(row["total_profit_usd"] or 0) if row else 0.0,
             "total_profit_real_usd": float(row["total_profit_real_usd"] or 0) if row else 0.0,
-        }},
-        "origin_wallets": {{
+        },
+        "origin_wallets": {
             "pending_by_currency": pending_by_currency,
             "top_pending": top_pending,
-        }},
-        "volume": {{
+        },
+        "volume": {
             "paid_usd_usdt": paid_usd_usdt,
             "paid_by_dest_currency": paid_by_dest_currency,
-        }},
-    }}
+        },
+    }

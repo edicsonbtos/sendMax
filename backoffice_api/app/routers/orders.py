@@ -1,4 +1,4 @@
-﻿"""Router: Ordenes y Trades"""
+"""Router: Ordenes y Trades"""
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
@@ -9,7 +9,6 @@ router = APIRouter(tags=["orders"])
 
 
 def _operator_filter(auth: dict):
-    """Retorna (sql_where, params) segun rol."""
     if auth.get("role") in ("admin", "ADMIN") or auth.get("auth") == "api_key":
         return "", ()
     user_id = auth.get("user_id")
@@ -21,7 +20,6 @@ def _operator_filter(auth: dict):
 @router.get("/orders")
 def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depends(verify_api_key)):
     where_extra, params_extra = _operator_filter(auth)
-
     rows = fetch_all(
         f"""
         SELECT
@@ -38,7 +36,7 @@ def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depends(ver
     )
     orders = []
     for r in rows:
-        orders.append({{
+        orders.append({
             "public_id": r["public_id"],
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
             "status": r["status"],
@@ -51,14 +49,13 @@ def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depends(ver
             "awaiting_paid_proof_at": r["awaiting_paid_proof_at"].isoformat() if r["awaiting_paid_proof_at"] else None,
             "paid_at": r["paid_at"].isoformat() if r["paid_at"] else None,
             "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
-        }})
-    return {{"count": len(orders), "orders": orders}}
+        })
+    return {"count": len(orders), "orders": orders}
 
 
-@router.get("/orders/{{public_id}}")
+@router.get("/orders/{public_id}")
 def order_detail(public_id: int, auth: dict = Depends(verify_api_key)):
     where_extra, params_extra = _operator_filter(auth)
-
     order = fetch_one(
         f"SELECT * FROM orders o WHERE o.public_id=%s {where_extra} LIMIT 1",
         (public_id,) + params_extra,
@@ -75,17 +72,16 @@ def order_detail(public_id: int, auth: dict = Depends(verify_api_key)):
         """,
         (public_id,),
     )
-
     ledger = []
     for r in ledger_rows:
-        ledger.append({{
+        ledger.append({
             "user_id": r["user_id"],
             "amount_usdt": float(r["amount_usdt"]) if r["amount_usdt"] is not None else None,
             "type": r["type"],
             "ref_order_public_id": r["ref_order_public_id"],
             "memo": r["memo"],
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-        }})
+        })
 
     trows = fetch_all(
         """
@@ -96,25 +92,21 @@ def order_detail(public_id: int, auth: dict = Depends(verify_api_key)):
         """,
         (public_id,),
     )
-
     trades = []
     buy_usdt = 0.0
     sell_usdt = 0.0
     fee_total = 0.0
-
     for r in trows:
         usdt = float(r["usdt_amount"] or 0)
         fee = float(r["fee_usdt"] or 0) if r["fee_usdt"] is not None else 0.0
         side = (r["side"] or "").upper()
-
         if side == "BUY":
             buy_usdt += usdt
             fee_total += fee
         elif side == "SELL":
             sell_usdt += usdt
             fee_total += fee
-
-        trades.append({{
+        trades.append({
             "id": int(r["id"]),
             "side": side,
             "fiat_currency": r["fiat_currency"],
@@ -126,21 +118,19 @@ def order_detail(public_id: int, auth: dict = Depends(verify_api_key)):
             "external_ref": r["external_ref"],
             "note": r["note"],
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-        }})
-
+        })
     profit_real_usdt = (buy_usdt - sell_usdt) - fee_total
-
-    return {{
+    return {
         "order": order,
         "ledger": ledger,
         "trades": trades,
         "profit_real_usdt": profit_real_usdt,
-        "profit_real_breakdown": {{
+        "profit_real_breakdown": {
             "buy_usdt": buy_usdt,
             "sell_usdt": sell_usdt,
             "fees_usdt": fee_total,
-        }},
-    }}
+        },
+    }
 
 
 class OrderTradeIn(BaseModel):
@@ -155,7 +145,7 @@ class OrderTradeIn(BaseModel):
     note: str | None = None
 
 
-@router.get("/orders/{{public_id}}/trades")
+@router.get("/orders/{public_id}/trades")
 def get_order_trades(public_id: int, auth: dict = Depends(verify_api_key)):
     rows = fetch_all(
         """
@@ -169,7 +159,7 @@ def get_order_trades(public_id: int, auth: dict = Depends(verify_api_key)):
     )
     out = []
     for r in rows:
-        out.append({{
+        out.append({
             "id": int(r["id"]),
             "order_public_id": int(r["order_public_id"]),
             "side": r["side"],
@@ -183,16 +173,15 @@ def get_order_trades(public_id: int, auth: dict = Depends(verify_api_key)):
             "note": r["note"],
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
             "created_by_user_id": r["created_by_user_id"],
-        }})
-    return {{"ok": True, "public_id": public_id, "items": out}}
+        })
+    return {"ok": True, "public_id": public_id, "items": out}
 
 
-@router.post("/orders/{{public_id}}/trades")
+@router.post("/orders/{public_id}/trades")
 def create_order_trade(public_id: int, payload: OrderTradeIn, auth: dict = Depends(verify_api_key)):
     side = (payload.side or "").upper().strip()
     if side not in ("BUY", "SELL"):
         raise HTTPException(status_code=400, detail="side must be BUY or SELL")
-
     row = fetch_one(
         """
         INSERT INTO order_trades (
@@ -209,7 +198,6 @@ def create_order_trade(public_id: int, payload: OrderTradeIn, auth: dict = Depen
         ),
         rw=True,
     )
-
     agg = fetch_one(
         """
         SELECT
@@ -225,10 +213,9 @@ def create_order_trade(public_id: int, payload: OrderTradeIn, auth: dict = Depen
     sell_usdt = float(agg["sell_usdt"] or 0) if agg else 0.0
     fees_usdt = float(agg["fees_usdt"] or 0) if agg else 0.0
     profit_real = (buy_usdt - sell_usdt) - fees_usdt
-
     fetch_one(
         "UPDATE orders SET profit_real_usdt=%s WHERE public_id=%s RETURNING public_id",
         (profit_real, public_id),
         rw=True,
     )
-    return {{"ok": True, "id": int(row["id"]) if row else None}}
+    return {"ok": True, "id": int(row["id"]) if row else None}
