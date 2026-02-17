@@ -1,4 +1,4 @@
-﻿"""Router: Órdenes y Trades"""
+﻿"""Router: Ordenes y Trades"""
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
@@ -8,24 +8,37 @@ from ..auth import verify_api_key
 router = APIRouter(tags=["orders"])
 
 
+def _operator_filter(auth: dict):
+    """Retorna (sql_where, params) segun rol."""
+    if auth.get("role") in ("admin", "ADMIN") or auth.get("auth") == "api_key":
+        return "", ()
+    user_id = auth.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=403, detail="user_id no encontrado en token")
+    return " AND o.operator_user_id = %s", (user_id,)
+
+
 @router.get("/orders")
-def list_orders(limit: int = Query(default=20, le=100), api_key: str = Depends(verify_api_key)):
+def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depends(verify_api_key)):
+    where_extra, params_extra = _operator_filter(auth)
+
     rows = fetch_all(
-        """
+        f"""
         SELECT
-          public_id, created_at, status, awaiting_paid_proof,
-          origin_country, dest_country,
-          amount_origin, payout_dest, profit_usdt,
-          awaiting_paid_proof_at, paid_at, updated_at
-        FROM orders
-        ORDER BY created_at DESC
+          o.public_id, o.created_at, o.status, o.awaiting_paid_proof,
+          o.origin_country, o.dest_country,
+          o.amount_origin, o.payout_dest, o.profit_usdt,
+          o.awaiting_paid_proof_at, o.paid_at, o.updated_at
+        FROM orders o
+        WHERE 1=1 {where_extra}
+        ORDER BY o.created_at DESC
         LIMIT %s
         """,
-        (limit,),
+        params_extra + (limit,),
     )
     orders = []
     for r in rows:
-        orders.append({
+        orders.append({{
             "public_id": r["public_id"],
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
             "status": r["status"],
@@ -38,13 +51,18 @@ def list_orders(limit: int = Query(default=20, le=100), api_key: str = Depends(v
             "awaiting_paid_proof_at": r["awaiting_paid_proof_at"].isoformat() if r["awaiting_paid_proof_at"] else None,
             "paid_at": r["paid_at"].isoformat() if r["paid_at"] else None,
             "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
-        })
-    return {"count": len(orders), "orders": orders}
+        }})
+    return {{"count": len(orders), "orders": orders}}
 
 
-@router.get("/orders/{public_id}")
-def order_detail(public_id: int, api_key: str = Depends(verify_api_key)):
-    order = fetch_one("SELECT * FROM orders WHERE public_id=%s LIMIT 1", (public_id,))
+@router.get("/orders/{{public_id}}")
+def order_detail(public_id: int, auth: dict = Depends(verify_api_key)):
+    where_extra, params_extra = _operator_filter(auth)
+
+    order = fetch_one(
+        f"SELECT * FROM orders o WHERE o.public_id=%s {where_extra} LIMIT 1",
+        (public_id,) + params_extra,
+    )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -60,14 +78,14 @@ def order_detail(public_id: int, api_key: str = Depends(verify_api_key)):
 
     ledger = []
     for r in ledger_rows:
-        ledger.append({
+        ledger.append({{
             "user_id": r["user_id"],
             "amount_usdt": float(r["amount_usdt"]) if r["amount_usdt"] is not None else None,
             "type": r["type"],
             "ref_order_public_id": r["ref_order_public_id"],
             "memo": r["memo"],
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-        })
+        }})
 
     trows = fetch_all(
         """
@@ -96,7 +114,7 @@ def order_detail(public_id: int, api_key: str = Depends(verify_api_key)):
             sell_usdt += usdt
             fee_total += fee
 
-        trades.append({
+        trades.append({{
             "id": int(r["id"]),
             "side": side,
             "fiat_currency": r["fiat_currency"],
@@ -108,21 +126,21 @@ def order_detail(public_id: int, api_key: str = Depends(verify_api_key)):
             "external_ref": r["external_ref"],
             "note": r["note"],
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-        })
+        }})
 
     profit_real_usdt = (buy_usdt - sell_usdt) - fee_total
 
-    return {
+    return {{
         "order": order,
         "ledger": ledger,
         "trades": trades,
         "profit_real_usdt": profit_real_usdt,
-        "profit_real_breakdown": {
+        "profit_real_breakdown": {{
             "buy_usdt": buy_usdt,
             "sell_usdt": sell_usdt,
             "fees_usdt": fee_total,
-        },
-    }
+        }},
+    }}
 
 
 class OrderTradeIn(BaseModel):
@@ -137,8 +155,8 @@ class OrderTradeIn(BaseModel):
     note: str | None = None
 
 
-@router.get("/orders/{public_id}/trades")
-def get_order_trades(public_id: int, api_key: str = Depends(verify_api_key)):
+@router.get("/orders/{{public_id}}/trades")
+def get_order_trades(public_id: int, auth: dict = Depends(verify_api_key)):
     rows = fetch_all(
         """
         SELECT id, order_public_id, side, fiat_currency, fiat_amount, price, usdt_amount, fee_usdt,
@@ -151,7 +169,7 @@ def get_order_trades(public_id: int, api_key: str = Depends(verify_api_key)):
     )
     out = []
     for r in rows:
-        out.append({
+        out.append({{
             "id": int(r["id"]),
             "order_public_id": int(r["order_public_id"]),
             "side": r["side"],
@@ -165,12 +183,12 @@ def get_order_trades(public_id: int, api_key: str = Depends(verify_api_key)):
             "note": r["note"],
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
             "created_by_user_id": r["created_by_user_id"],
-        })
-    return {"ok": True, "public_id": public_id, "items": out}
+        }})
+    return {{"ok": True, "public_id": public_id, "items": out}}
 
 
-@router.post("/orders/{public_id}/trades")
-def create_order_trade(public_id: int, payload: OrderTradeIn, api_key: str = Depends(verify_api_key)):
+@router.post("/orders/{{public_id}}/trades")
+def create_order_trade(public_id: int, payload: OrderTradeIn, auth: dict = Depends(verify_api_key)):
     side = (payload.side or "").upper().strip()
     if side not in ("BUY", "SELL"):
         raise HTTPException(status_code=400, detail="side must be BUY or SELL")
@@ -213,4 +231,4 @@ def create_order_trade(public_id: int, payload: OrderTradeIn, api_key: str = Dep
         (profit_real, public_id),
         rw=True,
     )
-    return {"ok": True, "id": int(row["id"]) if row else None}
+    return {{"ok": True, "id": int(row["id"]) if row else None}}
