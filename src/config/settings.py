@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     ENV: str = "SANDBOX"
 
+    # Webhook (Railway)
+    WEBHOOK_URL: str | None = None
+    PORT: int = 8443
+
     # Soporte / Admin
     SUPPORT_WHATSAPP_NUMBER: str = "584242686434"
 

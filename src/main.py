@@ -1,17 +1,5 @@
 ﻿from __future__ import annotations
 
-"""
-src/main.py
-
-Entry-point único del proyecto.
-
-- Configura logging.
-- Filtra warnings ruidosos de PTB sobre per_message/per_* (no son errores).
-- Construye el bot con build_bot().
-- Registra scheduler de tasas.
-- Inicia polling.
-"""
-
 import logging
 import warnings
 from datetime import time
@@ -20,6 +8,7 @@ from zoneinfo import ZoneInfo
 from telegram.warnings import PTBUserWarning
 
 from src.config.logging import setup_logging
+from src.config.settings import settings
 from src.telegram_app.bot import build_bot
 from src.rates_scheduler import RatesScheduler
 
@@ -28,14 +17,6 @@ VET = ZoneInfo("America/Caracas")
 
 
 def _configure_warnings() -> None:
-    """
-    Silencia SOLO el warning informativo de python-telegram-bot sobre ConversationHandler
-    cuando se usan CallbackQueryHandlers con per_message=False.
-
-    Importante:
-    - No silenciamos DeprecationWarnings ni otros warnings.
-    - Esto mantiene logs limpios en producción sin ocultar errores reales.
-    """
     warnings.filterwarnings(
         "ignore",
         message=r".*CallbackQueryHandler.*will not be tracked for every message.*",
@@ -74,7 +55,19 @@ def main() -> None:
 
     logger.info("Scheduler tasas: 9am VET + cada 30 min registrado")
 
-    app.run_polling(allowed_updates=["message", "callback_query"])
+    # --- CAMBIO: Polling → Webhook ---
+    if settings.WEBHOOK_URL:
+        logger.info(f"Modo WEBHOOK: {settings.WEBHOOK_URL}")
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=settings.PORT,
+            url_path=settings.TELEGRAM_BOT_TOKEN,
+            webhook_url=f"{settings.WEBHOOK_URL}/{settings.TELEGRAM_BOT_TOKEN}",
+            allowed_updates=["message", "callback_query"],
+        )
+    else:
+        logger.info("Modo POLLING (desarrollo)")
+        app.run_polling(allowed_updates=["message", "callback_query"])
 
 
 if __name__ == "__main__":
