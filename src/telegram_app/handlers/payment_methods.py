@@ -12,6 +12,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings
+from src.db.settings_store import get_payment_methods_for_country
 from src.telegram_app.ui.keyboards import main_menu_keyboard
 from src.telegram_app.ui.routes_popular import COUNTRY_FLAGS, COUNTRY_LABELS
 
@@ -79,8 +80,10 @@ async def handle_payment_methods_country(update: Update, context: ContextTypes.D
         )
         return
 
-    # Lee desde ENV: PAYMENT_METHODS_{COUNTRY} con \n (settings lo convierte a saltos reales)
-    pm = settings.payment_methods_text(country)
+    # Lee desde DB primero, fallback a .env
+    pm = get_payment_methods_for_country(country)
+    if not pm:
+        pm = settings.payment_methods_text(country)
 
     header = f"🏦 Métodos de pago ({COUNTRY_FLAGS[country]} {COUNTRY_LABELS[country]})"
 
