@@ -1,4 +1,7 @@
-﻿const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://apii-maxx-production.up.railway.app';
+﻿const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+if (!API_BASE) {
+  throw new Error('NEXT_PUBLIC_API_URL no configurada');
+}
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;

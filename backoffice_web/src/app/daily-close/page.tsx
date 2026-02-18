@@ -206,7 +206,7 @@ export default function DailyClosePage() {
   useEffect(() => {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    setSelectedDay(yesterday.toISOString().split('T')[0]);
+    setSelectedDay(yesterday.toLocaleDateString('en-CA'));
   }, []);
 
   /* -- Fetch ------------------------------------------------- */

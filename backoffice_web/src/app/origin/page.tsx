@@ -136,7 +136,7 @@ export default function OriginWalletsPage() {
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
-  const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const today = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
 
   /* -- Fetch ---------------------------------------------- */
   const fetchData = useCallback(async () => {

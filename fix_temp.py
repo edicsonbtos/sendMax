@@ -1,55 +1,95 @@
 ﻿import os
 
-# FIX 1: metrics.py - Agregar constantes de estados
-with open('backoffice_api/app/routers/metrics.py', 'r', encoding='utf-8') as f:
+# ═══════════════════════════════════════════
+# FIX 1: api.ts - Quitar URL hardcodeada
+# ═══════════════════════════════════════════
+path1 = 'backoffice_web/src/lib/api.ts'
+with open(path1, 'r', encoding='utf-8') as f:
     content = f.read()
-
-states_const = '''"""Router: Metricas y Dashboard"""
-
-# Estados de órdenes (fuente única)
-ST_CREADA = "CREADA"
-ST_ORIGEN = "ORIGEN_VERIFICANDO"
-ST_PROCESO = "EN_PROCESO"
-ST_PAGADA = "PAGADA"
-ST_CANCELADA = "CANCELADA"
-
-from fastapi import APIRouter, Depends, Query'''
 
 content = content.replace(
-    '\"\"\"Router: Metricas y Dashboard\"\"\"\n\nfrom fastapi import APIRouter, Depends, Query',
-    states_const
+    "const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://apii-maxx-production.up.railway.app';",
+    '''const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+if (!API_BASE) {
+  throw new Error('NEXT_PUBLIC_API_URL no configurada');
+}'''
 )
 
-with open('backoffice_api/app/routers/metrics.py', 'w', encoding='utf-8') as f:
+with open(path1, 'w', encoding='utf-8') as f:
     f.write(content)
-print("OK 1/3 - metrics.py: constantes de estados agregadas")
+print("OK 1/5 - api.ts: URL hardcodeada eliminada")
 
 
-# FIX 2: orders.py - Agregar try/except en endpoints
-with open('backoffice_api/app/routers/orders.py', 'r', encoding='utf-8') as f:
+# ═══════════════════════════════════════════
+# FIX 2: login/page.tsx - Importar API_BASE de api.ts
+# ═══════════════════════════════════════════
+path2 = 'backoffice_web/src/app/login/page.tsx'
+with open(path2, 'r', encoding='utf-8') as f:
     content = f.read()
 
-# Agregar import logging
 content = content.replace(
-    '\"\"\"Router: Ordenes y Trades\"\"\"\n\nfrom fastapi import APIRouter, Depends, Query, HTTPException',
-    '\"\"\"Router: Ordenes y Trades\"\"\"\n\nimport logging\nfrom fastapi import APIRouter, Depends, Query, HTTPException\n\nlogger = logging.getLogger(__name__)'
+    "import { useAuth } from '@/components/AuthProvider';\n\nconst API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://apii-maxx-production.up.railway.app';",
+    "import { useAuth } from '@/components/AuthProvider';\nimport { API_BASE } from '@/lib/api';"
 )
 
-with open('backoffice_api/app/routers/orders.py', 'w', encoding='utf-8') as f:
+with open(path2, 'w', encoding='utf-8') as f:
     f.write(content)
-print("OK 2/3 - orders.py: logging agregado")
+print("OK 2/5 - login/page.tsx: API_BASE importado de api.ts")
 
 
-# FIX 3: menu.py - Ya tiene rate limit, solo agregar logging
-with open('src/telegram_app/handlers/menu.py', 'r', encoding='utf-8') as f:
+# ═══════════════════════════════════════════
+# FIX 3: daily-close - Zona horaria local
+# ═══════════════════════════════════════════
+path3 = 'backoffice_web/src/app/daily-close/page.tsx'
+with open(path3, 'r', encoding='utf-8') as f:
     content = f.read()
 
-if 'import logging' not in content:
-    content = content.replace(
-        'import time',
-        'import time\nimport logging\n\nlogger = logging.getLogger(__name__)'
-    )
+content = content.replace(
+    "yesterday.toISOString().split('T')[0]",
+    "yesterday.toLocaleDateString('en-CA')"
+)
 
-with open('src/telegram_app/handlers/menu.py', 'w', encoding='utf-8') as f:
+with open(path3, 'w', encoding='utf-8') as f:
     f.write(content)
-print("OK 3/3 - menu.py: logging agregado")
+print("OK 3/5 - daily-close: Zona horaria corregida")
+
+
+# ═══════════════════════════════════════════
+# FIX 4: origin - Zona horaria local
+# ═══════════════════════════════════════════
+path4 = 'backoffice_web/src/app/origin/page.tsx'
+with open(path4, 'r', encoding='utf-8') as f:
+    content = f.read()
+
+content = content.replace(
+    "new Date().toISOString().split('T')[0]",
+    "new Date().toLocaleDateString('en-CA')"
+)
+
+with open(path4, 'w', encoding='utf-8') as f:
+    f.write(content)
+print("OK 4/5 - origin: Zona horaria corregida")
+
+
+# ═══════════════════════════════════════════
+# FIX 5: Verificar que NEXT_PUBLIC_API_URL existe en .env
+# ═══════════════════════════════════════════
+env_path = 'backoffice_web/.env'
+env_local = 'backoffice_web/.env.local'
+
+has_var = False
+for p in [env_path, env_local]:
+    if os.path.exists(p):
+        with open(p, 'r') as f:
+            if 'NEXT_PUBLIC_API_URL' in f.read():
+                has_var = True
+
+if not has_var:
+    target = env_local if os.path.exists(env_local) else env_path
+    with open(target, 'a', encoding='utf-8') as f:
+        f.write('\nNEXT_PUBLIC_API_URL=https://apii-maxx-production.up.railway.app\n')
+    print("OK 5/5 - .env: NEXT_PUBLIC_API_URL agregada")
+else:
+    print("OK 5/5 - .env: NEXT_PUBLIC_API_URL ya existe")
+
+print("\n=== TODOS LOS FIXES APLICADOS ===")
