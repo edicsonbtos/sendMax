@@ -23,6 +23,23 @@ import { apiRequest } from '@/lib/api';
    INTERFACES — mapeadas 1:1 al backend real (verificado 2026-02-13)
    ================================================================ */
 
+
+interface BalanceItem {
+  origin_country: string;
+  fiat_currency: string;
+  opening_balance: number;
+  in_today: number;
+  out_today: number;
+  current_balance: number;
+}
+
+interface BalancesResponse {
+  ok: boolean;
+  day: string;
+  prev_day: string;
+  items: BalanceItem[];
+}
+
 interface CloseReportItem {
   origin_country: string;
   fiat_currency: string;
@@ -192,6 +209,7 @@ export default function DailyClosePage() {
   const [dailySummary, setDailySummary] = useState<DailyCloseResponse | null>(null);
   const [movements, setMovements] = useState<DailyMovement[]>([]);
   const [sweeps, setSweeps] = useState<SweepItem[]>([]);
+  const [balances, setBalances] = useState<BalanceItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState(0);
@@ -215,16 +233,18 @@ export default function DailyClosePage() {
     setLoading(true);
     setError('');
     try {
-      const [reportData, summaryData, movData, sweepData] = await Promise.all([
+      const [reportData, summaryData, movData, sweepData, balanceData] = await Promise.all([
         apiRequest<CloseReportResponse>('/origin-wallets/close-report?day=' + selectedDay),
         apiRequest<DailyCloseResponse>('/daily-close?day=' + selectedDay),
         apiRequest<DailyResponse>('/origin-wallets/daily?day=' + selectedDay).catch(() => null),
         apiRequest<SweepsResponse>('/origin-wallets/sweeps?day=' + selectedDay).catch(() => null),
+        apiRequest<BalancesResponse>('/origin-wallets/balances2?day=' + selectedDay).catch(() => null),
       ]);
       setReport(reportData?.items || []);
       setDailySummary(summaryData || null);
       setMovements(movData?.movements || []);
       setSweeps(sweepData?.sweeps || []);
+      setBalances(balanceData?.items || []);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       setError(message);
@@ -342,19 +362,24 @@ export default function DailyClosePage() {
   /* -- CSV ---------------------------------------------------- */
   const exportCSV = () => {
     if (report.length === 0) return;
-    const headers = ['Pais', 'Moneda', 'Entradas', 'Salidas', 'Neto', 'Pendientes_Verificando', 'OK_Cerrar', 'Cerrado', 'Neto_Al_Cierre', 'Nota_Cierre'];
-    const rows = report.map((r) => [
-      sanitizeCSV(r.origin_country),
-      sanitizeCSV(r.fiat_currency),
-      formatMoneyCSV(r.in_amount, r.fiat_currency),
-      formatMoneyCSV(r.out_amount, r.fiat_currency),
-      formatMoneyCSV(r.net_amount, r.fiat_currency),
-      String(r.pending_origin_verificando_count),
-      r.ok_to_close ? 'SI' : 'NO',
-      r.closed ? 'SI' : 'NO',
-      r.net_amount_at_close != null ? formatMoneyCSV(r.net_amount_at_close, r.fiat_currency) : '',
-      sanitizeCSV(r.close_note),
-    ]);
+    const headers = ['Pais', 'Moneda', 'Saldo_Inicial', 'Entradas', 'Salidas', 'Neto', 'Saldo_Final', 'Pendientes_Verificando', 'OK_Cerrar', 'Cerrado', 'Neto_Al_Cierre', 'Nota_Cierre'];
+    const rows = report.map((r) => {
+      const bal = balances.find(b => b.origin_country === r.origin_country && b.fiat_currency === r.fiat_currency);
+      return [
+        sanitizeCSV(r.origin_country),
+        sanitizeCSV(r.fiat_currency),
+        bal ? formatMoneyCSV(bal.opening_balance, r.fiat_currency) : '0',
+        formatMoneyCSV(r.in_amount, r.fiat_currency),
+        formatMoneyCSV(r.out_amount, r.fiat_currency),
+        formatMoneyCSV(r.net_amount, r.fiat_currency),
+        bal ? formatMoneyCSV(bal.current_balance, r.fiat_currency) : '0',
+        String(r.pending_origin_verificando_count),
+        r.ok_to_close ? 'SI' : 'NO',
+        r.closed ? 'SI' : 'NO',
+        r.net_amount_at_close != null ? formatMoneyCSV(r.net_amount_at_close, r.fiat_currency) : '',
+        sanitizeCSV(r.close_note),
+      ];
+    });
     const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -586,10 +611,12 @@ export default function DailyClosePage() {
                       <TableHead>
                         <TableRow>
                           <TableCell sx={{ fontWeight: 700 }}>Pais</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>Saldo Inicial</TableCell>
                           <TableCell sx={{ fontWeight: 700 }}>Moneda</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 700, color: '#16A34A' }}>Entradas</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 700, color: '#DC2626' }}>Salidas</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 700, color: '#2563EB' }}>Neto</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700, color: '#16A34A' }}>Saldo Final</TableCell>
                           <TableCell align="center" sx={{ fontWeight: 700 }}>Pendientes</TableCell>
                           <TableCell align="center" sx={{ fontWeight: 700 }}>Estado</TableCell>
                           <TableCell align="center" sx={{ fontWeight: 700 }}>Accion</TableCell>
@@ -614,6 +641,12 @@ export default function DailyClosePage() {
                                   <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{item.origin_country}</Typography>
                                 </Stack>
                               </TableCell>
+                              <TableCell align="right" sx={{ color: '#64748B', fontWeight: 600 }}>
+                                {(() => {
+                                  const bal = balances.find(b => b.origin_country === item.origin_country && b.fiat_currency === item.fiat_currency);
+                                  return bal ? getCurrencySymbol(item.fiat_currency) + ' ' + formatMoney(bal.opening_balance, item.fiat_currency) : '-';
+                                })()}
+                              </TableCell>
                               <TableCell>
                                 <Chip label={getCurrencySymbol(item.fiat_currency) + ' ' + item.fiat_currency} size="small"
                                   sx={{ fontWeight: 700, backgroundColor: '#4B2E8310', color: '#4B2E83' }} />
@@ -629,6 +662,12 @@ export default function DailyClosePage() {
                                 color: item.net_amount > 0 ? '#2563EB' : item.net_amount < 0 ? '#DC2626' : '#94A3B8',
                               }}>
                                 {getCurrencySymbol(item.fiat_currency) + ' ' + formatMoney(item.net_amount, item.fiat_currency)}
+                              </TableCell>
+                              <TableCell align="right" sx={{ color: '#16A34A', fontWeight: 700, fontSize: '1rem' }}>
+                                {(() => {
+                                  const bal = balances.find(b => b.origin_country === item.origin_country && b.fiat_currency === item.fiat_currency);
+                                  return bal ? getCurrencySymbol(item.fiat_currency) + ' ' + formatMoney(bal.current_balance, item.fiat_currency) : '-';
+                                })()}
                               </TableCell>
                               <TableCell align="center">
                                 {item.pending_origin_verificando_count > 0 ? (
@@ -719,6 +758,7 @@ export default function DailyClosePage() {
                       <TableRow>
                         <TableCell sx={{ fontWeight: 700 }}>Hora</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Pais</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>Saldo Inicial</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Moneda</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700 }}>Monto</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Origen</TableCell>
@@ -798,6 +838,7 @@ export default function DailyClosePage() {
                       <TableRow>
                         <TableCell sx={{ fontWeight: 700 }}>Hora</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Pais</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>Saldo Inicial</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Moneda</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700 }}>Monto</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Nota</TableCell>
