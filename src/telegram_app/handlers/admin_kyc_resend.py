@@ -1,11 +1,11 @@
 ﻿from __future__ import annotations
 
 import html
-import psycopg
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
 
 from src.config.settings import settings
+from src.db.connection import get_conn
 
 
 def _is_admin(update: Update) -> bool:
@@ -30,7 +30,7 @@ async def kyc_resend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("user_id inválido.")
         return
 
-    with psycopg.connect(settings.DATABASE_URL) as conn:
+    with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, alias, full_name, phone, address_short,
@@ -53,7 +53,7 @@ async def kyc_resend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("KYC_TELEGRAM_CHAT_ID no configurado.")
         return
 
-    from src.telegram_app.flows.kyc_flow import _kyc_review_kb  # reuse keyboard
+    from src.telegram_app.flows.kyc_flow import _kyc_review_kb
 
     text = (
         "🆕 <b>Nuevo ingreso (KYC) [REENVIADO]</b>\n\n"

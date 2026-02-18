@@ -7,11 +7,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 
-import psycopg
 import asyncio
-from dotenv import load_dotenv
 
 from src.config.settings import settings
+from src.db.connection import get_conn
 from src.db.repositories.users_repo import get_user_by_telegram_id
 from src.db.repositories.operator_summary_repo import list_recent_orders_for_operator
 from src.db.repositories.wallet_metrics_repo import get_wallet_metrics
@@ -70,11 +69,6 @@ def _history_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
 
-def _db_conn():
-    load_dotenv()
-    return psycopg.connect(settings.DATABASE_URL)
-
-
 async def _count_orders(operator_user_id: int, *, only_today: bool) -> dict[str, int]:
     if only_today:
         sql = """
@@ -94,7 +88,7 @@ async def _count_orders(operator_user_id: int, *, only_today: bool) -> dict[str,
 
     out = {"CREADA": 0, "EN_PROCESO": 0, "PAGADA": 0, "CANCELADA": 0}
     def _query():
-        with _db_conn() as conn:
+        with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql, (operator_user_id,))
                 return cur.fetchall()
@@ -113,7 +107,7 @@ async def _latest_paid(operator_user_id: int, limit: int = 3):
         LIMIT %s;
     """
     def _query():
-        with _db_conn() as conn:
+        with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql, (operator_user_id, limit))
                 return cur.fetchall()
@@ -155,7 +149,6 @@ def _build_dashboard_text(user_alias: str, today_counts: dict[str, int], all_cou
 
 def _build_profit_text(me_id: int, alias: str) -> str:
     m = get_wallet_metrics(me_id)
-    # Resumen: 2 decimales para lectura
     def f2(x: Decimal) -> str:
         return f"{Decimal(str(x)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}"
 
@@ -198,7 +191,6 @@ def _proof_buttons(rows) -> InlineKeyboardMarkup:
 
 
 async def enter_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Exclusividad: salir de otros modos de menú
     context.user_data.pop("pm_mode", None)
     context.user_data.pop("rates_mode", None)
     context.user_data.pop("ref_mode", None)

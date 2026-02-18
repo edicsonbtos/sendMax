@@ -7,6 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler, MessageHandler, filters
 
 from src.config.settings import settings
+from src.db.connection import get_conn
 from src.db.repositories.orders_repo import mark_order_paid, get_order_by_public_id, set_profit_usdt
 from src.db.repositories.users_repo import get_telegram_id_by_user_id
 from src.db.repositories import rates_repo
@@ -32,10 +33,6 @@ def dm_paid_button(public_id: int) -> InlineKeyboardMarkup:
 
 
 async def on_open_dm_paid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Se ejecuta cuando en el grupo Pagos presionan "Enviar por privado".
-    Abre DM con el admin y guarda el public_id pendiente en user_data del admin.
-    """
     q = update.callback_query
     if not q:
         return
@@ -58,10 +55,8 @@ async def on_open_dm_paid(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await q.message.reply_text("❌ ID inválido.")
         return
 
-    # Guardar estado por admin (user_data) => DM proof pending
     context.user_data["pending_paid_dm_order_id"] = public_id
 
-    # Mensaje en el grupo (confirmación)
     try:
         await q.message.reply_text(
             f"✅ Listo. Ahora envía el comprobante por privado al bot para la orden #{public_id}.",
@@ -69,7 +64,6 @@ async def on_open_dm_paid(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except Exception:
         pass
 
-    # Enviar DM al admin (si no tiene chat abierto, Telegram igual entrega)
     try:
         await context.bot.send_message(
             chat_id=update.effective_user.id,
@@ -93,13 +87,9 @@ async def cancel_paid_dm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Recibe la foto SOLO en privado del admin y finaliza la orden.
-    """
     if not _is_admin(update):
         return
 
-    # Solo DM (privado)
     if update.effective_chat and update.effective_chat.type != "private":
         return
 
@@ -111,17 +101,14 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not msg:
         return
 
-    # Rechazar álbum
     if getattr(msg, "media_group_id", None):
         await msg.reply_text("❌ Envía solo 1 foto (no álbum).")
         return
 
-    # Rechazar reenviados (best-effort)
     if getattr(msg, "forward_date", None) or getattr(msg, "forward_origin", None) or getattr(msg, "forward_from", None) or getattr(msg, "forward_from_chat", None):
         await msg.reply_text("❌ No reenvíes la imagen. Súbela como foto nueva (1 sola).")
         return
 
-    # Rechazar video/animación
     if msg.video or msg.animation:
         await msg.reply_text("❌ Debe ser una foto (no video/animación).")
         return
@@ -132,7 +119,6 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     file_id = msg.photo[-1].file_id
 
-    # Marcar pagada + guardar dest proof
     ok = mark_order_paid(int(pid), file_id)
     if not ok:
         await msg.reply_text("❌ No pude marcar la orden como PAGADA. Verifica el ID.")
@@ -163,12 +149,10 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     profit_usdt = _q8((amount_origin / buy_origin) - (payout_dest / sell_dest))
     set_profit_usdt(int(pid), profit_usdt)
 
-    # Ledger shares (misma regla)
+    # Sponsor lookup usando pool
     sponsor_id = None
     try:
-        # mini query sponsor_id para no tocar users_repo
-        import psycopg
-        with psycopg.connect(settings.DATABASE_URL) as conn:
+        with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT sponsor_id FROM users WHERE id=%s LIMIT 1;", (int(order.operator_user_id),))
                 row = cur.fetchone()
@@ -206,7 +190,6 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             idempotency=True,
         )
 
-    # Notificar operador con comprobante destino
     operator_tid = get_telegram_id_by_user_id(int(order.operator_user_id))
     if operator_tid:
         try:
@@ -222,7 +205,6 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         except Exception:
             pass
 
-    # Postear al grupo de pagos
     if settings.PAYMENTS_TELEGRAM_CHAT_ID:
         try:
             await context.bot.send_message(

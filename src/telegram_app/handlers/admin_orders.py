@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import logging
 from decimal import Decimal, ROUND_HALF_UP
@@ -8,6 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings
+from src.db.connection import get_conn
 from src.telegram_app.ui.routes_popular import COUNTRY_FLAGS, format_rate_no_noise
 from src.db.repositories import rates_repo
 from src.db.repositories.orders_repo import (
@@ -402,7 +403,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         # 3. Sponsor split (usa profit REAL para pagar al operador)
         sponsor_id = None
         try:
-            with psycopg.connect(settings.DATABASE_URL) as rconn:
+            with get_conn() as rconn:
                 with rconn.cursor() as cur:
                     cur.execute("SELECT sponsor_id FROM users WHERE id=%s LIMIT 1;", (int(order.operator_user_id),))
                     row = cur.fetchone()
@@ -424,7 +425,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
             memo_sp = None
 
         # 4. ATOMICO: order + profit + trades + ledger + wallet
-        with psycopg.connect(settings.DATABASE_URL) as conn:
+        with get_conn() as conn:
             with conn.transaction():
                 ok_paid = mark_order_paid_tx(conn, int(public_id), proof_file_id)
                 if not ok_paid:

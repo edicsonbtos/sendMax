@@ -1,11 +1,11 @@
 ﻿from __future__ import annotations
 
 import logging
-import psycopg
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings
+from src.db.connection import get_conn
 from src.db.repositories.users_repo import set_kyc_status, get_telegram_id_by_user_id
 from src.telegram_app.handlers.menu import show_home
 
@@ -43,7 +43,7 @@ def _reset_kyc_fields(user_id: int) -> None:
       updated_at=now()
     WHERE id=%s;
     """
-    with psycopg.connect(settings.DATABASE_URL) as conn:
+    with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (int(user_id),))
         conn.commit()
@@ -84,7 +84,6 @@ async def handle_kyc_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         ok = set_kyc_status(user_id=user_id, new_status="APPROVED", reason=None)
 
         if ok:
-            # Notificar usuario
             tg_id = get_telegram_id_by_user_id(user_id)
             if tg_id:
                 try:
@@ -92,7 +91,6 @@ async def handle_kyc_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                         chat_id=int(tg_id),
                         text="✅ Tu verificación fue aprobada. Ya puedes usar el bot.",
                     )
-                    # mostrar menú
                     fake_update = Update(update.update_id, message=None)
                 except Exception:
                     pass
@@ -109,7 +107,6 @@ async def handle_kyc_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     if action == "reject":
-        # Guardar en memoria del admin qué usuario está rechazando
         context.user_data["kyc_reject_user_id"] = user_id
         try:
             await q.message.reply_text("✍️ Escribe el motivo del rechazo (1 mensaje):")
@@ -134,13 +131,9 @@ async def handle_kyc_reject_reason(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text("Motivo muy corto. Intenta de nuevo:")
         return
 
-    # Marcar rechazado (con motivo)
     set_kyc_status(user_id=int(user_id), new_status="REJECTED", reason=reason)
-
-    # Resetear campos para que pueda registrarse de nuevo
     _reset_kyc_fields(int(user_id))
 
-    # Notificar usuario
     tg_id = get_telegram_id_by_user_id(int(user_id))
     if tg_id:
         try:

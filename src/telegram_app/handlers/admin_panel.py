@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings
+from src.db.connection import get_conn
 from src.telegram_app.ui.admin_keyboards import admin_panel_keyboard, admin_reset_confirm_keyboard
 from src.telegram_app.ui.keyboards import main_menu_keyboard
 
@@ -11,15 +12,9 @@ from src.telegram_app.handlers.admin_orders import admin_orders
 from src.telegram_app.handlers.admin_rates import rates_now
 from src.telegram_app.handlers.admin_alert_test import alert_test
 
-import psycopg
-
 
 def _is_admin(update: Update) -> bool:
     return settings.is_admin_id(getattr(update.effective_user, "id", None))
-
-
-def _db_conn():
-    return psycopg.connect(settings.DATABASE_URL)
 
 
 async def open_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -53,12 +48,10 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     if text == "📋 Órdenes (CREADA)":
-        # reutiliza el handler existente
         await admin_orders(update, context)
         return
 
     if text in ("🔄 Tasas ahora", "📈 Tasas", "📈 Tasas ahora"):
-        # reutiliza /rates_now como función
         await rates_now(update, context)
         return
 
@@ -86,23 +79,16 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         context.user_data.pop("awaiting_reset_confirm", None)
 
-        # Reset seguro: borrar en orden para no romper FKs
         admin_telegram = int(settings.ADMIN_TELEGRAM_USER_ID)
 
         try:
-            with _db_conn() as conn:
+            with get_conn() as conn:
                 with conn.cursor() as cur:
-                    # 1) órdenes
                     cur.execute("DELETE FROM orders;")
-
-                    # 2) tasas (rutas y precios dependen de rate_versions)
                     cur.execute("DELETE FROM route_rates;")
                     cur.execute("DELETE FROM p2p_country_prices;")
                     cur.execute("DELETE FROM rate_versions;")
-
-                    # 3) usuarios (mantener admin)
                     cur.execute("DELETE FROM users WHERE telegram_user_id <> %s;", (admin_telegram,))
-
                 conn.commit()
 
             await update.message.reply_text("✅ Reset completo. Base lista para producción.", reply_markup=main_menu_keyboard(is_admin=True))
@@ -116,4 +102,3 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data.pop("awaiting_reset_confirm", None)
         await update.message.reply_text("Reset cancelado ✅", reply_markup=admin_panel_keyboard())
         return
-

@@ -1,10 +1,10 @@
 ﻿from __future__ import annotations
 
-import psycopg
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
 
 from src.config.settings import settings
+from src.db.connection import get_conn
 
 
 def _is_admin(update: Update) -> bool:
@@ -30,7 +30,7 @@ async def set_sponsor_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("No puedes asignar un usuario como su propio padrino.")
         return
 
-    with psycopg.connect(settings.DATABASE_URL) as conn:
+    with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT id, alias FROM users WHERE alias=%s LIMIT 1;", (child_alias,))
             child = cur.fetchone()
