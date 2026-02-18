@@ -1,8 +1,6 @@
-﻿"""
-Sendmax Backoffice API
-Version con JWT Auth + Roles
-"""
+""" Sendmax Backoffice API Version con JWT Auth + Roles """
 
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,16 +8,15 @@ from .routers import diagnostics, metrics, orders, origin_wallets, settings, ale
 
 app = FastAPI(title="Sendmax Backoffice API", version="0.8.0")
 
-# CORS
+# CORS Origins desde variable de entorno
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000,https://sendmax-web-production.up.railway.app"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://sendmax-bot.vercel.app",
-        "https://sendmax-web-production.up.railway.app",
-        "https://apii-maxx-production.up.railway.app",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
