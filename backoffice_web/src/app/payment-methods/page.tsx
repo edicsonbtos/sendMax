@@ -4,26 +4,25 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Stack, Button, TextField,
   Alert, CircularProgress, IconButton, Chip, Dialog, DialogTitle,
-  DialogContent, DialogActions, Switch, FormControlLabel, Divider,
+  DialogContent, DialogActions, Switch, FormControlLabel,
   Snackbar, Avatar, Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon,
   Save as SaveIcon, Refresh as RefreshIcon, DragIndicator as DragIcon,
-  AccountBalance as BankIcon, CheckCircle as ActiveIcon,
-  Cancel as InactiveIcon,
+  CheckCircle as ActiveIcon, Cancel as InactiveIcon,
 } from '@mui/icons-material';
 import { useAuth } from '@/components/AuthProvider';
 import { apiRequest } from '@/lib/api';
 
 const COUNTRIES = [
-  { code: 'USA', flag: '\u{1F1FA}\u{1F1F8}', label: 'Estados Unidos', color: '#3C3B6E' },
-  { code: 'VENEZUELA', flag: '\u{1F1FB}\u{1F1EA}', label: 'Venezuela', color: '#FFCD00' },
-  { code: 'CHILE', flag: '\u{1F1E8}\u{1F1F1}', label: 'Chile', color: '#0039A6' },
-  { code: 'PERU', flag: '\u{1F1F5}\u{1F1EA}', label: 'Per\u00FA', color: '#D91023' },
-  { code: 'COLOMBIA', flag: '\u{1F1E8}\u{1F1F4}', label: 'Colombia', color: '#FCD116' },
-  { code: 'MEXICO', flag: '\u{1F1F2}\u{1F1FD}', label: 'M\u00E9xico', color: '#006847' },
-  { code: 'ARGENTINA', flag: '\u{1F1E6}\u{1F1F7}', label: 'Argentina', color: '#74ACDF' },
+  { code: 'USA', flag: '🇺🇸', label: 'Estados Unidos', color: '#3C3B6E' },
+  { code: 'VENEZUELA', flag: '🇻🇪', label: 'Venezuela', color: '#FFCD00' },
+  { code: 'CHILE', flag: '🇨🇱', label: 'Chile', color: '#0039A6' },
+  { code: 'PERU', flag: '🇵🇪', label: 'Perú', color: '#D91023' },
+  { code: 'COLOMBIA', flag: '🇨🇴', label: 'Colombia', color: '#FCD116' },
+  { code: 'MEXICO', flag: '🇲🇽', label: 'México', color: '#006847' },
+  { code: 'ARGENTINA', flag: '🇦🇷', label: 'Argentina', color: '#74ACDF' },
 ];
 
 interface PaymentMethod {
@@ -47,7 +46,6 @@ export default function PaymentMethodsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
-
   const [editCountry, setEditCountry] = useState<string | null>(null);
   const [editMethod, setEditMethod] = useState<PaymentMethod | null>(null);
   const [editIndex, setEditIndex] = useState<number>(-1);
@@ -158,9 +156,9 @@ export default function PaymentMethodsPage() {
     <Box className="fade-in">
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800 }}>Metodos de Pago</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>Métodos de Pago</Typography>
           <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
-            Administra los metodos de pago por pais que ven los operadores en Telegram
+            Administra los métodos de pago por país que ven los operadores en Telegram
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<RefreshIcon />} onClick={fetchData} disabled={loading}>
@@ -179,7 +177,7 @@ export default function PaymentMethodsPage() {
           {COUNTRIES.map((country) => {
             const cd = data[country.code] || { methods: [], active_count: 0, total_count: 0 };
             return (
-              <Card key={country.code} sx={{ borderLeft: 4px solid  }}>
+              <Card key={country.code} sx={{ borderLeft: `4px solid ${country.color}` }}>
                 <CardContent sx={{ p: 2.5 }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                     <Stack direction="row" spacing={1.5} alignItems="center">
@@ -205,7 +203,7 @@ export default function PaymentMethodsPage() {
 
                   {cd.methods.length === 0 ? (
                     <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
-                      Sin metodos configurados. El bot mostrara mensaje de soporte.
+                      Sin métodos configurados. El bot mostrará mensaje de soporte.
                     </Alert>
                   ) : (
                     <Stack spacing={1.5}>
@@ -268,10 +266,9 @@ export default function PaymentMethodsPage() {
         </Stack>
       )}
 
-      {/* Edit/Add Dialog */}
       <Dialog open={!!editMethod} onClose={() => { setEditMethod(null); setEditCountry(null); }} fullWidth maxWidth="sm">
         <DialogTitle sx={{ fontWeight: 700 }}>
-          {editIndex >= 0 ? 'Editar Metodo' : 'Nuevo Metodo'}
+          {editIndex >= 0 ? 'Editar Método' : 'Nuevo Método'}
           {editCountry && (
             <Chip label={COUNTRIES.find(c => c.code === editCountry)?.label} size="small" sx={{ ml: 1, fontWeight: 600 }} />
           )}
@@ -279,8 +276,8 @@ export default function PaymentMethodsPage() {
         <DialogContent>
           <Stack spacing={2.5} sx={{ mt: 1 }}>
             <TextField
-              label="Nombre del metodo" fullWidth required
-              placeholder="Ej: Zelle, Pago Movil, Transferencia"
+              label="Nombre del método" fullWidth required
+              placeholder="Ej: Zelle, Pago Móvil, Transferencia"
               value={editMethod?.name || ''} onChange={(e) => setEditMethod(prev => prev ? { ...prev, name: e.target.value } : prev)}
             />
             <TextField
@@ -290,9 +287,9 @@ export default function PaymentMethodsPage() {
             />
             <TextField
               label="Datos de pago" fullWidth multiline rows={3}
-              placeholder="Ej: Banco Mercantil\nCuenta: 0105-1234-5678\nTelefono: 04242686434"
+              placeholder="Ej: Banco Mercantil&#10;Cuenta: 0105-1234-5678&#10;Teléfono: 04242686434"
               value={editMethod?.details || ''} onChange={(e) => setEditMethod(prev => prev ? { ...prev, details: e.target.value } : prev)}
-              helperText="Usa Enter para separar lineas"
+              helperText="Usa Enter para separar líneas"
             />
             <FormControlLabel
               control={<Switch checked={editMethod?.active ?? true} onChange={(e) => setEditMethod(prev => prev ? { ...prev, active: e.target.checked } : prev)} />}
@@ -310,11 +307,10 @@ export default function PaymentMethodsPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Delete Dialog */}
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Eliminar metodo</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>Eliminar método</DialogTitle>
         <DialogContent>
-          <Alert severity="error">Esta accion no se puede deshacer.</Alert>
+          <Alert severity="error">Esta acción no se puede deshacer.</Alert>
         </DialogContent>
         <DialogActions sx={{ p: 2.5 }}>
           <Button onClick={() => setDeleteTarget(null)}>Cancelar</Button>
@@ -324,7 +320,6 @@ export default function PaymentMethodsPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar */}
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(s => ({ ...s, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert onClose={() => setSnackbar(s => ({ ...s, open: false }))} severity={snackbar.severity} variant="filled">
