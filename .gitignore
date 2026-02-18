@@ -41,3 +41,6 @@ backoffice_web/temp_*.py
 
 # Permitir .env.production del frontend
 !backoffice_web/.env.production
+
+# Archivos temporales movidos
+_archivados/
