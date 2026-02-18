@@ -1,13 +1,16 @@
 ﻿"""
 Router de gestion de usuarios (admin only).
-- GET /users - listar usuarios
-- POST /users - crear operador con email/password
-- PUT /users/{id}/toggle - activar/desactivar
+- GET  /users              - listar con KYC, balance, busqueda
+- GET  /users/{user_id}    - detalle completo
+- POST /users              - crear operador con email/password
+- PUT  /users/{id}/toggle  - activar/desactivar
+- PUT  /users/{id}/password - reset password temporal
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
+from decimal import Decimal
 import secrets
 
 from ..auth import verify_api_key
@@ -25,6 +28,27 @@ def require_admin(auth=Depends(verify_api_key)):
     return auth
 
 
+def _ser(row):
+    """Convierte dict de DB para JSON: Decimal->str, datetime->isoformat."""
+    if not row:
+        return row
+    out = {}
+    for k, v in row.items():
+        if v is None:
+            out[k] = None
+        elif isinstance(v, Decimal):
+            out[k] = str(v.quantize(Decimal("0.01")))
+        elif hasattr(v, "isoformat"):
+            out[k] = v.isoformat()
+        else:
+            out[k] = v
+    return out
+
+
+def _ser_list(rows):
+    return [_ser(r) for r in (rows or [])]
+
+
 class CreateOperatorRequest(BaseModel):
     email: str
     password: str
@@ -40,30 +64,136 @@ class ToggleResponse(BaseModel):
 
 
 @router.get("")
-def list_users(auth=Depends(require_admin)):
-    rows = fetch_all(
+def list_users(
+    search: Optional[str] = Query(None, description="Buscar por alias, nombre o email"),
+    auth=Depends(require_admin),
+):
+    base_sql = """
+        SELECT u.id, u.telegram_user_id, u.alias, u.full_name, u.email,
+               u.role, u.is_active,
+               COALESCE(u.kyc_status, 'PENDING') AS kyc_status,
+               u.created_at,
+               COALESCE(w.balance_usdt, 0) AS balance_usdt,
+               COALESCE(oc.total_orders, 0) AS total_orders
+        FROM users u
+        LEFT JOIN wallets w ON w.user_id = u.id
+        LEFT JOIN (
+            SELECT operator_user_id, COUNT(*) AS total_orders
+            FROM orders
+            GROUP BY operator_user_id
+        ) oc ON oc.operator_user_id = u.id
+        WHERE u.role IN ('admin', 'operator')
+    """
+    if search and search.strip():
+        term = "%" + search.strip() + "%"
+        sql = base_sql + """
+            AND (u.alias ILIKE %s OR u.full_name ILIKE %s OR u.email ILIKE %s)
+            ORDER BY u.created_at DESC
         """
-        SELECT id, telegram_user_id, alias, full_name, email,
-               role, is_active, created_at
-        FROM users
-        WHERE role IN ('admin', 'operator')
-        ORDER BY created_at DESC
+        rows = fetch_all(sql, (term, term, term))
+    else:
+        sql = base_sql + " ORDER BY u.created_at DESC"
+        rows = fetch_all(sql)
+
+    return {"count": len(rows or []), "users": _ser_list(rows)}
+
+
+@router.get("/{user_id}")
+def get_user_detail(user_id: int, auth=Depends(require_admin)):
+    user = fetch_one(
         """
+        SELECT u.id, u.telegram_user_id, u.alias, u.full_name, u.email,
+               u.phone, u.address_short, u.role, u.is_active, u.sponsor_id,
+               u.payout_country, u.payout_method_text,
+               COALESCE(u.kyc_status, 'PENDING') AS kyc_status,
+               u.kyc_submitted_at, u.kyc_reviewed_at, u.kyc_review_reason,
+               u.created_at, u.updated_at,
+               COALESCE(w.balance_usdt, 0) AS balance_usdt
+        FROM users u
+        LEFT JOIN wallets w ON w.user_id = u.id
+        WHERE u.id = %s
+        """,
+        (user_id,),
     )
-    users = []
-    for r in rows:
-        users.append({
-            "id": r["id"],
-            "telegram_user_id": r["telegram_user_id"],
-            "alias": r["alias"],
-            "full_name": r["full_name"],
-            "email": r["email"],
-            "role": r["role"],
-            "is_active": r["is_active"],
-            "has_password": bool(r.get("email")),
-            "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-        })
-    return {"count": len(users), "users": users}
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    metrics = fetch_one(
+        """
+        SELECT
+            COALESCE((
+                SELECT SUM(amount_usdt) FROM wallet_ledger
+                WHERE user_id = %s AND type = 'ORDER_PROFIT'
+                  AND created_at >= date_trunc('day', now())
+            ), 0) AS profit_today,
+            COALESCE((
+                SELECT SUM(amount_usdt) FROM wallet_ledger
+                WHERE user_id = %s AND type = 'ORDER_PROFIT'
+                  AND created_at >= date_trunc('month', now())
+            ), 0) AS profit_month,
+            COALESCE((
+                SELECT SUM(amount_usdt) FROM wallet_ledger
+                WHERE user_id = %s AND type = 'SPONSOR_COMMISSION'
+                  AND created_at >= date_trunc('month', now())
+            ), 0) AS referrals_month
+        """,
+        (user_id, user_id, user_id),
+    )
+
+    ledger = fetch_all(
+        """
+        SELECT id, amount_usdt, type, ref_order_public_id, memo, created_at
+        FROM wallet_ledger
+        WHERE user_id = %s
+        ORDER BY created_at DESC
+        LIMIT 15
+        """,
+        (user_id,),
+    )
+
+    withdrawals = fetch_all(
+        """
+        SELECT id, amount_usdt, status, dest_text, country,
+               fiat, fiat_amount, reject_reason,
+               created_at, resolved_at
+        FROM withdrawals
+        WHERE user_id = %s
+        ORDER BY created_at DESC
+        LIMIT 10
+        """,
+        (user_id,),
+    )
+
+    ref_row = fetch_one(
+        "SELECT COUNT(*) AS cnt FROM users WHERE sponsor_id = %s",
+        (user_id,),
+    )
+
+    orders = fetch_all(
+        """
+        SELECT public_id, origin_country, dest_country,
+               amount_origin, payout_dest, profit_usdt,
+               status, created_at
+        FROM orders
+        WHERE operator_user_id = %s
+        ORDER BY created_at DESC
+        LIMIT 10
+        """,
+        (user_id,),
+    )
+
+    return {
+        "user": _ser(user),
+        "metrics": _ser(metrics) if metrics else {
+            "profit_today": "0.00",
+            "profit_month": "0.00",
+            "referrals_month": "0.00",
+        },
+        "ledger": _ser_list(ledger),
+        "withdrawals": _ser_list(withdrawals),
+        "referrals_count": int(ref_row["cnt"]) if ref_row else 0,
+        "orders": _ser_list(orders),
+    }
 
 
 @router.post("")
@@ -78,15 +208,16 @@ def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
 
     row = fetch_one(
         """
-        INSERT INTO users (telegram_user_id, alias, full_name, email, hashed_password, role, is_active)
+        INSERT INTO users
+            (telegram_user_id, alias, full_name, email,
+             hashed_password, role, is_active)
         VALUES (%s, %s, %s, %s, %s, 'operator', true)
         RETURNING id, alias, email, role
         """,
         (tg_id, alias, data.full_name, data.email, hashed),
         rw=True,
     )
-
-    return {"ok": True, "user": row}
+    return {"ok": True, "user": _ser(row)}
 
 
 @router.put("/{user_id}/toggle")
@@ -102,16 +233,13 @@ def toggle_user(user_id: int, auth=Depends(require_admin)):
     )
     if not row:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
     return ToggleResponse(ok=True, user_id=row["id"], is_active=row["is_active"])
 
 
 @router.put("/{user_id}/password")
 def reset_password(user_id: int, auth=Depends(require_admin)):
-    """Reset password a un valor temporal."""
     temp_pass = secrets.token_urlsafe(10)
     hashed = get_password_hash(temp_pass)
-
     row = fetch_one(
         "UPDATE users SET hashed_password = %s, updated_at = now() WHERE id = %s RETURNING id",
         (hashed, user_id),
@@ -119,5 +247,4 @@ def reset_password(user_id: int, auth=Depends(require_admin)):
     )
     if not row:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
     return {"ok": True, "temp_password": temp_pass}
