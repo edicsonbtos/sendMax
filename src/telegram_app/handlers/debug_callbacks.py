@@ -11,7 +11,7 @@ async def debug_any_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not q:
         return
     try:
-        logger.info(f"[DEBUG][callback] from_user={q.from_user.id} chat_id={q.message.chat_id} data={q.data}")
+        logger.debug(f"[DEBUG][callback] from_user={q.from_user.id} chat_id={q.message.chat_id} data={q.data}")
         await q.answer()
     except Exception:
         pass
