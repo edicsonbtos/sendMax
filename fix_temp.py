@@ -1,95 +1,64 @@
-﻿import os
-
-# ═══════════════════════════════════════════
-# FIX 1: api.ts - Quitar URL hardcodeada
-# ═══════════════════════════════════════════
-path1 = 'backoffice_web/src/lib/api.ts'
-with open(path1, 'r', encoding='utf-8') as f:
+﻿with open('backoffice_web/src/app/orders/page.tsx', 'r', encoding='utf-8') as f:
     content = f.read()
 
+# 1. Agregar useMemo al import
 content = content.replace(
-    "const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://apii-maxx-production.up.railway.app';",
-    '''const API_BASE = process.env.NEXT_PUBLIC_API_URL;
-if (!API_BASE) {
-  throw new Error('NEXT_PUBLIC_API_URL no configurada');
-}'''
+    "import React, { useState, useEffect, useCallback } from 'react';",
+    "import React, { useState, useEffect, useCallback, useMemo } from 'react';"
 )
 
-with open(path1, 'w', encoding='utf-8') as f:
-    f.write(content)
-print("OK 1/5 - api.ts: URL hardcodeada eliminada")
-
-
-# ═══════════════════════════════════════════
-# FIX 2: login/page.tsx - Importar API_BASE de api.ts
-# ═══════════════════════════════════════════
-path2 = 'backoffice_web/src/app/login/page.tsx'
-with open(path2, 'r', encoding='utf-8') as f:
-    content = f.read()
-
+# 2. Quitar estado filteredOrders
 content = content.replace(
-    "import { useAuth } from '@/components/AuthProvider';\n\nconst API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://apii-maxx-production.up.railway.app';",
-    "import { useAuth } from '@/components/AuthProvider';\nimport { API_BASE } from '@/lib/api';"
+    "const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);",
+    ""
 )
 
-with open(path2, 'w', encoding='utf-8') as f:
-    f.write(content)
-print("OK 2/5 - login/page.tsx: API_BASE importado de api.ts")
-
-
-# ═══════════════════════════════════════════
-# FIX 3: daily-close - Zona horaria local
-# ═══════════════════════════════════════════
-path3 = 'backoffice_web/src/app/daily-close/page.tsx'
-with open(path3, 'r', encoding='utf-8') as f:
-    content = f.read()
-
+# 3. Quitar setFilteredOrders del fetch
 content = content.replace(
-    "yesterday.toISOString().split('T')[0]",
-    "yesterday.toLocaleDateString('en-CA')"
+    "      setOrders(ordersArray);\n      setFilteredOrders(ordersArray);",
+    "      setOrders(ordersArray);"
+)
+content = content.replace(
+    "      setOrders([]);\n      setFilteredOrders([]);",
+    "      setOrders([]);"
 )
 
-with open(path3, 'w', encoding='utf-8') as f:
+# 4. Reemplazar useEffect de filtrado por useMemo
+old_effect = '''  useEffect(() => {
+    let filtered = [...orders];
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      filtered = filtered.filter((o) =>
+        o.public_id.toString().includes(search) ||
+        o.origin_country?.toLowerCase().includes(search) ||
+        o.dest_country?.toLowerCase().includes(search) ||
+        o.status?.toLowerCase().includes(search)
+      );
+    }
+    if (statusFilter !== 'all') filtered = filtered.filter((o) => o.status === statusFilter);
+    if (countryFilter !== 'all') filtered = filtered.filter((o) => o.origin_country === countryFilter || o.dest_country === countryFilter);
+    setFilteredOrders(filtered);
+  }, [searchTerm, statusFilter, countryFilter, orders]);'''
+
+new_memo = '''  const filteredOrders = useMemo(() => {
+    let filtered = [...orders];
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      filtered = filtered.filter((o) =>
+        o.public_id.toString().includes(search) ||
+        o.origin_country?.toLowerCase().includes(search) ||
+        o.dest_country?.toLowerCase().includes(search) ||
+        o.status?.toLowerCase().includes(search)
+      );
+    }
+    if (statusFilter !== 'all') filtered = filtered.filter((o) => o.status === statusFilter);
+    if (countryFilter !== 'all') filtered = filtered.filter((o) => o.origin_country === countryFilter || o.dest_country === countryFilter);
+    return filtered;
+  }, [searchTerm, statusFilter, countryFilter, orders]);'''
+
+content = content.replace(old_effect, new_memo)
+
+with open('backoffice_web/src/app/orders/page.tsx', 'w', encoding='utf-8') as f:
     f.write(content)
-print("OK 3/5 - daily-close: Zona horaria corregida")
 
-
-# ═══════════════════════════════════════════
-# FIX 4: origin - Zona horaria local
-# ═══════════════════════════════════════════
-path4 = 'backoffice_web/src/app/origin/page.tsx'
-with open(path4, 'r', encoding='utf-8') as f:
-    content = f.read()
-
-content = content.replace(
-    "new Date().toISOString().split('T')[0]",
-    "new Date().toLocaleDateString('en-CA')"
-)
-
-with open(path4, 'w', encoding='utf-8') as f:
-    f.write(content)
-print("OK 4/5 - origin: Zona horaria corregida")
-
-
-# ═══════════════════════════════════════════
-# FIX 5: Verificar que NEXT_PUBLIC_API_URL existe en .env
-# ═══════════════════════════════════════════
-env_path = 'backoffice_web/.env'
-env_local = 'backoffice_web/.env.local'
-
-has_var = False
-for p in [env_path, env_local]:
-    if os.path.exists(p):
-        with open(p, 'r') as f:
-            if 'NEXT_PUBLIC_API_URL' in f.read():
-                has_var = True
-
-if not has_var:
-    target = env_local if os.path.exists(env_local) else env_path
-    with open(target, 'a', encoding='utf-8') as f:
-        f.write('\nNEXT_PUBLIC_API_URL=https://apii-maxx-production.up.railway.app\n')
-    print("OK 5/5 - .env: NEXT_PUBLIC_API_URL agregada")
-else:
-    print("OK 5/5 - .env: NEXT_PUBLIC_API_URL ya existe")
-
-print("\n=== TODOS LOS FIXES APLICADOS ===")
+print("OK - orders/page.tsx: useEffect reemplazado por useMemo")

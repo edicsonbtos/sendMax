@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -78,7 +78,7 @@ export default function OrdersPage() {
   const router = useRouter();
   const { token } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [limit, setLimit] = useState(100);
@@ -93,12 +93,10 @@ export default function OrdersPage() {
       const data = await apiRequest<OrdersResponse>(`/orders?limit=${limit}`);
       const ordersArray = Array.isArray(data?.orders) ? data.orders : [];
       setOrders(ordersArray);
-      setFilteredOrders(ordersArray);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       setError(message);
       setOrders([]);
-      setFilteredOrders([]);
     } finally {
       setLoading(false);
     }
@@ -108,7 +106,7 @@ export default function OrdersPage() {
     if (token) fetchOrders();
   }, [token, fetchOrders]);
 
-  useEffect(() => {
+  const filteredOrders = useMemo(() => {
     let filtered = [...orders];
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
@@ -121,7 +119,7 @@ export default function OrdersPage() {
     }
     if (statusFilter !== 'all') filtered = filtered.filter((o) => o.status === statusFilter);
     if (countryFilter !== 'all') filtered = filtered.filter((o) => o.origin_country === countryFilter || o.dest_country === countryFilter);
-    setFilteredOrders(filtered);
+    return filtered;
   }, [searchTerm, statusFilter, countryFilter, orders]);
 
   const clearFilters = () => { setSearchTerm(''); setStatusFilter('all'); setCountryFilter('all'); };
