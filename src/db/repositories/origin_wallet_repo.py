@@ -2,7 +2,6 @@
 
 import logging
 logger = logging.getLogger(__name__)
-logger.warning("origin_wallet_repo LOADED: v2 (no src.db.connection import)")
 
 from dataclasses import dataclass
 from datetime import date
