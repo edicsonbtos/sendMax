@@ -210,7 +210,7 @@ export default function SettingsPage() {
     }
   }
 
-  React.useEffect(() => { if (token) load(); }, [apiKey]);
+  React.useEffect(() => { if (token) load(); }, [token]);
 
   const marginFields = [
     { key: "margin_default", label: "Margen general", value: marginDefault, setter: setMarginDefault, helper: "Aplicado a todas las rutas por defecto" },
