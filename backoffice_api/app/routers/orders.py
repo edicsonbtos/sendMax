@@ -1,6 +1,9 @@
 """Router: Ordenes y Trades"""
 
+import logging
 from fastapi import APIRouter, Depends, Query, HTTPException
+
+logger = logging.getLogger(__name__)
 from pydantic import BaseModel
 from ..db import fetch_one, fetch_all
 from ..auth import verify_api_key

@@ -1,5 +1,12 @@
 """Router: Metricas y Dashboard"""
 
+# Estados de órdenes (fuente única)
+ST_CREADA = "CREADA"
+ST_ORIGEN = "ORIGEN_VERIFICANDO"
+ST_PROCESO = "EN_PROCESO"
+ST_PAGADA = "PAGADA"
+ST_CANCELADA = "CANCELADA"
+
 from fastapi import APIRouter, Depends, Query
 from ..db import fetch_one, fetch_all
 from ..auth import verify_api_key

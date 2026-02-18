@@ -6,6 +6,9 @@ Incluye rate-limit anti-spam para taps de menú.
 """
 
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 from telegram import Update
 from telegram.ext import ContextTypes
 
