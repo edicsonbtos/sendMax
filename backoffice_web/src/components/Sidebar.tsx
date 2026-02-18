@@ -26,6 +26,7 @@ const adminMenu = [
   { text: "Cierre Diario", path: "/daily-close", icon: <CalendarIcon />, description: "Reportes y cierres" },
   { text: "Usuarios", path: "/users", icon: <PeopleIcon />, description: "Gestionar operadores" },
   { text: "Configuracion", path: "/settings", icon: <SettingsIcon />, description: "Reglas y margenes" },
+    { text: "Metodos de Pago", path: "/payment-methods", icon: <WalletIcon />, description: "Metodos por pais" },
 ];
 
 const operatorMenu = [

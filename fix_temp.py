@@ -1,13 +1,14 @@
-﻿with open('backoffice_web/src/app/settings/page.tsx', 'r', encoding='utf-8') as f:
+﻿with open('backoffice_web/src/components/Sidebar.tsx', 'r', encoding='utf-8') as f:
     content = f.read()
 
-# Cambiar [apiKey] por [token]
+# Agregar después de Configuracion
 content = content.replace(
-    'React.useEffect(() => { if (token) load(); }, [apiKey]);',
-    'React.useEffect(() => { if (token) load(); }, [token]);'
+    '{ text: "Configuracion", path: "/settings", icon: <SettingsIcon />, description: "Reglas y margenes" },',
+    '''{ text: "Configuracion", path: "/settings", icon: <SettingsIcon />, description: "Reglas y margenes" },
+    { text: "Metodos de Pago", path: "/payment-methods", icon: <WalletIcon />, description: "Metodos por pais" },'''
 )
 
-with open('backoffice_web/src/app/settings/page.tsx', 'w', encoding='utf-8') as f:
+with open('backoffice_web/src/components/Sidebar.tsx', 'w', encoding='utf-8') as f:
     f.write(content)
 
-print("OK - settings/page.tsx corregido")
+print("OK 1 - Sidebar: Metodos de Pago agregado")
