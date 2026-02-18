@@ -13,9 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-import psycopg
+from src.db.connection import get_conn
 
-from src.config.settings import settings
 
 
 # --- Modelos simples (DTOs) ---
@@ -50,8 +49,7 @@ class CountryPrice:
     sell_price: Decimal
 
 
-def get_conn():
-    return psycopg.connect(settings.DATABASE_URL)
+# get_conn importado desde connection.py (pool centralizado)
 
 
 # --- Escritura ---

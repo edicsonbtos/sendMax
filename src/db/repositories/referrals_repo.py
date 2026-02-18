@@ -1,9 +1,7 @@
 ﻿from __future__ import annotations
 
 from dataclasses import dataclass
-import psycopg
 
-from src.config.settings import settings
 
 
 @dataclass(frozen=True)
@@ -13,8 +11,7 @@ class ReferralRow:
     created_at: object
 
 
-def get_conn():
-    return psycopg.connect(settings.DATABASE_URL)
+from src.db.connection import get_conn
 
 
 def count_referrals(sponsor_user_id: int) -> int:

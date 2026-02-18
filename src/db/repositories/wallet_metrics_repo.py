@@ -2,13 +2,10 @@
 
 from dataclasses import dataclass
 from decimal import Decimal
-import psycopg
-
-from src.config.settings import settings
 
 
-def get_conn():
-    return psycopg.connect(settings.DATABASE_URL)
+
+from src.db.connection import get_conn
 
 
 @dataclass(frozen=True)

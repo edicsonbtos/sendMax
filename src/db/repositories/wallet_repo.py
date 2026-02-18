@@ -2,9 +2,7 @@
 
 from dataclasses import dataclass
 from decimal import Decimal
-import psycopg
 
-from src.config.settings import settings
 
 
 @dataclass(frozen=True)
@@ -13,8 +11,7 @@ class Wallet:
     balance_usdt: Decimal
 
 
-def get_conn():
-    return psycopg.connect(settings.DATABASE_URL)
+from src.db.connection import get_conn
 
 
 def get_or_create_wallet(user_id: int) -> Wallet:

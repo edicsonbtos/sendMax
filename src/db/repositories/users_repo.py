@@ -5,11 +5,10 @@ Aquí concentramos todas las consultas SQL sobre la tabla users.
 """
 
 from __future__ import annotations
+from src.db.connection import get_conn
 
 from dataclasses import dataclass
-import psycopg
 
-from src.config.settings import settings
 
 
 @dataclass(frozen=True)
@@ -46,8 +45,7 @@ class UserKYC:
     kyc_review_reason: str | None
 
 
-def get_conn():
-    return psycopg.connect(settings.DATABASE_URL)
+# get_conn importado desde connection.py (pool centralizado)
 
 
 def get_user_by_telegram_id(telegram_user_id: int) -> User | None:

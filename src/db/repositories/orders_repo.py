@@ -16,9 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
-import psycopg
+from src.db.connection import get_conn
 
-from src.config.settings import settings
 
 
 @dataclass(frozen=True)
@@ -44,8 +43,7 @@ class Order:
 VALID_STATUSES = {"CREADA", "ORIGEN_VERIFICANDO", "ORIGEN_CONFIRMADO", "EN_PROCESO", "PAGADA", "CANCELADA"}
 
 
-def get_conn():
-    return psycopg.connect(settings.DATABASE_URL)
+# get_conn importado desde connection.py (pool centralizado)
 
 
 def next_public_id(cur) -> int:

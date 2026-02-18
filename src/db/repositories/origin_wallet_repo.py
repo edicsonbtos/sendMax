@@ -11,11 +11,9 @@ from decimal import Decimal
 import psycopg
 from psycopg.rows import dict_row
 
-from src.config.settings import settings
 
 
-def get_conn():
-    return psycopg.connect(settings.DATABASE_URL)
+from src.db.connection import get_conn
 
 
 @dataclass

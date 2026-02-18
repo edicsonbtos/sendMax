@@ -3,9 +3,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
 from datetime import datetime
-import psycopg
 
-from src.config.settings import settings
 
 
 @dataclass(frozen=True)
@@ -21,8 +19,7 @@ class OrderSummaryRow:
     dest_payment_proof_file_id: str | None
 
 
-def get_conn():
-    return psycopg.connect(settings.DATABASE_URL)
+from src.db.connection import get_conn
 
 
 def list_recent_orders_for_operator(operator_user_id: int, limit: int = 10) -> list[OrderSummaryRow]:
