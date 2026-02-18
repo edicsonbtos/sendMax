@@ -1,47 +1,45 @@
-﻿with open('backoffice_web/src/app/daily-close/page.tsx', 'r', encoding='utf-8') as f:
-    content = f.read()
+﻿content = '''\"\"\" Sendmax Backoffice API Version con JWT Auth + Roles \"\"\"
 
-# Modificar headers del CSV
-content = content.replace(
-    'const headers = [\'Pais\', \'Moneda\', \'Entradas\', \'Salidas\', \'Neto\', \'Pendientes_Verificando\', \'OK_Cerrar\', \'Cerrado\', \'Neto_Al_Cierre\', \'Nota_Cierre\'];',
-    'const headers = [\'Pais\', \'Moneda\', \'Saldo_Inicial\', \'Entradas\', \'Salidas\', \'Neto\', \'Saldo_Final\', \'Pendientes_Verificando\', \'OK_Cerrar\', \'Cerrado\', \'Neto_Al_Cierre\', \'Nota_Cierre\'];'
+import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .routers import diagnostics, metrics, orders, origin_wallets, settings, alerts, corrections, auth, users
+
+app = FastAPI(title="Sendmax Backoffice API", version="0.8.0")
+
+# CORS Origins desde variable de entorno
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000,https://sendmax-web-production.up.railway.app"
+).split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Modificar rows del CSV
-old_csv_row = '''const rows = report.map((r) => [
-      sanitizeCSV(r.origin_country),
-      sanitizeCSV(r.fiat_currency),
-      formatMoneyCSV(r.in_amount, r.fiat_currency),
-      formatMoneyCSV(r.out_amount, r.fiat_currency),
-      formatMoneyCSV(r.net_amount, r.fiat_currency),
-      String(r.pending_origin_verificando_count),
-      r.ok_to_close ? 'SI' : 'NO',
-      r.closed ? 'SI' : 'NO',
-      r.net_amount_at_close != null ? formatMoneyCSV(r.net_amount_at_close, r.fiat_currency) : '',
-      sanitizeCSV(r.close_note),
-    ]);'''
+# Routers
+app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(diagnostics.router)
+app.include_router(metrics.router)
+app.include_router(orders.router)
+app.include_router(origin_wallets.router)
+app.include_router(settings.router)
+app.include_router(alerts.router)
+app.include_router(corrections.router)
 
-new_csv_row = '''const rows = report.map((r) => {
-      const bal = balances.find(b => b.origin_country === r.origin_country && b.fiat_currency === r.fiat_currency);
-      return [
-        sanitizeCSV(r.origin_country),
-        sanitizeCSV(r.fiat_currency),
-        bal ? formatMoneyCSV(bal.opening_balance, r.fiat_currency) : '0',
-        formatMoneyCSV(r.in_amount, r.fiat_currency),
-        formatMoneyCSV(r.out_amount, r.fiat_currency),
-        formatMoneyCSV(r.net_amount, r.fiat_currency),
-        bal ? formatMoneyCSV(bal.current_balance, r.fiat_currency) : '0',
-        String(r.pending_origin_verificando_count),
-        r.ok_to_close ? 'SI' : 'NO',
-        r.closed ? 'SI' : 'NO',
-        r.net_amount_at_close != null ? formatMoneyCSV(r.net_amount_at_close, r.fiat_currency) : '',
-        sanitizeCSV(r.close_note),
-      ];
-    });'''
 
-content = content.replace(old_csv_row, new_csv_row)
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+'''
 
-with open('backoffice_web/src/app/daily-close/page.tsx', 'w', encoding='utf-8') as f:
+with open('backoffice_api/app/main.py', 'w', encoding='utf-8') as f:
     f.write(content)
 
-print("OK 5 - daily-close: CSV con saldos de apertura/cierre")
+print("OK - main.py reescrito con CORS profesional")
