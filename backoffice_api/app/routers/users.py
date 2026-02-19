@@ -25,7 +25,6 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
-# Campos sensibles que NUNCA deben exponerse en respuestas
 SENSITIVE_FIELDS = {"hashed_password", "kyc_doc_file_id", "kyc_selfie_file_id"}
 
 
@@ -100,8 +99,6 @@ class ToggleResponse(BaseModel):
     is_active: bool
 
 
-# ── GET /users ───────────────────────────────────────────
-
 @router.get("")
 def list_users(
     search: Optional[str] = Query(None, description="Buscar por alias, nombre o email"),
@@ -136,8 +133,6 @@ def list_users(
 
     return {"count": len(rows or []), "users": _ser_list(rows)}
 
-
-# ── GET /users/{user_id} ────────────────────────────────
 
 @router.get("/{user_id}")
 def get_user_detail(user_id: int, auth=Depends(require_admin)):
@@ -237,8 +232,6 @@ def get_user_detail(user_id: int, auth=Depends(require_admin)):
     }
 
 
-# ── POST /users ─────────────────────────────────────────
-
 @router.post("")
 def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
     existing = fetch_one("SELECT id FROM users WHERE LOWER(email) = LOWER(%s)", (data.email,))
@@ -246,8 +239,10 @@ def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
         raise HTTPException(status_code=400, detail="Email ya registrado")
 
     hashed = get_password_hash(data.password)
-    tg_id = data.telegram_user_id or 0
     alias = data.alias or data.email.split("@")[0]
+
+    # Si telegram_user_id no viene o es 0, guardar NULL (no 0)
+    tg_id = data.telegram_user_id if data.telegram_user_id else None
 
     row = fetch_one(
         """
@@ -262,8 +257,6 @@ def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
     )
     return {"ok": True, "user": _ser(row)}
 
-
-# ── PUT /users/{id}/toggle ──────────────────────────────
 
 @router.put("/{user_id}/toggle")
 def toggle_user(user_id: int, auth=Depends(require_admin)):
@@ -280,8 +273,6 @@ def toggle_user(user_id: int, auth=Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return ToggleResponse(ok=True, user_id=row["id"], is_active=row["is_active"])
 
-
-# ── PUT /users/{id}/password ────────────────────────────
 
 @router.put("/{user_id}/password")
 def reset_password(user_id: int, auth=Depends(require_admin)):
