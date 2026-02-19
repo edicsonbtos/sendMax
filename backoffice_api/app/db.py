@@ -1,9 +1,19 @@
+﻿"""
+Pool de conexiones para backoffice API.
+- Pool RO (lectura) y Pool RW (escritura) separados.
+- Manejo de errores con rollback y logging.
+- Commit dentro del cursor para psycopg3.
+"""
+
 import os
+import logging
 import psycopg
 from psycopg_pool import ConnectionPool
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 def get_db_url_ro() -> str:
@@ -20,13 +30,14 @@ def get_db_url_rw() -> str:
     return url
 
 
-# Pool global - se reutiliza en cada query
-_pool_ro = None
-_pool_rw = None
+# Pool global
+_pool_ro: ConnectionPool | None = None
+_pool_rw: ConnectionPool | None = None
 
 
-def _get_pool_ro() -> ConnectionPool:
-    global _pool_ro
+def init_pools() -> None:
+    """Inicializa ambos pools. Llamar en startup de la app."""
+    global _pool_ro, _pool_rw
     if _pool_ro is None:
         _pool_ro = ConnectionPool(
             get_db_url_ro(),
@@ -34,11 +45,7 @@ def _get_pool_ro() -> ConnectionPool:
             max_size=10,
             open=True,
         )
-    return _pool_ro
-
-
-def _get_pool_rw() -> ConnectionPool:
-    global _pool_rw
+        logger.info("Pool RO inicializado")
     if _pool_rw is None:
         _pool_rw = ConnectionPool(
             get_db_url_rw(),
@@ -46,23 +53,56 @@ def _get_pool_rw() -> ConnectionPool:
             max_size=5,
             open=True,
         )
+        logger.info("Pool RW inicializado")
+
+
+def _get_pool_ro() -> ConnectionPool:
+    global _pool_ro
+    if _pool_ro is None:
+        init_pools()
+    return _pool_ro
+
+
+def _get_pool_rw() -> ConnectionPool:
+    global _pool_rw
+    if _pool_rw is None:
+        init_pools()
     return _pool_rw
 
 
 def fetch_one(sql: str, params: tuple = (), *, rw: bool = False):
+    """
+    Ejecuta query y retorna una fila como dict.
+    Si rw=True usa pool RW y hace commit.
+    """
     pool = _get_pool_rw() if rw else _get_pool_ro()
-    with pool.connection() as conn:
-        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-            cur.execute(sql, params)
-            row = cur.fetchone()
-        if rw:
-            conn.commit()
-        return row
+    try:
+        with pool.connection() as conn:
+            with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+                cur.execute(sql, params)
+                row = cur.fetchone()
+                if rw:
+                    conn.commit()
+                return row
+    except Exception as e:
+        logger.exception("fetch_one error (rw=%s): %s", rw, e)
+        raise
 
 
-def fetch_all(sql: str, params: tuple = ()):
-    pool = _get_pool_ro()
-    with pool.connection() as conn:
-        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-            cur.execute(sql, params)
-            return cur.fetchall()
+def fetch_all(sql: str, params: tuple = (), *, rw: bool = False):
+    """
+    Ejecuta query y retorna lista de dicts.
+    Si rw=True usa pool RW y hace commit.
+    """
+    pool = _get_pool_rw() if rw else _get_pool_ro()
+    try:
+        with pool.connection() as conn:
+            with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+                if rw:
+                    conn.commit()
+                return rows
+    except Exception as e:
+        logger.exception("fetch_all error (rw=%s): %s", rw, e)
+        raise

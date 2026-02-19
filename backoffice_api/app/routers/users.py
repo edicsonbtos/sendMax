@@ -7,17 +7,26 @@ Router de gestion de usuarios (admin only).
 - PUT  /users/{id}/password - reset password temporal
 """
 
+import re
+import secrets
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from decimal import Decimal
-import secrets
 
 from ..auth import verify_api_key
 from ..auth_jwt import get_password_hash
 from ..db import fetch_one, fetch_all
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/users", tags=["Users"])
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+# Campos sensibles que NUNCA deben exponerse en respuestas
+SENSITIVE_FIELDS = {"hashed_password", "kyc_doc_file_id", "kyc_selfie_file_id"}
 
 
 def require_admin(auth=Depends(verify_api_key)):
@@ -29,15 +38,20 @@ def require_admin(auth=Depends(verify_api_key)):
 
 
 def _ser(row):
-    """Convierte dict de DB para JSON: Decimal->str, datetime->isoformat."""
+    """Convierte dict de DB para JSON: Decimal->str, datetime->isoformat.
+    Filtra campos sensibles."""
     if not row:
         return row
     out = {}
     for k, v in row.items():
+        if k in SENSITIVE_FIELDS:
+            continue
         if v is None:
             out[k] = None
         elif isinstance(v, Decimal):
             out[k] = str(v.quantize(Decimal("0.01")))
+        elif isinstance(v, bytes):
+            out[k] = v.decode("utf-8", errors="replace")
         elif hasattr(v, "isoformat"):
             out[k] = v.isoformat()
         else:
@@ -56,12 +70,37 @@ class CreateOperatorRequest(BaseModel):
     alias: Optional[str] = None
     telegram_user_id: Optional[int] = None
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v):
+        v = v.strip().lower()
+        if not EMAIL_REGEX.match(v):
+            raise ValueError("Email inválido")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError("Password debe tener mínimo 8 caracteres")
+        return v
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, v):
+        v = v.strip()
+        if len(v) < 3:
+            raise ValueError("Nombre debe tener mínimo 3 caracteres")
+        return v
+
 
 class ToggleResponse(BaseModel):
     ok: bool
     user_id: int
     is_active: bool
 
+
+# ── GET /users ───────────────────────────────────────────
 
 @router.get("")
 def list_users(
@@ -97,6 +136,8 @@ def list_users(
 
     return {"count": len(rows or []), "users": _ser_list(rows)}
 
+
+# ── GET /users/{user_id} ────────────────────────────────
 
 @router.get("/{user_id}")
 def get_user_detail(user_id: int, auth=Depends(require_admin)):
@@ -196,9 +237,11 @@ def get_user_detail(user_id: int, auth=Depends(require_admin)):
     }
 
 
+# ── POST /users ─────────────────────────────────────────
+
 @router.post("")
 def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
-    existing = fetch_one("SELECT id FROM users WHERE email = %s", (data.email,))
+    existing = fetch_one("SELECT id FROM users WHERE LOWER(email) = LOWER(%s)", (data.email,))
     if existing:
         raise HTTPException(status_code=400, detail="Email ya registrado")
 
@@ -220,6 +263,8 @@ def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
     return {"ok": True, "user": _ser(row)}
 
 
+# ── PUT /users/{id}/toggle ──────────────────────────────
+
 @router.put("/{user_id}/toggle")
 def toggle_user(user_id: int, auth=Depends(require_admin)):
     row = fetch_one(
@@ -235,6 +280,8 @@ def toggle_user(user_id: int, auth=Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return ToggleResponse(ok=True, user_id=row["id"], is_active=row["is_active"])
 
+
+# ── PUT /users/{id}/password ────────────────────────────
 
 @router.put("/{user_id}/password")
 def reset_password(user_id: int, auth=Depends(require_admin)):
