@@ -10,10 +10,11 @@ Router de gestion de usuarios (admin only).
 import re
 import secrets
 import logging
+from decimal import Decimal
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
-from typing import Optional
-from decimal import Decimal
 
 from ..auth import verify_api_key
 from ..auth_jwt import get_password_hash
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
+# Campos que no deben salir en respuestas del backoffice API
 SENSITIVE_FIELDS = {"hashed_password", "kyc_doc_file_id", "kyc_selfie_file_id"}
 
 
@@ -36,12 +38,16 @@ def require_admin(auth=Depends(verify_api_key)):
     return auth
 
 
-def _ser(row):
-    """Convierte dict de DB para JSON: Decimal->str, datetime->isoformat.
-    Filtra campos sensibles."""
+def _ser(row: dict | None) -> dict | None:
+    """Serializa row dict de DB a JSON-friendly:
+    - Filtra campos sensibles
+    - Decimal -> str con 2 decimales (UI)
+    - datetime -> isoformat
+    - bytes -> utf-8
+    """
     if not row:
         return row
-    out = {}
+    out: dict = {}
     for k, v in row.items():
         if k in SENSITIVE_FIELDS:
             continue
@@ -58,8 +64,8 @@ def _ser(row):
     return out
 
 
-def _ser_list(rows):
-    return [_ser(r) for r in (rows or [])]
+def _ser_list(rows: list[dict] | None) -> list[dict]:
+    return [_ser(r) for r in (rows or [])]  # type: ignore[misc]
 
 
 class CreateOperatorRequest(BaseModel):
@@ -71,7 +77,7 @@ class CreateOperatorRequest(BaseModel):
 
     @field_validator("email")
     @classmethod
-    def validate_email(cls, v):
+    def validate_email(cls, v: str) -> str:
         v = v.strip().lower()
         if not EMAIL_REGEX.match(v):
             raise ValueError("Email inválido")
@@ -79,17 +85,26 @@ class CreateOperatorRequest(BaseModel):
 
     @field_validator("password")
     @classmethod
-    def validate_password(cls, v):
+    def validate_password(cls, v: str) -> str:
         if len(v) < 8:
             raise ValueError("Password debe tener mínimo 8 caracteres")
         return v
 
     @field_validator("full_name")
     @classmethod
-    def validate_full_name(cls, v):
+    def validate_full_name(cls, v: str) -> str:
         v = v.strip()
         if len(v) < 3:
             raise ValueError("Nombre debe tener mínimo 3 caracteres")
+        return v
+
+    @field_validator("telegram_user_id")
+    @classmethod
+    def validate_tg_id(cls, v: Optional[int]) -> Optional[int]:
+        if v is None:
+            return None
+        if v <= 0:
+            raise ValueError("telegram_user_id debe ser > 0 si se envía")
         return v
 
 
@@ -232,6 +247,15 @@ def get_user_detail(user_id: int, auth=Depends(require_admin)):
     }
 
 
+def _generate_backoffice_tg_id() -> int:
+    """
+    Genera un telegram_user_id sintético para usuarios creados desde backoffice.
+    DB exige NOT NULL y UNIQUE.
+    Estrategia: entero negativo aleatorio (Telegram IDs reales son positivos).
+    """
+    return -secrets.randbelow(2_000_000_000) - 1  # [-2e9-1 .. -1]
+
+
 @router.post("")
 def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
     existing = fetch_one("SELECT id FROM users WHERE LOWER(email) = LOWER(%s)", (data.email,))
@@ -239,23 +263,35 @@ def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
         raise HTTPException(status_code=400, detail="Email ya registrado")
 
     hashed = get_password_hash(data.password)
-    alias = data.alias or data.email.split("@")[0]
+    alias = (data.alias or data.email.split("@")[0]).strip()
 
-    # Si telegram_user_id no viene o es 0, guardar NULL (no 0)
-    tg_id = data.telegram_user_id if data.telegram_user_id else None
+    tg_id = data.telegram_user_id or _generate_backoffice_tg_id()
 
-    row = fetch_one(
-        """
-        INSERT INTO users
-            (telegram_user_id, alias, full_name, email,
-             hashed_password, role, is_active)
-        VALUES (%s, %s, %s, %s, %s, 'operator', true)
-        RETURNING id, alias, email, role
-        """,
-        (tg_id, alias, data.full_name, data.email, hashed),
-        rw=True,
-    )
-    return {"ok": True, "user": _ser(row)}
+    # Reintentar pocas veces por si se da una colisión (muy improbable)
+    for _ in range(3):
+        try:
+            row = fetch_one(
+                """
+                INSERT INTO users
+                    (telegram_user_id, alias, full_name, email,
+                     hashed_password, role, is_active)
+                VALUES (%s, %s, %s, %s, %s, 'operator', true)
+                RETURNING id, alias, email, role
+                """,
+                (tg_id, alias, data.full_name, data.email, hashed),
+                rw=True,
+            )
+            return {"ok": True, "user": _ser(row)}
+        except Exception as e:
+            # Si fue colisión de telegram_user_id, regenerar y reintentar.
+            # Para cualquier otro error, re-lanzar.
+            msg = str(e)
+            if "users_telegram_user_id_key" in msg or "telegram_user_id" in msg:
+                tg_id = _generate_backoffice_tg_id()
+                continue
+            raise
+
+    raise HTTPException(status_code=500, detail="No se pudo crear usuario (colisión de ID interno)")
 
 
 @router.put("/{user_id}/toggle")
