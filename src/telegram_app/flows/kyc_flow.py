@@ -23,12 +23,7 @@ from src.db.repositories.users_repo import (
     check_email_exists,
 )
 from src.telegram_app.handlers.menu import show_home
-
-# Importar hash de password desde backoffice
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../backoffice_api"))
-from app.auth_jwt import get_password_hash
+from src.utils.crypto import get_password_hash
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +142,6 @@ async def start_kyc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await _prompt_for_step(update, step)
         return step
 
-    # Usuario nuevo -> pedir alias
     await update.message.reply_text(
         "👋 Bienvenido a Sendmax.\n\n"
         "Crea tu alias (nombre de operador):\n"
@@ -279,11 +273,9 @@ async def receive_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("❌ Contraseña muy corta. Debe tener mínimo 8 caracteres.\n\nIntenta de nuevo:")
         return ASK_PASSWORD
     
-    # Hashear password inmediatamente (nunca guardar texto plano)
     hashed = get_password_hash(v)
     update_kyc_draft(telegram_user_id=int(update.effective_user.id), hashed_password=hashed)
     
-    # Borrar mensaje con password por seguridad
     try:
         await update.message.delete()
     except Exception:
@@ -354,7 +346,6 @@ async def receive_selfie_photo(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ No pude enviar tu verificación. Intenta /start.")
         return ConversationHandler.END
 
-    # Notificar grupo KYC
     if settings.KYC_TELEGRAM_CHAT_ID:
         try:
             db_user = get_user_by_telegram_id(tg_id)
@@ -381,7 +372,7 @@ async def receive_selfie_photo(update: Update, context: ContextTypes.DEFAULT_TYP
 
     await update.message.reply_text(
         "✅ Verificación enviada correctamente.\n\n"
-        "📧 Recibirás un correo cuando tu cuenta sea aprobada.\n"
+        "📧 Recibirás notificación cuando tu cuenta sea aprobada.\n"
         "⏳ Un administrador revisará tu solicitud pronto."
     )
     return ConversationHandler.END
