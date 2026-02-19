@@ -44,8 +44,8 @@ class UserKYC:
     kyc_reviewed_at: object | None
     kyc_review_reason: str | None
 
-
-# get_conn importado desde connection.py (pool centralizado)
+    email: str | None
+    hashed_password: str | None
 
 
 def get_user_by_telegram_id(telegram_user_id: int) -> User | None:
@@ -63,7 +63,6 @@ def get_user_by_telegram_id(telegram_user_id: int) -> User | None:
 
 
 def get_user_by_alias(alias: str) -> User | None:
-    # alias es CITEXT en DB, búsqueda case-insensitive.
     sql = """
         SELECT id, telegram_user_id, alias, role, is_active, sponsor_id
         FROM users
@@ -105,7 +104,14 @@ def create_user(
             return User(*row)
 
 
-# --- KYC + payout ---
+def check_email_exists(email: str) -> bool:
+    """Verifica si un email ya esta registrado (case-insensitive)."""
+    sql = "SELECT 1 FROM users WHERE LOWER(email) = LOWER(%s) LIMIT 1;"
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (email,))
+            return cur.fetchone() is not None
+
 
 def get_user_kyc_by_telegram_id(telegram_user_id: int) -> UserKYC | None:
     sql = """
@@ -114,7 +120,8 @@ def get_user_kyc_by_telegram_id(telegram_user_id: int) -> UserKYC | None:
             full_name, phone, address_short,
             payout_country, payout_method_text,
             kyc_doc_file_id, kyc_selfie_file_id,
-            kyc_status, kyc_submitted_at, kyc_reviewed_at, kyc_review_reason
+            kyc_status, kyc_submitted_at, kyc_reviewed_at, kyc_review_reason,
+            email, hashed_password
         FROM users
         WHERE telegram_user_id = %s
         LIMIT 1;
@@ -136,9 +143,11 @@ def submit_kyc(
     payout_method_text: str,
     kyc_doc_file_id: str,
     kyc_selfie_file_id: str,
+    email: str,
+    hashed_password: str,
 ) -> bool:
     """
-    Guarda KYC y deja status=SUBMITTED. (Aprobación es manual por admin)
+    Guarda KYC completo y deja status=SUBMITTED. (Aprobación es manual por admin)
     """
     sql = """
         UPDATE users
@@ -150,6 +159,8 @@ def submit_kyc(
             payout_method_text=%s,
             kyc_doc_file_id=%s,
             kyc_selfie_file_id=%s,
+            email=%s,
+            hashed_password=%s,
             kyc_status='SUBMITTED',
             kyc_submitted_at=now(),
             updated_at=now()
@@ -163,6 +174,7 @@ def submit_kyc(
                     full_name, phone, address_short,
                     payout_country, payout_method_text,
                     kyc_doc_file_id, kyc_selfie_file_id,
+                    email, hashed_password,
                     telegram_user_id,
                 ),
             )
@@ -228,6 +240,7 @@ def get_payout_method(user_id: int) -> tuple[str | None, str | None]:
                 return (None, None)
             return (row[0], row[1])
 
+
 def update_kyc_draft(
     *,
     telegram_user_id: int,
@@ -238,6 +251,8 @@ def update_kyc_draft(
     payout_method_text: str | None = None,
     kyc_doc_file_id: str | None = None,
     kyc_selfie_file_id: str | None = None,
+    email: str | None = None,
+    hashed_password: str | None = None,
 ) -> bool:
     """
     Guarda progreso parcial del KYC sin marcar SUBMITTED.
@@ -264,11 +279,14 @@ def update_kyc_draft(
         add("kyc_doc_file_id", kyc_doc_file_id)
     if kyc_selfie_file_id is not None:
         add("kyc_selfie_file_id", kyc_selfie_file_id)
+    if email is not None:
+        add("email", email)
+    if hashed_password is not None:
+        add("hashed_password", hashed_password)
 
     if not fields:
         return False
 
-    # No cambiamos status aquí, solo guardamos draft.
     sql = f"""
         UPDATE users
         SET {", ".join(fields)},
