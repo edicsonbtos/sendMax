@@ -1,0 +1,191 @@
+﻿==================================================
+SENDMAX - DIAGNÓSTICO PARA AUDITORÍA
+Fecha: 02/19/2026 18:56:50
+==================================================
+
+[1] ARCHIVOS TEMPORALES Y BASURA
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\scripts\maintenance\.tmp_reset_hits.txt
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_add_alias_debug.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_add_kyc_debug.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_add_kyc_resend_handler.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_add_reset_all_handler.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_add_set_sponsor_handler.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_apply_patch_start_kyc.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_awaiting_rows.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_cl_peru_route.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_commissions.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_jeima_paid_and_sponsor.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_last_order_full.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_ledger_order.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_order_10.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_order_24_full.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_order_24_state.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_order_29.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_order_profit.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_paid_after_patch.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_paid_orders.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_payment_methods.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_profit_last10.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_rate_client_formula.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_referral_commission.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_routes_completeness.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_sponsor_commission.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_users_cols.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_wallet_vs_ledger.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_audit_which_flow.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_approved.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_chatids_runtime.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_jeima26.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_jeimary_created.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_jeimary_exists.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_jeimary_user_row.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_me_status.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_migration_applied.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_my_kyc_files.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_my_kyc_state.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_orders_count.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_check_ref_user.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_compare_chat_ids.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_deep_audit.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_enable_touch_contact.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_find_reset_refs.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_find_reset_refs_safe.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_fix_build_kyc_conversation.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_fix_kyc_alias_message.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_fix_kyc_future.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_fix_kyc_markdown.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_fix_ledger_adjustments.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_fix_profit_orders.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_fix_receive_sponsor.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_force_alias_prompt.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_is_admin_runtime.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_kyc_diag_patch.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_flow_locks.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_kyc_send_errors.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_kyc_show_home.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_menu_debug.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_menu_rates_router.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_new_order_entrypoint.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_new_order_fiat_logic.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_pm_fallback.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_reset_all_sequence.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_sniffer_text.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_sponsor_prompt.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_patch_withdraw_reset.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_pretty_welcome_alias.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_print_db_url.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_print_db_used.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_prod_cleanup.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_register_kyc_resend.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_register_reset_all.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_register_set_sponsor.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_remove_bom.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_remove_bom_many.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_reset_my_kyc.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_simulate_sponsor_split.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_start_kyc_patch.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_start_retry.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_test_send_kyc_chat.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_top_ledger_impacts.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_verify_awaiting_col.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_verify_jeima_sponsor.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_verify_kyc_cols.py
+C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\.tmp_verify_ref_created_again.py
+
+[2] VERIFICACIÓN DE DEPENDENCIAS (JOSE)
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_api\requirements.txt ---
+python-jose[cryptography]==3.3.0
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\scripts\maintenance\_dump_for_review\requirements.txt ---
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\requirements.txt ---
+
+[3] RUTAS EN DIAGNOSTICS.PY
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_api\app\routers\diagnostics.py ---
+@router.get("/health")
+@router.get("/diag/env")
+@router.get("/diag/db-users")
+@router.get("/diag/db-roles")
+@router.get("/version2")
+@router.get("/gitsha")
+
+[4] IMPORTS DE JOSE EN EL CÓDIGO
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_api\app\auth.py ---
+from jose import JWTError, jwt
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        except JWTError:
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\backoffice_api\app\auth_jwt.py ---
+from jose import JWTError, jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+
+[5] RASTREO DE IDS NEGATIVOS / TELEGRAM NULLABLE
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\scripts\maintenance\_backup_security\settings.py ---
+    ADMIN_TELEGRAM_USER_ID: int | None = None
+    # Ej: ADMIN_TELEGRAM_USER_IDS=7518903082,123456789
+    ADMIN_TELEGRAM_USER_IDS: str | None = None
+        if self.ADMIN_TELEGRAM_USER_ID:
+            ids.add(int(self.ADMIN_TELEGRAM_USER_ID))
+        if self.ADMIN_TELEGRAM_USER_IDS:
+            for part in self.ADMIN_TELEGRAM_USER_IDS.split(","):
+    def is_admin_id(self, telegram_user_id: int | None) -> bool:
+        if telegram_user_id is None:
+        return int(telegram_user_id) in self.admin_user_ids
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\src\config\settings.py ---
+    ADMIN_TELEGRAM_USER_ID: int | None = None
+    # Ej: ADMIN_TELEGRAM_USER_IDS=7518903082,123456789
+    ADMIN_TELEGRAM_USER_IDS: str | None = None
+        if self.ADMIN_TELEGRAM_USER_ID:
+            ids.add(int(self.ADMIN_TELEGRAM_USER_ID))
+        if self.ADMIN_TELEGRAM_USER_IDS:
+            for part in self.ADMIN_TELEGRAM_USER_IDS.split(","):
+    def is_admin_id(self, telegram_user_id: int | None) -> bool:
+        if telegram_user_id is None:
+        return int(telegram_user_id) in self.admin_user_ids
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\src\db\repositories\orders_repo.py ---
+def mark_origin_verified(public_id: int, *, by_telegram_user_id: int | None = None, by_name: str | None = None) -> bool:
+            cur.execute(sql, (by_telegram_user_id, by_name, public_id))
+def set_awaiting_paid_proof(public_id: int, *, by_telegram_user_id: int | None = None) -> bool:
+            cur.execute(sql, (by_telegram_user_id, public_id))
+def list_orders_awaiting_paid_proof_by(by_telegram_user_id: int, limit: int = 10) -> list[Order]:
+            cur.execute(sql, (by_telegram_user_id, limit))
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\src\db\repositories\users_repo.py ---
+    telegram_user_id: int
+    telegram_user_id: int
+def get_user_by_telegram_id(telegram_user_id: int) -> User | None:
+        SELECT id, telegram_user_id, alias, role, is_active, sponsor_id
+        WHERE telegram_user_id = %s
+            cur.execute(sql, (telegram_user_id,))
+        SELECT id, telegram_user_id, alias, role, is_active, sponsor_id
+    sql = "SELECT telegram_user_id FROM users WHERE id = %s LIMIT 1;"
+    telegram_user_id: int,
+        INSERT INTO users (telegram_user_id, alias, sponsor_id, role)
+        RETURNING id, telegram_user_id, alias, role, is_active, sponsor_id;
+            cur.execute(sql, (telegram_user_id, alias, sponsor_id, role))
+def get_user_kyc_by_telegram_id(telegram_user_id: int) -> UserKYC | None:
+            id, telegram_user_id, alias, role, is_active, sponsor_id,
+        WHERE telegram_user_id = %s
+            cur.execute(sql, (telegram_user_id,))
+    telegram_user_id: int,
+        WHERE telegram_user_id=%s;
+                    telegram_user_id,
+    telegram_user_id: int,
+        WHERE telegram_user_id=%s;
+    params.append(int(telegram_user_id))
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\src\db\repositories\user_contacts_repo.py ---
+def touch_contact(telegram_user_id: int) -> None:
+    Guarda telegram_user_id para broadcast/post-reset.
+    INSERT INTO user_contacts (telegram_user_id, first_seen_at, last_seen_at)
+    ON CONFLICT (telegram_user_id)
+            cur.execute(sql, (int(telegram_user_id),))
+    sql = "SELECT telegram_user_id FROM user_contacts ORDER BY last_seen_at DESC"
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\src\telegram_app\handlers\admin_orders.py ---
+                by_telegram_user_id=getattr(update.effective_user, "id", None),
+            by_telegram_user_id=getattr(update.effective_user, "id", None),
+def _pick_pending_order_id_from_db(by_telegram_user_id: int) -> int | None:
+    pending = list_orders_awaiting_paid_proof_by(by_telegram_user_id, limit=1)
+--- Archivo: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\_archivados\_patch_add_mark_origin_verified.py ---
+new_fn = """def mark_origin_verified(public_id: int, *, by_telegram_user_id: int | None = None, by_name: str | None = None) -> bool:
+            cur.execute(sql, (by_telegram_user_id, by_name, public_id))
+
+[6] HISTORIAL ALEMBIC (VERSION_NUM)
