@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 """
-Flujo: ?? Nuevo envío (PRO) — FIAT -> FIAT (coherente con profit puente)
+Flujo: ?? Nuevo envo (PRO)  FIAT -> FIAT (coherente con profit puente)
 
 Regla de negocio (unit consistency):
-- orders.amount_origin = FIAT del país de origen
-- orders.payout_dest   = FIAT del país de destino
-- route_rates.rate_client = (FIAT_dest / FIAT_origin) ya incluye comisión
+- orders.amount_origin = FIAT del pas de origen
+- orders.payout_dest   = FIAT del pas de destino
+- route_rates.rate_client = (FIAT_dest / FIAT_origin) ya incluye comisin
 - profit_usdt se calcula al pagar con snapshot:
     (amount_origin / buy_origin) - (payout_dest / sell_dest)
 
 UX:
-- Pantalla única (edit_message_text) best-effort
+- Pantalla nica (edit_message_text) best-effort
 - Aislamiento con context.user_data["order_mode"]=True
 """
 
@@ -151,7 +151,7 @@ async def _screen_send_or_edit(
             )
             return screen_id
         except Exception as e:
-            logger.warning("edit_message_text falló (screen_id=%s): %s", screen_id, e)
+            logger.warning("edit_message_text fall (screen_id=%s): %s", screen_id, e)
             await _best_effort_delete(update, context, screen_id)
             context.user_data.pop("screen_message_id", None)
 
@@ -200,15 +200,15 @@ def _build_summary_text(order: dict, rr) -> str:
     comm = Decimal(str(settings.commission_pct(origin, dest)))
 
     return (
-        "Listo ? Revisa tu envío:\n\n"
+        "Listo ? Revisa tu envo:\n\n"
         f"Ruta: {COUNTRY_FLAGS[origin]} {COUNTRY_LABELS[origin]} -> {COUNTRY_FLAGS[dest]} {COUNTRY_LABELS[dest]}\n"
         f"Monto (origen): {_fmt_money(amount_fiat)} {origin}\n"
         f"Tasa: {_fmt_rate(rr.rate_client)}\n"
-        f"Comisión: {_fmt_money(comm)}%\n"
+        f"Comisin: {_fmt_money(comm)}%\n"
         f"Recibe aprox (destino): {_fmt_money(payout_dest)} {dest}\n\n"
         "Beneficiario:\n"
         f"{benef_short}\n\n"
-        "¿Confirmamos?"
+        "Confirmamos?"
     )
 
 
@@ -266,7 +266,7 @@ async def _notify_admin_new_order(context: ContextTypes.DEFAULT_TYPE, order) -> 
 async def entry_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Lock: evita doble inicio por spam
     if context.user_data.get("order_mode"):
-        await update.message.reply_text("? Ya tienes un envío en curso. Si deseas salir, escribe Cancelar.")
+        await update.message.reply_text("? Ya tienes un envo en curso. Si deseas salir, escribe Cancelar.")
         return ASK_ORIGIN
     context.user_data["order_mode"] = True
     context.user_data["order"] = {}
@@ -276,7 +276,7 @@ async def entry_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await _screen_send_or_edit(
         update,
         context,
-        "?? Nuevo envío\n\nElige el país de *origen*:",
+        "?? Nuevo envo\n\nElige el pas de *origen*:",
         reply_markup=_country_keyboard(),
         parse_mode="Markdown",
     )
@@ -286,7 +286,7 @@ async def entry_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def receive_origin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     code = _parse_country(update.message.text)
     if not code:
-        await _screen_send_or_edit(update, context, "Selecciona un país usando los botones ??", reply_markup=_country_keyboard())
+        await _screen_send_or_edit(update, context, "Selecciona un pas usando los botones ??", reply_markup=_country_keyboard())
         return ASK_ORIGIN
 
     context.user_data["order"]["origin"] = code
@@ -294,7 +294,7 @@ async def receive_origin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await _screen_send_or_edit(
         update,
         context,
-        "Perfecto ? Ahora elige el país de *destino*:",
+        "Perfecto ? Ahora elige el pas de *destino*:",
         reply_markup=_country_keyboard(),
         parse_mode="Markdown",
     )
@@ -304,12 +304,12 @@ async def receive_origin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def receive_dest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     code = _parse_country(update.message.text)
     if not code:
-        await _screen_send_or_edit(update, context, "Selecciona un país usando los botones ??", reply_markup=_country_keyboard())
+        await _screen_send_or_edit(update, context, "Selecciona un pas usando los botones ??", reply_markup=_country_keyboard())
         return ASK_DEST
 
     origin = context.user_data["order"].get("origin")
     if code == origin:
-        await _screen_send_or_edit(update, context, "Esa ruta no es válida. Elige un destino diferente ??", reply_markup=_country_keyboard())
+        await _screen_send_or_edit(update, context, "Esa ruta no es vlida. Elige un destino diferente ??", reply_markup=_country_keyboard())
         return ASK_DEST
 
     context.user_data["order"]["dest"] = code
@@ -337,7 +337,7 @@ async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if amount <= 0:
             raise InvalidOperation()
     except Exception:
-        await _screen_send_or_edit(update, context, "Monto inválido. Escribe solo el número (ej: 10000).", reply_markup=_cancel_keyboard())
+        await _screen_send_or_edit(update, context, "Monto invlido. Escribe solo el nmero (ej: 10000).", reply_markup=_cancel_keyboard())
         return ASK_AMOUNT
 
     await _best_effort_delete(update, context, update.message.message_id)
@@ -347,19 +347,19 @@ async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     edit_target = context.user_data.get("edit_target")
     if edit_target == "amount":
         context.user_data.pop("edit_target", None)
-        await _screen_send_or_edit(update, context, "Listo ? ¿Quieres seguir editando o continuar?", reply_markup=_after_edit_keyboard())
+        await _screen_send_or_edit(update, context, "Listo ? Quieres seguir editando o continuar?", reply_markup=_after_edit_keyboard())
         return ASK_EDIT_FIELD
 
     await _screen_send_or_edit(
         update,
         context,
-        "Perfecto ? Ahora pega los *datos del beneficiario* (como lo enviarías por WhatsApp).\n\n"
+        "Perfecto ? Ahora pega los *datos del beneficiario* (como lo enviaras por WhatsApp).\n\n"
         "Incluye al menos:\n"
-        "• Nombre\n"
-        "• Cédula\n"
-        "• Nº cuenta\n"
-        "• Tipo\n\n"
-        "Envíalo en un solo mensaje.",
+        " Nombre\n"
+        " Cdula\n"
+        " N cuenta\n"
+        " Tipo\n\n"
+        "Envalo en un solo mensaje.",
         reply_markup=_cancel_keyboard(),
         parse_mode="Markdown",
     )
@@ -384,7 +384,7 @@ async def receive_benef(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if edit_target == "beneficiary":
         context.user_data["order"]["beneficiary_text"] = text
         context.user_data.pop("edit_target", None)
-        await _screen_send_or_edit(update, context, "Perfecto ? ¿Quieres seguir editando o continuar?", reply_markup=_after_edit_keyboard())
+        await _screen_send_or_edit(update, context, "Perfecto ? Quieres seguir editando o continuar?", reply_markup=_after_edit_keyboard())
         return ASK_EDIT_FIELD
 
     context.user_data["order"]["beneficiary_text"] = text
@@ -392,7 +392,7 @@ async def receive_benef(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await _screen_send_or_edit(
         update,
         context,
-        "Excelente ? Ahora envía el *comprobante de pago* en foto.",
+        "Excelente ? Ahora enva el *comprobante de pago* en foto.",
         reply_markup=_cancel_keyboard(),
         parse_mode="Markdown",
     )
@@ -430,7 +430,7 @@ async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     rr = get_route_rate(rate_version_id=rv.id, origin_country=origin, dest_country=dest)
     if not rr:
-        await _screen_send_or_edit(update, context, "Esa ruta no está disponible ahora mismo. Intenta otra ruta.")
+        await _screen_send_or_edit(update, context, "Esa ruta no est disponible ahora mismo. Intenta otra ruta.")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
@@ -464,22 +464,22 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     text = (update.message.text or "").strip()
 
     if text.lower() == BTN_CANCEL.lower():
-        await _screen_send_or_edit(update, context, "Envío cancelado ?")
+        await _screen_send_or_edit(update, context, "Envo cancelado ?")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
     if text == BTN_EDIT:
-        await _screen_send_or_edit(update, context, "¿Qué quieres editar?", reply_markup=_edit_keyboard())
+        await _screen_send_or_edit(update, context, "Qu quieres editar?", reply_markup=_edit_keyboard())
         return ASK_EDIT
 
     if text != BTN_CONFIRM:
-        await _screen_send_or_edit(update, context, "Selecciona una opción usando los botones ??", reply_markup=_confirm_keyboard())
+        await _screen_send_or_edit(update, context, "Selecciona una opcin usando los botones ??", reply_markup=_confirm_keyboard())
         return ASK_CONFIRM
 
     telegram_id = update.effective_user.id
     user = get_user_by_telegram_id(telegram_id)
     if not user:
-        await _screen_send_or_edit(update, context, "No estás registrado. Escribe /start para registrarte.")
+        await _screen_send_or_edit(update, context, "No ests registrado. Escribe /start para registrarte.")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
@@ -534,7 +534,7 @@ async def receive_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     text = (update.message.text or "").strip()
 
     if text.lower() == BTN_CANCEL.lower():
-        await _screen_send_or_edit(update, context, "Envío cancelado ?")
+        await _screen_send_or_edit(update, context, "Envo cancelado ?")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
@@ -551,7 +551,7 @@ async def receive_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await _screen_send_or_edit(update, context, "Pega nuevamente los datos del beneficiario:", reply_markup=_cancel_keyboard())
         return ASK_BENEF
 
-    await _screen_send_or_edit(update, context, "Selecciona una opción usando los botones ??", reply_markup=_edit_keyboard())
+    await _screen_send_or_edit(update, context, "Selecciona una opcin usando los botones ??", reply_markup=_edit_keyboard())
     return ASK_EDIT
 
 
@@ -559,18 +559,18 @@ async def receive_after_edit(update: Update, context: ContextTypes.DEFAULT_TYPE)
     text = (update.message.text or "").strip()
 
     if text.lower() == BTN_CANCEL.lower():
-        await _screen_send_or_edit(update, context, "Envío cancelado ?")
+        await _screen_send_or_edit(update, context, "Envo cancelado ?")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
     if text == BTN_KEEP_EDITING:
-        await _screen_send_or_edit(update, context, "¿Qué quieres editar?", reply_markup=_edit_keyboard())
+        await _screen_send_or_edit(update, context, "Qu quieres editar?", reply_markup=_edit_keyboard())
         return ASK_EDIT
 
     if text == BTN_CONTINUE:
         return await _show_confirm_screen(update, context)
 
-    await _screen_send_or_edit(update, context, "Selecciona una opción usando los botones ??", reply_markup=_after_edit_keyboard())
+    await _screen_send_or_edit(update, context, "Selecciona una opcin usando los botones ??", reply_markup=_after_edit_keyboard())
     return ASK_EDIT_FIELD
 
 
