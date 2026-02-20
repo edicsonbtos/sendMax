@@ -193,3 +193,56 @@ def close_pools() -> None:
                 logger.warning("Error cerrando pool %s: %s", label, e)
     _pool_ro = None
     _pool_rw = None
+
+# ============================================================
+# Transaccion atomica RW con advisory lock support
+# Agregado por fix de integridad financiera del ledger
+# ============================================================
+
+from typing import Callable, TypeVar
+_T = TypeVar('_T')
+
+
+def run_in_transaction(fn, *, attempts=_MAX_ATTEMPTS):
+    """
+    Ejecuta fn(cursor) dentro de una unica transaccion RW atomica.
+
+    - Advisory locks adquiridos dentro de fn se liberan al COMMIT/ROLLBACK.
+    - Retry con backoff ante errores transitorios de red.
+    - HTTPException se propaga sin loguear como error de DB.
+    """
+    pool = _get_pool_rw()
+    last_exc = None
+
+    for attempt in range(attempts):
+        try:
+            with pool.connection() as conn:
+                try:
+                    with conn.cursor(row_factory=dict_row) as cur:
+                        result = fn(cur)
+                        conn.commit()
+                        return result
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    raise
+        except Exception as e:
+            last_exc = e
+            if attempt < attempts - 1 and _is_transient(e):
+                delay = _backoff_delay(attempt)
+                logger.warning(
+                    "run_in_transaction retry %d/%d in %.1fs: %s",
+                    attempt + 1, attempts, delay, e,
+                )
+                time.sleep(delay)
+                continue
+            if isinstance(e, psycopg.OperationalError):
+                logger.exception(
+                    "run_in_transaction failed (attempt %d): %s",
+                    attempt + 1, e,
+                )
+            raise
+
+    raise last_exc
