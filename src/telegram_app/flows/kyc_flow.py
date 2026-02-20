@@ -118,6 +118,11 @@ async def start_kyc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     tg_id = int(update.effective_user.id)
     touch_contact(tg_id)
 
+    # FIX H-01: capturar sponsor aqui donde context.args existe
+    sponsor_alias = parse_sponsor_alias_from_start_args(context)
+    if sponsor_alias:
+        context.user_data["sponsor_from_link"] = sponsor_alias
+
     ukyc = get_user_kyc_by_telegram_id(tg_id)
     if ukyc:
         if ukyc.kyc_status == "APPROVED":
@@ -166,16 +171,26 @@ async def receive_alias(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     context.user_data["pending_alias"] = alias
 
-    sponsor_alias = parse_sponsor_alias_from_start_args(context)
+    # FIX H-01: leer sponsor desde user_data (guardado en start_kyc)
+    sponsor_alias = context.user_data.pop("sponsor_from_link", None)
     if sponsor_alias:
         sponsor = get_user_by_alias(sponsor_alias)
         sponsor_id = sponsor.id if sponsor else None
 
-        create_user(
-            telegram_user_id=int(update.effective_user.id),
-            alias=alias,
-            sponsor_id=sponsor_id,
-        )
+        # FIX M-01: try/except en create_user
+        try:
+            create_user(
+                telegram_user_id=int(update.effective_user.id),
+                alias=alias,
+                sponsor_id=sponsor_id,
+            )
+        except Exception:
+            logger.exception("create_user failed (deep-link) alias=%s tg=%s", alias, update.effective_user.id)
+            await update.message.reply_text(
+                "❌ No se pudo crear tu cuenta. El alias puede estar tomado.\n"
+                "Intenta con otro alias:"
+            )
+            return ASK_ALIAS
 
         context.user_data.pop("pending_alias", None)
         await update.message.reply_text("✅ Alias creado. Ahora vamos con tu verificación 👇")
@@ -208,11 +223,17 @@ async def receive_sponsor(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return ASK_SPONSOR
         sponsor_id = sponsor.id
 
-    create_user(
-        telegram_user_id=int(update.effective_user.id),
-        alias=alias,
-        sponsor_id=sponsor_id,
-    )
+    # FIX M-01: try/except en create_user
+    try:
+        create_user(
+            telegram_user_id=int(update.effective_user.id),
+            alias=alias,
+            sponsor_id=sponsor_id,
+        )
+    except Exception:
+        logger.exception("create_user failed (sponsor) alias=%s tg=%s", alias, update.effective_user.id)
+        await update.message.reply_text("❌ Error al crear tu cuenta. Escribe /start para reiniciar.")
+        return ConversationHandler.END
 
     context.user_data.pop("pending_alias", None)
     await update.message.reply_text("✅ Alias creado. Ahora vamos con tu verificación 👇")
@@ -252,15 +273,15 @@ async def receive_address(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     v = (update.message.text or "").strip().lower()
-    
+
     if not EMAIL_REGEX.match(v):
         await update.message.reply_text("❌ Email inválido. Debe ser algo como: nombre@gmail.com\n\nIntenta de nuevo:")
         return ASK_EMAIL
-    
+
     if check_email_exists(v):
         await update.message.reply_text("❌ Este email ya está registrado. Usa otro email:")
         return ASK_EMAIL
-    
+
     update_kyc_draft(telegram_user_id=int(update.effective_user.id), email=v)
     await _prompt_for_step(update, ASK_PASSWORD)
     return ASK_PASSWORD
@@ -268,19 +289,19 @@ async def receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 async def receive_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     v = (update.message.text or "").strip()
-    
+
     if len(v) < 8:
         await update.message.reply_text("❌ Contraseña muy corta. Debe tener mínimo 8 caracteres.\n\nIntenta de nuevo:")
         return ASK_PASSWORD
-    
+
     hashed = get_password_hash(v)
     update_kyc_draft(telegram_user_id=int(update.effective_user.id), hashed_password=hashed)
-    
+
     try:
         await update.message.delete()
     except Exception:
         pass
-    
+
     await update.effective_chat.send_message("✅ Contraseña guardada de forma segura.")
     await _prompt_for_step(update, ASK_PAYOUT_COUNTRY)
     return ASK_PAYOUT_COUNTRY
@@ -330,18 +351,45 @@ async def receive_selfie_photo(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ Error. Escribe /start de nuevo.")
         return ConversationHandler.END
 
-    ok = submit_kyc(
-        telegram_user_id=tg_id,
-        full_name=str(ukyc.full_name),
-        phone=str(ukyc.phone),
-        address_short=str(ukyc.address_short),
-        email=str(ukyc.email),
-        hashed_password=str(ukyc.hashed_password),
-        payout_country=str(ukyc.payout_country),
-        payout_method_text=str(ukyc.payout_method_text),
-        kyc_doc_file_id=str(ukyc.kyc_doc_file_id),
-        kyc_selfie_file_id=str(ukyc.kyc_selfie_file_id),
-    )
+    # FIX M-02: validar campos completos antes de submit
+    required_fields = {
+        "full_name": ukyc.full_name,
+        "phone": ukyc.phone,
+        "address_short": ukyc.address_short,
+        "email": ukyc.email,
+        "hashed_password": ukyc.hashed_password,
+        "payout_country": ukyc.payout_country,
+        "payout_method_text": ukyc.payout_method_text,
+        "kyc_doc_file_id": ukyc.kyc_doc_file_id,
+        "kyc_selfie_file_id": ukyc.kyc_selfie_file_id,
+    }
+    missing = [k for k, v in required_fields.items() if not (v or "").strip()]
+    if missing:
+        logger.warning("KYC submit aborted — missing fields %s for tg_id=%s", missing, tg_id)
+        step = _next_kyc_step(ukyc)
+        await update.message.reply_text("⚠️ Faltan datos en tu verificación. Vamos a completarlos:")
+        await _prompt_for_step(update, step)
+        return step
+
+    # FIX M-02: pasar valores directos sin str() + try/except
+    try:
+        ok = submit_kyc(
+            telegram_user_id=tg_id,
+            full_name=ukyc.full_name,
+            phone=ukyc.phone,
+            address_short=ukyc.address_short,
+            email=ukyc.email,
+            hashed_password=ukyc.hashed_password,
+            payout_country=ukyc.payout_country,
+            payout_method_text=ukyc.payout_method_text,
+            kyc_doc_file_id=ukyc.kyc_doc_file_id,
+            kyc_selfie_file_id=ukyc.kyc_selfie_file_id,
+        )
+    except Exception:
+        logger.exception("submit_kyc DB error for tg_id=%s", tg_id)
+        await update.message.reply_text("❌ Error al enviar verificación. Intenta /start de nuevo.")
+        return ConversationHandler.END
+
     if not ok:
         await update.message.reply_text("❌ No pude enviar tu verificación. Intenta /start.")
         return ConversationHandler.END
@@ -349,6 +397,8 @@ async def receive_selfie_photo(update: Update, context: ContextTypes.DEFAULT_TYP
     if settings.KYC_TELEGRAM_CHAT_ID:
         try:
             db_user = get_user_by_telegram_id(tg_id)
+            if not db_user:
+                raise ValueError(f"User not found after submit for tg_id={tg_id}")
             text = (
                 "🆕 Nuevo ingreso (KYC)\n\n"
                 f"User ID: {db_user.id}\n"
@@ -365,8 +415,8 @@ async def receive_selfie_photo(update: Update, context: ContextTypes.DEFAULT_TYP
                 text=text,
                 reply_markup=_kyc_review_kb(int(db_user.id)),
             )
-            await context.bot.send_photo(chat_id=int(settings.KYC_TELEGRAM_CHAT_ID), photo=str(ukyc.kyc_doc_file_id))
-            await context.bot.send_photo(chat_id=int(settings.KYC_TELEGRAM_CHAT_ID), photo=str(ukyc.kyc_selfie_file_id))
+            await context.bot.send_photo(chat_id=int(settings.KYC_TELEGRAM_CHAT_ID), photo=ukyc.kyc_doc_file_id)
+            await context.bot.send_photo(chat_id=int(settings.KYC_TELEGRAM_CHAT_ID), photo=ukyc.kyc_selfie_file_id)
         except Exception as e:
             logger.exception("KYC send failed: %s", e)
 
@@ -376,6 +426,22 @@ async def receive_selfie_photo(update: Update, context: ContextTypes.DEFAULT_TYP
         "⏳ Un administrador revisará tu solicitud pronto."
     )
     return ConversationHandler.END
+
+
+async def _photo_state_text_fallback_doc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
+        "⚠️ Necesito una foto, no texto.\n"
+        "📸 Envía la foto de tu documento de identidad como imagen (no como archivo)."
+    )
+    return ASK_DOC_PHOTO
+
+
+async def _photo_state_text_fallback_selfie(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
+        "⚠️ Necesito una foto, no texto.\n"
+        "🤳 Envía tu selfie sosteniendo el documento como imagen."
+    )
+    return ASK_SELFIE_PHOTO
 
 
 async def cancel_kyc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -396,8 +462,14 @@ def build_kyc_conversation() -> ConversationHandler:
             ASK_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_password)],
             ASK_PAYOUT_COUNTRY: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_payout_country)],
             ASK_PAYOUT_METHOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_payout_method)],
-            ASK_DOC_PHOTO: [MessageHandler(filters.PHOTO, receive_doc_photo)],
-            ASK_SELFIE_PHOTO: [MessageHandler(filters.PHOTO, receive_selfie_photo)],
+            ASK_DOC_PHOTO: [
+                MessageHandler(filters.PHOTO, receive_doc_photo),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, _photo_state_text_fallback_doc),
+            ],
+            ASK_SELFIE_PHOTO: [
+                MessageHandler(filters.PHOTO, receive_selfie_photo),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, _photo_state_text_fallback_selfie),
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel_kyc)],
         allow_reentry=True,
