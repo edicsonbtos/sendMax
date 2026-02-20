@@ -73,21 +73,21 @@ class CreateOperatorRequest(BaseModel):
     password: str
     full_name: str
     alias: Optional[str] = None
-    telegram_user_id: Optional[int] = None
+    telegram_user_id: Optional[int] = None  # Optional ahora
 
     @field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
         v = v.strip().lower()
         if not EMAIL_REGEX.match(v):
-            raise ValueError("Email inválido")
+            raise ValueError("Email invalido")
         return v
 
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
         if len(v) < 8:
-            raise ValueError("Password debe tener mínimo 8 caracteres")
+            raise ValueError("Password debe tener minimo 8 caracteres")
         return v
 
     @field_validator("full_name")
@@ -95,7 +95,7 @@ class CreateOperatorRequest(BaseModel):
     def validate_full_name(cls, v: str) -> str:
         v = v.strip()
         if len(v) < 3:
-            raise ValueError("Nombre debe tener mínimo 3 caracteres")
+            raise ValueError("Nombre debe tener minimo 3 caracteres")
         return v
 
     @field_validator("telegram_user_id")
@@ -104,7 +104,7 @@ class CreateOperatorRequest(BaseModel):
         if v is None:
             return None
         if v <= 0:
-            raise ValueError("telegram_user_id debe ser > 0 si se envía")
+            raise ValueError("telegram_user_id debe ser > 0 si se envia")
         return v
 
 
@@ -247,15 +247,6 @@ def get_user_detail(user_id: int, auth=Depends(require_admin)):
     }
 
 
-def _generate_backoffice_tg_id() -> int:
-    """
-    Genera un telegram_user_id sintético para usuarios creados desde backoffice.
-    DB exige NOT NULL y UNIQUE.
-    Estrategia: entero negativo aleatorio (Telegram IDs reales son positivos).
-    """
-    return -secrets.randbelow(2_000_000_000) - 1  # [-2e9-1 .. -1]
-
-
 @router.post("")
 def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
     existing = fetch_one("SELECT id FROM users WHERE LOWER(email) = LOWER(%s)", (data.email,))
@@ -265,33 +256,34 @@ def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
     hashed = get_password_hash(data.password)
     alias = (data.alias or data.email.split("@")[0]).strip()
 
-    tg_id = data.telegram_user_id or _generate_backoffice_tg_id()
+    # telegram_user_id puede ser None (usuarios sin Telegram)
+    tg_id = data.telegram_user_id
 
-    # Reintentar pocas veces por si se da una colisión (muy improbable)
-    for _ in range(3):
-        try:
-            row = fetch_one(
-                """
-                INSERT INTO users
-                    (telegram_user_id, alias, full_name, email,
-                     hashed_password, role, is_active)
-                VALUES (%s, %s, %s, %s, %s, 'operator', true)
-                RETURNING id, alias, email, role
-                """,
-                (tg_id, alias, data.full_name, data.email, hashed),
-                rw=True,
+    # Si se envia un tg_id, verificar que no exista ya
+    if tg_id is not None:
+        tg_exists = fetch_one(
+            "SELECT id FROM users WHERE telegram_user_id = %s",
+            (tg_id,),
+        )
+        if tg_exists:
+            raise HTTPException(
+                status_code=400,
+                detail="telegram_user_id ya registrado",
             )
-            return {"ok": True, "user": _ser(row)}
-        except Exception as e:
-            # Si fue colisión de telegram_user_id, regenerar y reintentar.
-            # Para cualquier otro error, re-lanzar.
-            msg = str(e)
-            if "users_telegram_user_id_key" in msg or "telegram_user_id" in msg:
-                tg_id = _generate_backoffice_tg_id()
-                continue
-            raise
 
-    raise HTTPException(status_code=500, detail="No se pudo crear usuario (colisión de ID interno)")
+    # Insert directo - NULL es valido en la columna nullable
+    row = fetch_one(
+        """
+        INSERT INTO users
+            (telegram_user_id, alias, full_name, email,
+             hashed_password, role, is_active)
+        VALUES (%s, %s, %s, %s, %s, 'operator', true)
+        RETURNING id, alias, email, role
+        """,
+        (tg_id, alias, data.full_name, data.email, hashed),
+        rw=True,
+    )
+    return {"ok": True, "user": _ser(row)}
 
 
 @router.put("/{user_id}/toggle")
