@@ -44,3 +44,9 @@ backoffice_web/temp_*.py
 
 # Archivos temporales movidos
 _archivados/
+# --- auditoria/backups locales ---
+AUDIT_*.txt
+SUPER_PROMPTS_*.txt
+*.bak
+*.bak2
+*.bak_*
