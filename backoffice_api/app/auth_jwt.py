@@ -7,7 +7,8 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -58,5 +59,5 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
         if email is None:
             raise credentials_exception
         return {"email": email, "role": role}
-    except JWTError:
+    except InvalidTokenError:
         raise credentials_exception

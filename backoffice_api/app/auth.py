@@ -3,7 +3,8 @@
 import os
 from fastapi import Depends, HTTPException, Security, status, Request
 from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -33,7 +34,7 @@ async def verify_api_key(
             user_id = payload.get("user_id")
             if email:
                 return {"email": email, "role": role, "user_id": user_id, "auth": "jwt"}
-        except JWTError:
+        except InvalidTokenError:
             pass
 
     # 2) API KEY (legacy)
