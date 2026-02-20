@@ -1,14 +1,14 @@
 """Router: Metricas y Dashboard (M9 hardened)
 
 Fixes aplicados:
-- FIX1: Guard admin para wallets en company-overview
-- FIX2: total_volume_usd calculado (USD/USDT pagado)
+- FIX1: Guard admin para wallets en company-overview (operadores no ven tesoreria)
+- FIX2: total_volume_usd calculado (USD/USDT pagado, era 0 hardcodeado)
 - FIX3: ORIGEN_CONFIRMADO incluido en metricas y pending
 - FIX4: overview total_orders usa COUNT(*)
 - FIX5: awaiting_paid_proof filtra estados activos
-- FIX6: company-overview elimina query redundante
-- FIX7: p2p-prices aplica LIMIT siempre
-- FIX8: pending_orders consistente entre endpoints
+- FIX6: company-overview elimina query redundante (paid_usd_usdt derivado en Python)
+- FIX7: p2p-prices aplica LIMIT siempre + ge=1 hardening
+- FIX8: pending_orders consistente entre overview y company-overview
 """
 
 from __future__ import annotations
@@ -19,7 +19,10 @@ from ..auth import verify_api_key
 
 router = APIRouter(tags=["metrics"])
 
+# ============================================================
 # Estados de ordenes (fuente unica)
+# ============================================================
+
 ST_CREADA = "CREADA"
 ST_ORIGEN = "ORIGEN_VERIFICANDO"
 ST_ORIGEN_CONFIRMADO = "ORIGEN_CONFIRMADO"
@@ -30,12 +33,18 @@ ST_CANCELADA = "CANCELADA"
 PENDING_STATES = (ST_CREADA, ST_ORIGEN, ST_ORIGEN_CONFIRMADO, ST_PROCESO)
 
 
+# ============================================================
+# Helpers
+# ============================================================
+
 def _is_admin(auth: dict) -> bool:
+    """True si el usuario es admin o usa api_key."""
     role = (auth.get("role") or "").upper()
     return role == "ADMIN" or auth.get("auth") == "api_key"
 
 
 def _op_filter(auth: dict):
+    """Admins ven todo. Operadores solo sus ordenes. Fail-closed si no hay user_id."""
     if _is_admin(auth):
         return "", ()
     user_id = auth.get("user_id")
@@ -43,6 +52,10 @@ def _op_filter(auth: dict):
         raise HTTPException(status_code=403, detail="user_id no encontrado en token")
     return " AND operator_user_id = %s", (user_id,)
 
+
+# ============================================================
+# GET /metrics/overview
+# ============================================================
 
 @router.get("/metrics/overview")
 def metrics_overview(auth: dict = Depends(verify_api_key)):
@@ -52,18 +65,22 @@ def metrics_overview(auth: dict = Depends(verify_api_key)):
         f"""
         SELECT
           COUNT(*) AS total_orders,
+
           COUNT(*) FILTER (WHERE status=%s) AS creadas,
           COUNT(*) FILTER (WHERE status=%s) AS origen_verificando,
           COUNT(*) FILTER (WHERE status=%s) AS origen_confirmado,
           COUNT(*) FILTER (WHERE status=%s) AS en_proceso,
           COUNT(*) FILTER (WHERE status=%s) AS pagadas,
           COUNT(*) FILTER (WHERE status=%s) AS canceladas,
+
           COUNT(*) FILTER (
               WHERE awaiting_paid_proof = true
                 AND status NOT IN (%s, %s)
           ) AS awaiting_paid_proof,
+
           COALESCE(SUM(profit_usdt) FILTER (WHERE status=%s), 0) AS total_profit_usd,
           COALESCE(SUM(profit_real_usdt) FILTER (WHERE status=%s), 0) AS total_profit_real_usd,
+
           COALESCE(SUM(payout_dest) FILTER (
               WHERE status=%s AND dest_currency IN ('USD','USDT')
           ), 0) AS total_volume_usd
@@ -107,11 +124,19 @@ def metrics_overview(auth: dict = Depends(verify_api_key)):
     }
 
 
+# ============================================================
+# GET /metrics/profit_daily
+# ============================================================
+
 @router.get("/metrics/profit_daily")
 def profit_daily(days: int = Query(default=30, le=90), auth: dict = Depends(verify_api_key)):
     from ..audit import get_profit_daily
     return {"days": days, "profit_by_day": get_profit_daily(days)}
 
+
+# ============================================================
+# GET /operators/ranking
+# ============================================================
 
 @router.get("/operators/ranking")
 def operators_ranking(days: int = Query(default=7, le=90), auth: dict = Depends(verify_api_key)):
@@ -119,11 +144,19 @@ def operators_ranking(days: int = Query(default=7, le=90), auth: dict = Depends(
     return {"ok": True, "days": days, "operators": get_operators_ranking(days)}
 
 
+# ============================================================
+# GET /metrics/corridors
+# ============================================================
+
 @router.get("/metrics/corridors")
 def metrics_corridors(days: int = Query(default=30, le=90), auth: dict = Depends(verify_api_key)):
     from ..audit import get_corridors
     return {"ok": True, "days": days, "corridors": get_corridors(days)}
 
+
+# ============================================================
+# GET /metrics/p2p-prices
+# ============================================================
 
 @router.get("/metrics/p2p-prices")
 def metrics_p2p_prices(
@@ -187,11 +220,16 @@ def metrics_p2p_prices(
     return {"ok": True, "count": len(items), "items": items}
 
 
+# ============================================================
+# GET /metrics/company-overview
+# ============================================================
+
 @router.get("/metrics/company-overview")
 def metrics_company_overview(auth: dict = Depends(verify_api_key)):
     wh, prm = _op_filter(auth)
     admin = _is_admin(auth)
 
+    # --- Query 1: conteos + profit (siempre) ---
     row = fetch_one(
         f"""
         SELECT
@@ -208,6 +246,7 @@ def metrics_company_overview(auth: dict = Depends(verify_api_key)):
         prm,
     ) or {}
 
+    # --- Query 2: volumen por dest_currency (siempre) ---
     v_rows = fetch_all(
         f"""
         SELECT dest_currency, COALESCE(SUM(payout_dest),0) AS vol, COUNT(*) AS cnt
@@ -229,12 +268,14 @@ def metrics_company_overview(auth: dict = Depends(verify_api_key)):
         if r.get("dest_currency") is not None
     ]
 
+    # FIX6: derivar paid_usd_usdt en Python (elimina query redundante)
     paid_usd_usdt = sum(
         float(r["vol"] or 0)
         for r in v_rows
         if r.get("dest_currency") in ("USD", "USDT")
     )
 
+    # --- Query 3: wallets SOLO admin (no se ejecuta para operadores) ---
     origin_wallets_data = None
 
     if admin:
