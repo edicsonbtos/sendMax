@@ -1,13 +1,12 @@
-"""Router: Ordenes y Trades"""
+﻿"""Router: Ordenes y Trades"""
 
 import logging
 from fastapi import APIRouter, Depends, Query, HTTPException
-
-logger = logging.getLogger(__name__)
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from ..db import fetch_one, fetch_all
 from ..auth import verify_api_key
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["orders"])
 
 
@@ -18,6 +17,21 @@ def _operator_filter(auth: dict):
     if not user_id:
         raise HTTPException(status_code=403, detail="user_id no encontrado en token")
     return " AND o.operator_user_id = %s", (user_id,)
+
+
+def _verify_order_access(public_id: int, auth: dict):
+    """Verifica que el usuario tiene acceso a esta orden."""
+    if auth.get("role") in ("admin", "ADMIN") or auth.get("auth") == "api_key":
+        return
+    user_id = auth.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=403, detail="user_id no encontrado en token")
+    order = fetch_one(
+        "SELECT public_id FROM orders WHERE public_id = %s AND operator_user_id = %s",
+        (public_id, user_id),
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
 
 
 @router.get("/orders")
@@ -58,6 +72,7 @@ def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depends(ver
 
 @router.get("/orders/{public_id}")
 def order_detail(public_id: int, auth: dict = Depends(verify_api_key)):
+    _verify_order_access(public_id, auth)
     where_extra, params_extra = _operator_filter(auth)
     order = fetch_one(
         f"SELECT * FROM orders o WHERE o.public_id=%s {where_extra} LIMIT 1",
@@ -88,7 +103,8 @@ def order_detail(public_id: int, auth: dict = Depends(verify_api_key)):
 
     trows = fetch_all(
         """
-        SELECT id, side, fiat_currency, fiat_amount, price, usdt_amount, fee_usdt, source, external_ref, note, created_at
+        SELECT id, side, fiat_currency, fiat_amount, price, usdt_amount,
+               fee_usdt, source, external_ref, note, created_at
         FROM order_trades
         WHERE order_public_id=%s
         ORDER BY created_at ASC, id ASC
@@ -139,10 +155,10 @@ def order_detail(public_id: int, auth: dict = Depends(verify_api_key)):
 class OrderTradeIn(BaseModel):
     side: str
     fiat_currency: str
-    fiat_amount: float
-    price: float | None = None
-    usdt_amount: float
-    fee_usdt: float | None = None
+    fiat_amount: float = Field(gt=0)
+    price: float | None = Field(default=None, gt=0)
+    usdt_amount: float = Field(gt=0)
+    fee_usdt: float | None = Field(default=None, ge=0)
     source: str | None = None
     external_ref: str | None = None
     note: str | None = None
@@ -150,10 +166,12 @@ class OrderTradeIn(BaseModel):
 
 @router.get("/orders/{public_id}/trades")
 def get_order_trades(public_id: int, auth: dict = Depends(verify_api_key)):
+    _verify_order_access(public_id, auth)
     rows = fetch_all(
         """
-        SELECT id, order_public_id, side, fiat_currency, fiat_amount, price, usdt_amount, fee_usdt,
-               source, external_ref, note, created_at, created_by_user_id
+        SELECT id, order_public_id, side, fiat_currency, fiat_amount, price,
+               usdt_amount, fee_usdt, source, external_ref, note,
+               created_at, created_by_user_id
         FROM order_trades
         WHERE order_public_id=%s
         ORDER BY created_at ASC, id ASC
@@ -182,43 +200,78 @@ def get_order_trades(public_id: int, auth: dict = Depends(verify_api_key)):
 
 @router.post("/orders/{public_id}/trades")
 def create_order_trade(public_id: int, payload: OrderTradeIn, auth: dict = Depends(verify_api_key)):
+    _verify_order_access(public_id, auth)
+
     side = (payload.side or "").upper().strip()
     if side not in ("BUY", "SELL"):
         raise HTTPException(status_code=400, detail="side must be BUY or SELL")
-    row = fetch_one(
+
+    created_by = auth.get("user_id")
+    if not created_by:
+        raise HTTPException(status_code=403, detail="user_id requerido para crear trade")
+
+    # Verificar que la orden existe
+    order_check = fetch_one(
+        "SELECT public_id, status FROM orders WHERE public_id = %s",
+        (public_id,),
+    )
+    if not order_check:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # CTE atomico: INSERT trade + recalcular profit en UNA transaccion
+    # Resuelve race condition: no hay ventana entre INSERT y UPDATE
+    result = fetch_one(
         """
-        INSERT INTO order_trades (
-          order_public_id, side, fiat_currency, fiat_amount, price, usdt_amount, fee_usdt,
-          source, external_ref, note, created_by_user_id
+        WITH new_trade AS (
+            INSERT INTO order_trades (
+                order_public_id, side, fiat_currency, fiat_amount, price,
+                usdt_amount, fee_usdt, source, external_ref, note,
+                created_by_user_id
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, order_public_id
+        ),
+        agg AS (
+            SELECT
+                COALESCE(SUM(CASE WHEN side='BUY' THEN usdt_amount ELSE 0 END), 0) AS buy_usdt,
+                COALESCE(SUM(CASE WHEN side='SELL' THEN usdt_amount ELSE 0 END), 0) AS sell_usdt,
+                COALESCE(SUM(COALESCE(fee_usdt, 0)), 0) AS fees_usdt
+            FROM order_trades
+            WHERE order_public_id = %s
+        ),
+        upd AS (
+            UPDATE orders
+            SET profit_real_usdt = (SELECT buy_usdt - sell_usdt - fees_usdt FROM agg),
+                updated_at = now()
+            WHERE public_id = %s
+            RETURNING public_id
         )
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL)
-        RETURNING id
+        SELECT
+            (SELECT id FROM new_trade) AS trade_id,
+            (SELECT buy_usdt FROM agg) AS buy_usdt,
+            (SELECT sell_usdt FROM agg) AS sell_usdt,
+            (SELECT fees_usdt FROM agg) AS fees_usdt
         """,
         (
             public_id, side, payload.fiat_currency, payload.fiat_amount,
             payload.price, payload.usdt_amount, payload.fee_usdt,
             payload.source, payload.external_ref, payload.note,
+            created_by,
+            public_id,
+            public_id,
         ),
         rw=True,
     )
-    agg = fetch_one(
-        """
-        SELECT
-          COALESCE(SUM(CASE WHEN side='BUY' THEN usdt_amount ELSE 0 END),0) AS buy_usdt,
-          COALESCE(SUM(CASE WHEN side='SELL' THEN usdt_amount ELSE 0 END),0) AS sell_usdt,
-          COALESCE(SUM(COALESCE(fee_usdt,0)),0) AS fees_usdt
-        FROM order_trades
-        WHERE order_public_id=%s
-        """,
-        (public_id,),
-    )
-    buy_usdt = float(agg["buy_usdt"] or 0) if agg else 0.0
-    sell_usdt = float(agg["sell_usdt"] or 0) if agg else 0.0
-    fees_usdt = float(agg["fees_usdt"] or 0) if agg else 0.0
-    profit_real = (buy_usdt - sell_usdt) - fees_usdt
-    fetch_one(
-        "UPDATE orders SET profit_real_usdt=%s WHERE public_id=%s RETURNING public_id",
-        (profit_real, public_id),
-        rw=True,
-    )
-    return {"ok": True, "id": int(row["id"]) if row else None}
+
+    if not result:
+        raise HTTPException(status_code=500, detail="Error procesando trade")
+
+    return {
+        "ok": True,
+        "id": int(result["trade_id"]),
+        "profit_real_breakdown": {
+            "buy_usdt": float(result["buy_usdt"]),
+            "sell_usdt": float(result["sell_usdt"]),
+            "fees_usdt": float(result["fees_usdt"]),
+        },
+    }
