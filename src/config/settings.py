@@ -1,45 +1,45 @@
 ﻿from __future__ import annotations
 
+import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from src.db.settings_store import get_setting_float
 
+logger = logging.getLogger(__name__)
+
+_COMMISSION_MIN = 0.0
+_COMMISSION_MAX = 50.0
+
+
+def _clamp_commission(val: float, label: str) -> float:
+    if val < _COMMISSION_MIN:
+        logger.error("commission_pct '%s' debajo del minimo: %.4f -> clamped a %.1f", label, val, _COMMISSION_MIN)
+        return _COMMISSION_MIN
+    if val > _COMMISSION_MAX:
+        logger.error("commission_pct '%s' encima del maximo: %.4f -> clamped a %.1f", label, val, _COMMISSION_MAX)
+        return _COMMISSION_MAX
+    return val
+
 
 class Settings(BaseSettings):
-    # Core
     TELEGRAM_BOT_TOKEN: str
     DATABASE_URL: str
     ENV: str = "SANDBOX"
 
-    # Webhook (Railway)
     WEBHOOK_URL: str | None = None
     PORT: int = 8443
 
-    # Soporte / Admin
     SUPPORT_WHATSAPP_NUMBER: str = "584242686434"
 
-    # Legacy (mantener)
     ADMIN_TELEGRAM_USER_ID: int | None = None
-
-    # Nuevo: lista de admins (CSV en .env)
-    # Ej: ADMIN_TELEGRAM_USER_IDS=7518903082,123456789
     ADMIN_TELEGRAM_USER_IDS: str | None = None
 
-    # Alertas (tasas/sistema)
     ALERTS_TELEGRAM_CHAT_ID: int | None = None
-
-    # Nuevo: grupo de pagos (órdenes/pendientes)
     PAYMENTS_TELEGRAM_CHAT_ID: int | None = None
-
-    # Nuevo: grupo KYC (solicitudes de ingreso)
     KYC_TELEGRAM_CHAT_ID: int | None = None
-
-    # Nuevo: grupo verificación ORIGEN (comprobante origen)
     ORIGIN_REVIEW_TELEGRAM_CHAT_ID: int | None = None
 
-    # Debug de flujos (0/1)
     FLOW_DEBUG: int = 0
 
-    # Métodos de pago
     PAYMENT_METHODS_VENEZUELA: str | None = None
     PAYMENT_METHODS_USA: str | None = None
     PAYMENT_METHODS_CHILE: str | None = None
@@ -48,7 +48,6 @@ class Settings(BaseSettings):
     PAYMENT_METHODS_MEXICO: str | None = None
     PAYMENT_METHODS_ARGENTINA: str | None = None
 
-    # Comisiones
     COMMISSION_VENEZUELA: float = 6.0
     COMMISSION_DEFAULT: float = 10.0
     COMMISSION_USA_TO_VENEZUELA: float = 10.0
@@ -69,8 +68,13 @@ class Settings(BaseSettings):
                     continue
                 try:
                     ids.add(int(part))
-                except Exception:
-                    continue
+                except (ValueError, TypeError):
+                    logger.error(
+                        "ADMIN_TELEGRAM_USER_IDS valor invalido: '%s' (ignorado)", part
+                    )
+
+        if not ids:
+            logger.warning("No hay admin IDs configurados (funciones admin deshabilitadas)")
 
         return ids
 
@@ -80,41 +84,29 @@ class Settings(BaseSettings):
         return int(telegram_user_id) in self.admin_user_ids
 
     def payment_methods_text(self, country: str) -> str | None:
-        key = f"PAYMENT_METHODS_{country}"
+        key = "PAYMENT_METHODS_%s" % country
         raw = getattr(self, key, None)
         if not raw:
             return None
         return raw.replace("\\n", "\n")
 
     def commission_pct(self, origin: str, dest: str) -> float:
-        """
-        Comisión (%):
-        1) intenta leer desde tabla settings (backoffice):
-           - margin_route_usa_venez.percent
-           - margin_dest_venez.percent
-           - margin_default.percent
-        2) fallback a .env (COMMISSION_*)
-        """
         origin_u = (origin or "").upper()
         dest_u = (dest or "").upper()
 
-        # Defaults desde .env
         default_margin = float(self.COMMISSION_DEFAULT)
         vene_margin = float(self.COMMISSION_VENEZUELA)
         usa_ve_margin = float(self.COMMISSION_USA_TO_VENEZUELA)
 
-        # Overrides desde DB (settings)
         default_margin = get_setting_float("margin_default", "percent", default_margin)
         vene_margin = get_setting_float("margin_dest_venez", "percent", vene_margin)
         usa_ve_margin = get_setting_float("margin_route_usa_venez", "percent", usa_ve_margin)
 
         if dest_u == "VENEZUELA" and origin_u == "USA":
-            return float(usa_ve_margin)
+            return _clamp_commission(float(usa_ve_margin), "usa->venez")
         if dest_u == "VENEZUELA":
-            return float(vene_margin)
-        return float(default_margin)
+            return _clamp_commission(float(vene_margin), "->venez")
+        return _clamp_commission(float(default_margin), "default")
 
 
 settings = Settings()
-
-
