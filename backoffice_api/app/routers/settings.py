@@ -1,4 +1,4 @@
-﻿"""Router: Admin Settings - Modulo 8 hardened (10x)"""
+"""Router: Admin Settings - Modulo 8 hardened (10x)"""
 
 from __future__ import annotations
 
@@ -172,7 +172,7 @@ def put_admin_settings(
     user_agent = request.headers.get("user-agent")
 
     fetch_one(
-        \"\"\"
+        """
         INSERT INTO settings(key, value_json, updated_at, updated_by)
         VALUES (%s, %s::jsonb, now(), %s)
         ON CONFLICT (key) DO UPDATE
@@ -180,7 +180,7 @@ def put_admin_settings(
               updated_at = now(),
               updated_by = EXCLUDED.updated_by
         RETURNING key
-        \"\"\",
+        """,
         (k, json.dumps(payload.value_json), updated_by),
         rw=True,
     )
@@ -189,14 +189,14 @@ def put_admin_settings(
     after_json = _normalize_json(after["value_json"]) if after else None
 
     fetch_one(
-        \"\"\"
+        """
         INSERT INTO audit_log(
             actor_user_id, action, entity_type, entity_id,
             before_json, after_json, ip, user_agent
         )
         VALUES (NULL, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
         RETURNING id
-        \"\"\",
+        """,
         (
             "SETTINGS_UPDATED",
             "settings",
@@ -315,7 +315,7 @@ def put_payment_methods(
     user_agent = request.headers.get("user-agent")
 
     fetch_one(
-        \"\"\"
+        """
         INSERT INTO settings(key, value_json, updated_at, updated_by)
         VALUES (%s, %s::jsonb, now(), %s)
         ON CONFLICT (key) DO UPDATE
@@ -323,20 +323,20 @@ def put_payment_methods(
               updated_at = now(),
               updated_by = EXCLUDED.updated_by
         RETURNING key
-        \"\"\",
+        """,
         ("payment_methods", json.dumps(data), updated_by),
         rw=True,
     )
 
     fetch_one(
-        \"\"\"
+        """
         INSERT INTO audit_log(
             actor_user_id, action, entity_type, entity_id,
             before_json, after_json, ip, user_agent
         )
         VALUES (NULL, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
         RETURNING id
-        \"\"\",
+        """,
         (
             "PAYMENT_METHODS_UPDATED",
             "settings",

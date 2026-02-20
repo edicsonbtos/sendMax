@@ -1,4 +1,4 @@
-﻿"""Router: Alertas de ordenes atascadas - Modulo 8 hardened (10x)"""
+"""Router: Alertas de ordenes atascadas - Modulo 8 hardened (10x)"""
 
 from __future__ import annotations
 
@@ -29,28 +29,28 @@ def alerts_stuck_30m(
     cutoff = now - timedelta(minutes=minutes)
 
     total_origin = fetch_one(
-        \"\"\"
+        """
         SELECT COUNT(*) AS cnt
         FROM orders
         WHERE status = 'ORIGEN_VERIFICANDO'
           AND COALESCE(updated_at, created_at) < %s
-        \"\"\",
+        """,
         (cutoff,),
     )
 
     total_pay = fetch_one(
-        \"\"\"
+        """
         SELECT COUNT(*) AS cnt
         FROM orders
         WHERE awaiting_paid_proof = true
           AND awaiting_paid_proof_at IS NOT NULL
           AND awaiting_paid_proof_at < %s
-        \"\"\",
+        """,
         (cutoff,),
     )
 
     origin_rows = fetch_all(
-        \"\"\"
+        """
         SELECT public_id, origin_country, dest_country, status,
                created_at, updated_at
         FROM orders
@@ -58,12 +58,12 @@ def alerts_stuck_30m(
           AND COALESCE(updated_at, created_at) < %s
         ORDER BY COALESCE(updated_at, created_at) ASC
         LIMIT %s
-        \"\"\",
+        """,
         (cutoff, limit),
     )
 
     pay_rows = fetch_all(
-        \"\"\"
+        """
         SELECT public_id, origin_country, dest_country, status,
                awaiting_paid_proof_at, updated_at
         FROM orders
@@ -72,7 +72,7 @@ def alerts_stuck_30m(
           AND awaiting_paid_proof_at < %s
         ORDER BY awaiting_paid_proof_at ASC
         LIMIT %s
-        \"\"\",
+        """,
         (cutoff, limit),
     )
 
