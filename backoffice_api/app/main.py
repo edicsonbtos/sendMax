@@ -1,4 +1,4 @@
-""" Sendmax Backoffice API Version con JWT Auth + Roles """
+﻿""" Sendmax Backoffice API Version con JWT Auth + Roles """
 
 import os
 from fastapi import FastAPI
@@ -32,8 +32,3 @@ app.include_router(origin_wallets.router)
 app.include_router(settings.router)
 app.include_router(alerts.router)
 app.include_router(corrections.router)
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
