@@ -1,5 +1,5 @@
-"""
-Handler: Ver m·s tasas (paginaciÛn y filtros por callback inline)
+Ôªø"""
+Handler: Ver m√°s tasas (paginaci√≥n y filtros por callback inline)
 Con manejo robusto de errores en todos los callbacks.
 """
 
@@ -53,7 +53,7 @@ def _sort_routes_dest_first(routes: List[Tuple[str, str]]) -> List[Tuple[str, st
 
 
 async def _safe_edit(q, text: str, reply_markup=None):
-    """Edita mensaje con protecciÛn contra 'message is not modified'"""
+    """Edita mensaje con protecci√≥n contra 'message is not modified'"""
     try:
         await q.message.edit_text(
             text=text,
@@ -74,26 +74,19 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await q.answer()
         data = q.data or ""
 
-        # 1. VOLVER AL MEN⁄ PRINCIPAL
+        # 1. VOLVER AL MEN√ö PRINCIPAL
         if data == "rates_more:home":
-            from src.telegram_app.handlers.menu import main_menu_keyboard, _is_admin
-            try:
-                await q.message.delete()
-            except Exception:
-                pass
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="Elige una opciÛn del men˙ ??",
-                reply_markup=main_menu_keyboard(is_admin=_is_admin(update)),
-                parse_mode="Markdown",
-            )
+            from src.telegram_app.handlers.menu import show_home
+            await q.message.delete()
+            update.message = q.message
+            await show_home(update, context)
             return
 
         # 2. VOLVER A TASAS INICIALES
         if data == "rates_more:back":
             rv = get_latest_active_rate_version()
             if not rv:
-                await _safe_edit(q, "A˙n no hay tasas.")
+                await _safe_edit(q, "A√∫n no hay tasas.")
                 return
 
             rates = list_route_rates_for_version(rate_version_id=rv.id, routes=POPULAR_ROUTES)
@@ -106,16 +99,16 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     continue
                 blocks.append(f"{route_label(o, d)}\nTasa: {format_rate_no_noise(rr.rate_client)}")
 
-            text = "?? *Tasas de hoy* (Rutas populares)\n\n" + "\n\n".join(blocks)
+            text = "üìà *Tasas de hoy* (Rutas populares)\n\n" + "\n\n".join(blocks)
             await _safe_edit(q, text, rates_main_buttons())
             return
 
-        # 3. SELECCIONAR PAÕS
+        # 3. SELECCIONAR PA√çS
         if data == "rates_more:by_country":
-            await _safe_edit(q, "?? *Selecciona el paÌs de ORIGEN:*", rates_country_select_buttons(AVAILABLE_COUNTRIES))
+            await _safe_edit(q, "üåé *Selecciona el pa√≠s de ORIGEN:*", rates_country_select_buttons(AVAILABLE_COUNTRIES))
             return
 
-        # 4. MOSTRAR TASAS POR PAÕS
+        # 4. MOSTRAR TASAS POR PA√çS
         if data.startswith("rates_more:origin="):
             origin = _parse_origin(data)
             rv = get_latest_active_rate_version()
@@ -127,7 +120,7 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             if not rates:
                 await _safe_edit(
                     q,
-                    f"? No encontrÈ tasas para *{origin}*.\n\nIntenta con otro paÌs.",
+                    f"‚ùå No encontr√© tasas para *{origin}*.\n\nIntenta con otro pa√≠s.",
                     rates_country_select_buttons(AVAILABLE_COUNTRIES)
                 )
                 return
@@ -136,16 +129,16 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             for rr in rates:
                 blocks.append(f"{route_label(rr.origin_country, rr.dest_country)}\nTasa: {format_rate_no_noise(rr.rate_client)}")
 
-            text = f"?? *Tasas desde {origin}*\n\n" + "\n\n".join(blocks)
+            text = f"üìà *Tasas desde {origin}*\n\n" + "\n\n".join(blocks)
             await _safe_edit(q, text, rates_country_result_buttons())
             return
 
-        # 5. PAGINACI”N
+        # 5. PAGINACI√ìN
         if data.startswith("rates_more:page="):
             page = _parse_page(data)
             rv = get_latest_active_rate_version()
             if not rv:
-                await _safe_edit(q, "A˙n no hay tasas.")
+                await _safe_edit(q, "A√∫n no hay tasas.")
                 return
 
             all_pairs = list_all_route_pairs_for_version(rate_version_id=rv.id)
@@ -170,13 +163,13 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     continue
                 blocks.append(f"{route_label(o, d)}\nTasa: {format_rate_no_noise(rr.rate_client)}")
 
-            text = f"?? *Todas las tasas* (P·gina {page})\n\n" + ("\n\n".join(blocks) if blocks else "No hay rutas.")
+            text = f"üìã *Todas las tasas* (P√°gina {page})\n\n" + ("\n\n".join(blocks) if blocks else "No hay rutas.")
             await _safe_edit(q, text, rates_pagination_buttons(page=page, has_prev=has_prev, has_next=has_next))
             return
 
     except Exception as e:
         logger.error(f"Error en rates callback: {e}", exc_info=True)
         try:
-            await q.answer("?? Error temporal. Intenta de nuevo.", show_alert=True)
+            await q.answer("‚ö†Ô∏è Error temporal. Intenta de nuevo.", show_alert=True)
         except Exception:
             pass

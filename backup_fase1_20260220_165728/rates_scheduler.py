@@ -1,7 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import logging
-import asyncio
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -22,7 +21,7 @@ class RatesScheduler:
     Scheduler real de tasas (con anti-spam y alertas a grupo):
 
     Alert destination:
-    - Si ALERTS_TELEGRAM_CHAT_ID existe -> manda ah� (grupo Sendmax Alerts)
+    - Si ALERTS_TELEGRAM_CHAT_ID existe -> manda ahí (grupo Sendmax Alerts)
     - Si no -> manda al ADMIN_TELEGRAM_USER_ID
 
     Jobs:
@@ -73,34 +72,34 @@ class RatesScheduler:
 
     async def run_9am_baseline(self) -> None:
         try:
-            res = await asyncio.to_thread(generate_rates_full, kind="auto_9am", reason=f"Baseline 9am VET {self._now_vet_label()}")
-            msg = f"? Tasas 9am generadas. Versi�n #{res.version_id}\nPa�ses OK: {len(res.countries_ok)} | Fallaron: {len(res.countries_failed)}"
+            res = generate_rates_full(kind="auto_9am", reason=f"Baseline 9am VET {self._now_vet_label()}")
+            msg = f"✅ Tasas 9am generadas. Versión #{res.version_id}\nPaíses OK: {len(res.countries_ok)} | Fallaron: {len(res.countries_failed)}"
             logger.info(msg)
             await self._notify_admin(msg, key="baseline_ok")
 
             if res.any_unverified:
                 await self._notify_admin(
-                    "?? Aviso: en la versi�n 9am se us� al menos un anuncio NO verificado (fallback).",
+                    "⚠️ Aviso: en la versión 9am se usó al menos un anuncio NO verificado (fallback).",
                     key="baseline_unverified",
                 )
 
             if res.countries_failed:
                 await self._notify_admin(
-                    f"?? Aviso: pa�ses sin datos en 9am: {', '.join(res.countries_failed)}",
+                    f"⚠️ Aviso: países sin datos en 9am: {', '.join(res.countries_failed)}",
                     key="baseline_failed",
                 )
 
         except Exception as e:
             logger.exception("Error en baseline 9am: %s", e)
-            await self._notify_admin(f"?? Error generando baseline 9am: {e}", key="baseline_error")
+            await self._notify_admin(f"⚠️ Error generando baseline 9am: {e}", key="baseline_error")
 
     async def run_30m_check(self) -> None:
-        baseline_version_id = await asyncio.to_thread(latest_9am_version_id_today)
+        baseline_version_id = latest_9am_version_id_today()
         if not baseline_version_id:
             logger.info("[rates] 30m: sin baseline auto_9am, skip")
             return
 
-        baseline = await asyncio.to_thread(load_country_prices_for_version, baseline_version_id)
+        baseline = load_country_prices_for_version(baseline_version_id)
         if not baseline:
             logger.info("[rates] 30m: baseline sin country prices, skip")
             return
@@ -157,13 +156,13 @@ class RatesScheduler:
 
             if failed_now:
                 await self._notify_admin(
-                    f"?? Tasas 30m: pa�ses con error Binance: {', '.join(failed_now)}",
+                    f"⚠️ Tasas 30m: países con error Binance: {', '.join(failed_now)}",
                     key=f"30m_failed_{','.join(sorted(failed_now))}",
                 )
 
             if any_unverified_now:
                 await self._notify_admin(
-                    "?? Tasas 30m: se detect� al menos un anuncio NO verificado (fallback) en consulta actual.",
+                    "⚠️ Tasas 30m: se detectó al menos un anuncio NO verificado (fallback) en consulta actual.",
                     key="30m_unverified",
                 )
 
@@ -172,11 +171,11 @@ class RatesScheduler:
                 return
 
             reason = " | ".join(triggers[:6])
-            await self._notify_admin(f"?? Disparador tasas 30m: {reason}\nGenerando nueva versi�n�", key="30m_trigger")
+            await self._notify_admin(f"📈 Disparador tasas 30m: {reason}\nGenerando nueva versión…", key="30m_trigger")
 
-            res = await asyncio.to_thread(generate_rates_full, kind="intraday_recalc", reason=f"30m trigger: {reason}")
+            res = generate_rates_full(kind="intraday_recalc", reason=f"30m trigger: {reason}")
             await self._notify_admin(
-                f"? Nueva versi�n generada #{res.version_id} (intraday). OK={len(res.countries_ok)} FAIL={len(res.countries_failed)}",
+                f"✅ Nueva versión generada #{res.version_id} (intraday). OK={len(res.countries_ok)} FAIL={len(res.countries_failed)}",
                 key="30m_generated",
             )
 

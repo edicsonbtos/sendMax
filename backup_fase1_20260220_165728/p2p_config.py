@@ -28,8 +28,8 @@ COUNTRIES: dict[str, CountryP2PConfig] = {
     "USA": CountryP2PConfig(
         country="USA",
         fiat="USD",
-        buy_methods=["Zelle", "BankofAmerica", "AchTransfer"],
-        sell_methods=["Zelle", "BankofAmerica", "AchTransfer"],
+        buy_methods=["Zelle"],
+        sell_methods=["Zelle"],
         trans_amount=130,
     ),
     "CHILE": CountryP2PConfig(

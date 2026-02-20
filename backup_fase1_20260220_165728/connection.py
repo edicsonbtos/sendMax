@@ -79,7 +79,6 @@ def get_pool() -> ConnectionPool:
             max_lifetime=300,      # 5 min
             max_idle=120,          # 2 min
             reconnect_timeout=5,
-            check=ConnectionPool.check_connection,
         )
     return _pool
 
