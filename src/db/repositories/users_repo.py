@@ -1,20 +1,29 @@
 ﻿"""
 Repositorio de usuarios.
 
-Aquí concentramos todas las consultas SQL sobre la tabla users.
+Aqui concentramos todas las consultas SQL sobre la tabla users.
+
+Changelog:
+- telegram_user_id ahora es Optional[int] (nullable en DB).
+  Usuarios creados desde backoffice no tienen Telegram.
+  IDs negativos sinteticos eliminados; se usa NULL.
 """
 
 from __future__ import annotations
-from src.db.connection import get_conn
 
 from dataclasses import dataclass
 
+from src.db.connection import get_conn
 
+
+# --------------------------------------------
+# Dataclasses
+# --------------------------------------------
 
 @dataclass(frozen=True)
 class User:
     id: int
-    telegram_user_id: int
+    telegram_user_id: int | None
     alias: str
     role: str
     is_active: bool
@@ -24,7 +33,7 @@ class User:
 @dataclass(frozen=True)
 class UserKYC:
     id: int
-    telegram_user_id: int
+    telegram_user_id: int | None
     alias: str
     role: str
     is_active: bool
@@ -48,7 +57,14 @@ class UserKYC:
     hashed_password: str | None
 
 
+# --------------------------------------------
+# Queries de lectura
+# --------------------------------------------
+
 def get_user_by_telegram_id(telegram_user_id: int) -> User | None:
+    """Busca por telegram_user_id real (siempre >0)."""
+    if telegram_user_id is None or telegram_user_id <= 0:
+        return None
     sql = """
         SELECT id, telegram_user_id, alias, role, is_active, sponsor_id
         FROM users
@@ -76,44 +92,36 @@ def get_user_by_alias(alias: str) -> User | None:
             return User(*row) if row else None
 
 
+def get_user_by_id(user_id: int) -> User | None:
+    """Busca usuario por ID interno (PK). Util para backoffice."""
+    sql = """
+        SELECT id, telegram_user_id, alias, role, is_active, sponsor_id
+        FROM users
+        WHERE id = %s
+        LIMIT 1;
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (user_id,))
+            row = cur.fetchone()
+            return User(*row) if row else None
+
+
 def get_telegram_id_by_user_id(user_id: int) -> int | None:
+    """Retorna telegram_user_id o None si el usuario no tiene Telegram."""
     sql = "SELECT telegram_user_id FROM users WHERE id = %s LIMIT 1;"
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (user_id,))
             row = cur.fetchone()
-            return int(row[0]) if row else None
-
-
-def create_user(
-    telegram_user_id: int,
-    alias: str,
-    sponsor_id: int | None,
-    role: str = "operator",
-) -> User:
-    sql = """
-        INSERT INTO users (telegram_user_id, alias, sponsor_id, role)
-        VALUES (%s, %s, %s, %s)
-        RETURNING id, telegram_user_id, alias, role, is_active, sponsor_id;
-    """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (telegram_user_id, alias, sponsor_id, role))
-            row = cur.fetchone()
-            conn.commit()
-            return User(*row)
-
-
-def check_email_exists(email: str) -> bool:
-    """Verifica si un email ya esta registrado (case-insensitive)."""
-    sql = "SELECT 1 FROM users WHERE LOWER(email) = LOWER(%s) LIMIT 1;"
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (email,))
-            return cur.fetchone() is not None
+            if row is None:
+                return None
+            return int(row[0]) if row[0] is not None else None
 
 
 def get_user_kyc_by_telegram_id(telegram_user_id: int) -> UserKYC | None:
+    if telegram_user_id is None or telegram_user_id <= 0:
+        return None
     sql = """
         SELECT
             id, telegram_user_id, alias, role, is_active, sponsor_id,
@@ -133,6 +141,68 @@ def get_user_kyc_by_telegram_id(telegram_user_id: int) -> UserKYC | None:
             return UserKYC(*row) if row else None
 
 
+def get_user_kyc_by_id(user_id: int) -> UserKYC | None:
+    """Busca KYC por ID interno. Para backoffice sin telegram_user_id."""
+    sql = """
+        SELECT
+            id, telegram_user_id, alias, role, is_active, sponsor_id,
+            full_name, phone, address_short,
+            payout_country, payout_method_text,
+            kyc_doc_file_id, kyc_selfie_file_id,
+            kyc_status, kyc_submitted_at, kyc_reviewed_at, kyc_review_reason,
+            email, hashed_password
+        FROM users
+        WHERE id = %s
+        LIMIT 1;
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (user_id,))
+            row = cur.fetchone()
+            return UserKYC(*row) if row else None
+
+
+# --------------------------------------------
+# Creacion
+# --------------------------------------------
+
+def create_user(
+    telegram_user_id: int | None,
+    alias: str,
+    sponsor_id: int | None,
+    role: str = "operator",
+) -> User:
+    """Crea usuario. telegram_user_id=None para usuarios de backoffice."""
+    sql = """
+        INSERT INTO users (telegram_user_id, alias, sponsor_id, role)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id, telegram_user_id, alias, role, is_active, sponsor_id;
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (telegram_user_id, alias, sponsor_id, role))
+            row = cur.fetchone()
+            conn.commit()
+            return User(*row)
+
+
+# --------------------------------------------
+# Email check
+# --------------------------------------------
+
+def check_email_exists(email: str) -> bool:
+    """Verifica si un email ya esta registrado (case-insensitive)."""
+    sql = "SELECT 1 FROM users WHERE LOWER(email) = LOWER(%s) LIMIT 1;"
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (email,))
+            return cur.fetchone() is not None
+
+
+# --------------------------------------------
+# KYC
+# --------------------------------------------
+
 def submit_kyc(
     *,
     telegram_user_id: int,
@@ -147,7 +217,8 @@ def submit_kyc(
     hashed_password: str,
 ) -> bool:
     """
-    Guarda KYC completo y deja status=SUBMITTED. (Aprobación es manual por admin)
+    Guarda KYC completo y deja status=SUBMITTED.
+    Solo se llama desde Telegram, telegram_user_id siempre es int real.
     """
     sql = """
         UPDATE users
@@ -209,6 +280,10 @@ def set_kyc_status(
             return ok
 
 
+# --------------------------------------------
+# Payout
+# --------------------------------------------
+
 def set_payout_method(
     *,
     user_id: int,
@@ -241,6 +316,10 @@ def get_payout_method(user_id: int) -> tuple[str | None, str | None]:
             return (row[0], row[1])
 
 
+# --------------------------------------------
+# KYC draft (progreso parcial desde Telegram)
+# --------------------------------------------
+
 def update_kyc_draft(
     *,
     telegram_user_id: int,
@@ -256,10 +335,13 @@ def update_kyc_draft(
 ) -> bool:
     """
     Guarda progreso parcial del KYC sin marcar SUBMITTED.
-    Solo actualiza campos que vengan != None.
+    Solo se llama desde Telegram, telegram_user_id es siempre int real.
     """
+    if telegram_user_id is None:
+        raise ValueError("update_kyc_draft requiere telegram_user_id real")
+
     fields = []
-    params = []
+    params: list = []
 
     def add(col: str, val):
         fields.append(f"{col}=%s")
