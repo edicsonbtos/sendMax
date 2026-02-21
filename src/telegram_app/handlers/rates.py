@@ -21,6 +21,7 @@ from src.telegram_app.ui.routes_popular import (
 
 async def show_rates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Muestra tasas populares con botones inline (ASYNC)"""
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     # Limpiar cualquier modo anterior
     context.user_data.pop("rates_mode", None)
     context.user_data.pop("rates_message_id", None)

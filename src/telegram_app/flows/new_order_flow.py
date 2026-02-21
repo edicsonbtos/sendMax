@@ -278,6 +278,7 @@ async def _notify_admin_new_order(context: ContextTypes.DEFAULT_TYPE, order) -> 
 
 
 async def entry_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     # Lock: evita doble inicio por spam
     if context.user_data.get("order_mode"):
         await update.message.reply_text("⏳ Ya tienes un envío en curso. Si deseas salir, escribe Cancelar.")
@@ -381,6 +382,15 @@ async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def receive_benef(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message and (update.message.photo or update.message.document):
+        await _screen_send_or_edit(
+            update,
+            context,
+            "⚠️ Recibí una imagen, pero primero necesito que escribas los datos solicitados en texto. Por favor, ingrésalos para continuar.",
+            reply_markup=_cancel_keyboard(),
+        )
+        return ASK_BENEF
+
     text = (update.message.text or "").strip()
 
     if text.lower() == BTN_CANCEL.lower():
@@ -414,33 +424,38 @@ async def receive_benef(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Caso: Llega texto en lugar de foto
+    if update.message and update.message.text:
+        if update.message.text.lower() == BTN_CANCEL.lower():
+            await _screen_send_or_edit(update, context, "Listo, cancelado ✅")
+            _reset_flow_memory(context)
+            return ConversationHandler.END
+
+        await _screen_send_or_edit(
+            update,
+            context,
+            "⚠️ Por favor, adjunta la foto o captura del comprobante de pago para poder finalizar tu orden.",
+            reply_markup=_cancel_keyboard(),
+        )
+        return ASK_PROOF
+
     # Acepta comprobante como FOTO o como DOCUMENTO (imagen/archivo)
     file_id = None
     if update.message and update.message.photo:
         file_id = update.message.photo[-1].file_id
     elif update.message and update.message.document:
         file_id = update.message.document.file_id
+
     if not file_id:
-        await _screen_send_or_edit(update, context, "Envía el comprobante como foto o archivo, por favor.", reply_markup=_cancel_keyboard())
-        return ASK_PROOF
-
-    if update.message and update.message.text and update.message.text.lower() == BTN_CANCEL.lower():
-        await _screen_send_or_edit(update, context, "Listo, cancelado ✅")
-        _reset_flow_memory(context)
-        return ConversationHandler.END
-
-    if not update.message.photo:
         await _screen_send_or_edit(
             update,
             context,
-            "Necesito una *foto* del comprobante. Intenta de nuevo.",
-            reply_markup=_cancel_keyboard(),
-            parse_mode="Markdown",
+            "⚠️ Por favor, adjunta la foto o captura del comprobante de pago para poder finalizar tu orden.",
+            reply_markup=_cancel_keyboard()
         )
         return ASK_PROOF
-
-    file_id = update.message.photo[-1].file_id
     context.user_data["order"]["proof_file_id"] = file_id
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
         rv = await asyncio.wait_for(get_latest_active_rate_version(), timeout=5.0)
@@ -523,6 +538,7 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     commission_pct = Decimal(str(settings.commission_pct(origin, dest)))
 
     payout_dest = (amount_origin * rate_client)
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
         order = await asyncio.wait_for(
@@ -615,10 +631,12 @@ def build_new_order_conversation() -> ConversationHandler:
             ASK_ORIGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_origin)],
             ASK_DEST: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_dest)],
             ASK_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_amount)],
-            ASK_BENEF: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_benef)],
+            ASK_BENEF: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_benef),
+                MessageHandler(filters.PHOTO | filters.Document.ALL, receive_benef),
+            ],
             ASK_PROOF: [
-                MessageHandler(filters.PHOTO, receive_proof),
-                MessageHandler(filters.Document.ALL, receive_proof),
+                MessageHandler(filters.PHOTO | filters.Document.ALL, receive_proof),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_proof),
             ],
             ASK_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_confirm)],
