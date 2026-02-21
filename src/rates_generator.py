@@ -9,6 +9,7 @@ import asyncio
 from src.integrations.binance_p2p import BinanceP2PClient
 from src.integrations.p2p_config import COUNTRIES
 from src.db.repositories import rates_repo
+from src.db.settings_store import get_setting_float
 from src.config.settings import settings
 
 
@@ -20,12 +21,11 @@ class GenerateResult:
     any_unverified: bool
 
 
-def _pick_price_with_method_fallback(client: BinanceP2PClient, *, fiat: str, trade_type: str, methods: list[str], trans_amount: float):
+async def _pick_price_with_method_fallback(client: BinanceP2PClient, *, fiat: str, trade_type: str, methods: list[str], trans_amount: float):
     last_err = None
     for m in methods:
         try:
-            # BinanceP2PClient es sincrónico (httpx.Client)
-            q = client.fetch_first_price(
+            q = await client.fetch_first_price(
                 fiat=fiat,
                 trade_type=trade_type,
                 pay_methods=[m],
@@ -40,47 +40,45 @@ def _pick_price_with_method_fallback(client: BinanceP2PClient, *, fiat: str, tra
 
 async def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
     """
-    Genera una version completa de tasas (ASÍNCRONO).
+    Genera una version completa de tasas (STRICTLY ASYNC).
     """
     client = BinanceP2PClient()
     try:
         now = datetime.now(timezone.utc)
 
+        # Pre-fetch configuración desde DB (una sola vez)
+        m_default = await get_setting_float("margin_default", "percent", settings.COMMISSION_DEFAULT)
+        m_venez = await get_setting_float("margin_dest_venez", "percent", settings.COMMISSION_VENEZUELA)
+        m_usa_venez = await get_setting_float("margin_route_usa_venez", "percent", settings.COMMISSION_USA_TO_VENEZUELA)
+
         country_prices: dict[str, dict] = {}
         failed: list[str] = []
         any_unverified = False
 
-        # Binance I/O es síncrono, lo corremos en hilos para no bloquear el loop
-        def fetch_all_prices():
-            results = {}
-            local_failed = []
-            local_any_unverified = False
-            for code, cfg in COUNTRIES.items():
-                try:
-                    buy_price, buy_verified, buy_method = _pick_price_with_method_fallback(
-                        client, fiat=cfg.fiat, trade_type="BUY", methods=cfg.buy_methods, trans_amount=cfg.trans_amount
-                    )
-                    sell_price, sell_verified, sell_method = _pick_price_with_method_fallback(
-                        client, fiat=cfg.fiat, trade_type="SELL", methods=cfg.sell_methods, trans_amount=cfg.trans_amount
-                    )
+        # Binance I/O ahora es asíncrono
+        for code, cfg in COUNTRIES.items():
+            try:
+                buy_price, buy_verified, buy_method = await _pick_price_with_method_fallback(
+                    client, fiat=cfg.fiat, trade_type="BUY", methods=cfg.buy_methods, trans_amount=cfg.trans_amount
+                )
+                sell_price, sell_verified, sell_method = await _pick_price_with_method_fallback(
+                    client, fiat=cfg.fiat, trade_type="SELL", methods=cfg.sell_methods, trans_amount=cfg.trans_amount
+                )
 
-                    is_verified = bool(buy_verified and sell_verified)
-                    if not is_verified:
-                        local_any_unverified = True
+                is_verified = bool(buy_verified and sell_verified)
+                if not is_verified:
+                    any_unverified = True
 
-                    results[code] = {
-                        "fiat": cfg.fiat,
-                        "buy": buy_price,
-                        "sell": sell_price,
-                        "is_verified": is_verified,
-                        "methods_used": f"BUY:{buy_method}|SELL:{sell_method}",
-                        "amount_ref": Decimal(str(cfg.trans_amount)),
-                    }
-                except Exception:
-                    local_failed.append(code)
-            return results, local_failed, local_any_unverified
-
-        country_prices, failed, any_unverified = await asyncio.to_thread(fetch_all_prices)
+                country_prices[code] = {
+                    "fiat": cfg.fiat,
+                    "buy": buy_price,
+                    "sell": sell_price,
+                    "is_verified": is_verified,
+                    "methods_used": f"BUY:{buy_method}|SELL:{sell_method}",
+                    "amount_ref": Decimal(str(cfg.trans_amount)),
+                }
+            except Exception:
+                failed.append(code)
 
         if len(country_prices) < 2:
             raise RuntimeError("No hay suficientes paises con precios para generar rutas (>=2).")
@@ -118,7 +116,15 @@ async def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
             buy_origin = country_prices[origin]["buy"]
             sell_dest = country_prices[dest]["sell"]
 
-            pct = Decimal(str(settings.commission_pct(origin, dest)))
+            # Usamos los márgenes resueltos arriba
+            pct_val = settings.commission_pct(
+                origin, dest,
+                override_default=m_default,
+                override_venez=m_venez,
+                override_usa_venez=m_usa_venez
+            )
+            pct = Decimal(str(pct_val))
+
             rate_base = (sell_dest / buy_origin)
             rate_client = rate_base * (Decimal("1.0") - pct)
 
@@ -141,4 +147,4 @@ async def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
         )
 
     finally:
-        client.close()
+        await client.close()
