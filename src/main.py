@@ -13,7 +13,7 @@ from telegram.warnings import PTBUserWarning
 
 from src.config.logging import setup_logging
 from src.config.settings import settings
-from src.db.connection import close_pool
+from src.db.connection import close_pool, is_pool_open, open_pool
 from src.rates_scheduler import RatesScheduler
 from src.telegram_app.bot import build_bot
 
@@ -37,14 +37,24 @@ rates_scheduler = RatesScheduler(bot_app)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Setup
+    logger.info("Inicializando DB pool...")
+    await open_pool()
+    logger.info("Pool async DB abierto")
+
     logger.info("Iniciando PTB Application...")
     await bot_app.initialize()
 
     # Scheduler
     async def job_9am(context):
+        if not is_pool_open():
+            logger.warning("rates_9am_baseline skipped: DB pool not ready (startup)")
+            return
         await rates_scheduler.run_9am_baseline()
 
     async def job_30m(context):
+        if not is_pool_open():
+            logger.warning("rates_30m_check skipped: DB pool not ready (startup)")
+            return
         await rates_scheduler.run_30m_check()
 
     bot_app.job_queue.run_daily(
@@ -101,6 +111,14 @@ def main() -> None:
             uvicorn.run(app, host="0.0.0.0", port=settings.PORT, log_level="info")
         else:
             logger.info("Corriendo en modo POLLING (Desarrollo)")
+            # En dev/polling, abrimos el pool síncronamente antes de arrancar si queremos ser consistentes,
+            # pero PTB run_polling bloquea.
+            import asyncio
+            try:
+                asyncio.run(open_pool())
+            except Exception:
+                pass
+
             # En polling usamos el loop de PTB normal
             bot_app.run_polling(allowed_updates=["message", "callback_query"])
     finally:

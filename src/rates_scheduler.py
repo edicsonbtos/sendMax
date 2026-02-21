@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-import logging
 import asyncio
-from datetime import datetime, timezone, timedelta
+import logging
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from src.config.settings import settings
+from src.db.repositories.rates_baseline_repo import (
+    latest_9am_version_id_today,
+    load_country_prices_for_version,
+)
 from src.db.settings_store import get_setting_float, get_setting_json
 from src.integrations.binance_p2p import BinanceP2PClient
 from src.integrations.p2p_config import COUNTRIES
-from src.db.repositories.rates_baseline_repo import load_country_prices_for_version, latest_9am_version_id_today
 from src.rates_generator import generate_rates_full
 
 logger = logging.getLogger("rates_scheduler")
@@ -99,7 +102,7 @@ class RatesScheduler:
         failed_now: list[str] = []
 
         try:
-            ref_map = get_setting_json("p2p_reference_amounts") or {}
+            ref_map = await get_setting_json("p2p_reference_amounts") or {}
 
             def _trans_amount_for_fiat(fiat: str, fallback: float) -> float:
                 try:
@@ -108,7 +111,10 @@ class RatesScheduler:
                 except Exception:
                     return float(fallback)
 
-            def fetch_current_prices():
+            thr_val = await get_setting_float('pricing_fluctuation_threshold','percent', 0.03)
+            thr = Decimal(str(thr_val))
+
+            def fetch_current_prices_sync():
                 local_triggers = []
                 local_any_unverified = False
                 local_failed = []
@@ -131,8 +137,6 @@ class RatesScheduler:
                         buy_base = Decimal(str(baseline[code]["buy"]))
                         sell_base = Decimal(str(baseline[code]["sell"]))
 
-                        # Umbral
-                        thr = Decimal(str(get_setting_float('pricing_fluctuation_threshold','percent', 0.03)))
                         buy_trigger = Decimal('1') + thr
                         sell_trigger = Decimal('1') - thr
 
@@ -148,7 +152,7 @@ class RatesScheduler:
                         local_failed.append(code)
                 return local_triggers, local_any_unverified, local_failed
 
-            triggers, any_unverified_now, failed_now = await asyncio.to_thread(fetch_current_prices)
+            triggers, any_unverified_now, failed_now = await asyncio.to_thread(fetch_current_prices_sync)
 
             if failed_now:
                 await self._notify_admin(
@@ -163,7 +167,7 @@ class RatesScheduler:
                 )
 
             if not triggers:
-                logger.info("[rates] 30m: sin cambios >=3% vs baseline, no action")
+                logger.info("[rates_30m] sin cambios >=3% vs baseline, no action")
                 return
 
             reason = " | ".join(triggers[:6])

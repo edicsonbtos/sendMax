@@ -1,4 +1,4 @@
-# Version: 20260220-bot-db-hardened-async
+# Version: 20260221-bot-db-startup-fix
 from __future__ import annotations
 
 import asyncio
@@ -83,6 +83,21 @@ def get_pool() -> AsyncConnectionPool:
     return _pool
 
 
+async def open_pool() -> None:
+    """Abre el pool de conexiones de forma explícita."""
+    pool = get_pool()
+    if not pool.opened:
+        logger.info("Abriendo pool ASYNC DB...")
+        await pool.open()
+        logger.info("Pool ASYNC DB abierto")
+
+
+def is_pool_open() -> bool:
+    """Verifica si el pool existe y está abierto."""
+    global _pool
+    return bool(_pool) and bool(_pool.opened)
+
+
 @asynccontextmanager
 async def get_async_conn() -> AsyncGenerator[psycopg.AsyncConnection, None]:
     """
@@ -108,7 +123,7 @@ async def get_async_conn() -> AsyncGenerator[psycopg.AsyncConnection, None]:
 
 
 async def close_pool() -> None:
-    """Cerrar pool en shutdown."""
+    """Cerrar pool en shutdown (idempotente)."""
     global _pool
     if _pool is not None:
         try:
