@@ -19,20 +19,7 @@ VET = ZoneInfo("America/Caracas")
 
 class RatesScheduler:
     """
-    Scheduler real de tasas (con anti-spam y alertas a grupo):
-
-    Alert destination:
-    - Si ALERTS_TELEGRAM_CHAT_ID existe -> manda ahí (grupo Sendmax Alerts)
-    - Si no -> manda al ADMIN_TELEGRAM_USER_ID
-
-    Jobs:
-    - 9am VET: genera baseline (auto_9am)
-    - cada 30m: compara vs baseline:
-        BUY_actual >= BUY_9am * 1.03  OR  SELL_actual <= SELL_9am * 0.97
-      Si dispara: genera intraday_recalc.
-
-    Anti-spam:
-    - Alertas repetidas se limitan por cooldown.
+    Scheduler real de tasas (ASYNC).
     """
 
     ALERT_COOLDOWN = timedelta(hours=2)
@@ -73,38 +60,39 @@ class RatesScheduler:
 
     async def run_9am_baseline(self) -> None:
         try:
-            res = await asyncio.to_thread(generate_rates_full, kind="auto_9am", reason=f"Baseline 9am VET {self._now_vet_label()}")
-            msg = f"? Tasas 9am generadas. Versión #{res.version_id}\nPaíses OK: {len(res.countries_ok)} | Fallaron: {len(res.countries_failed)}"
+            res = await generate_rates_full(kind="auto_9am", reason=f"Baseline 9am VET {self._now_vet_label()}")
+            msg = f"📈 Tasas 9am generadas. Versión #{res.version_id}\nPaíses OK: {len(res.countries_ok)} | Fallaron: {len(res.countries_failed)}"
             logger.info(msg)
             await self._notify_admin(msg, key="baseline_ok")
 
             if res.any_unverified:
                 await self._notify_admin(
-                    "?? Aviso: en la versión 9am se usó al menos un anuncio NO verificado (fallback).",
+                    "⚠️ Aviso: en la versión 9am se usó al menos un anuncio NO verificado (fallback).",
                     key="baseline_unverified",
                 )
 
             if res.countries_failed:
                 await self._notify_admin(
-                    f"?? Aviso: países sin datos en 9am: {', '.join(res.countries_failed)}",
+                    f"⚠️ Aviso: países sin datos en 9am: {', '.join(res.countries_failed)}",
                     key="baseline_failed",
                 )
 
         except Exception as e:
             logger.exception("Error en baseline 9am: %s", e)
-            await self._notify_admin(f"?? Error generando baseline 9am: {e}", key="baseline_error")
+            await self._notify_admin(f"⚠️ Error generando baseline 9am: {e}", key="baseline_error")
 
     async def run_30m_check(self) -> None:
-        baseline_version_id = await asyncio.to_thread(latest_9am_version_id_today)
+        baseline_version_id = await latest_9am_version_id_today()
         if not baseline_version_id:
             logger.info("[rates] 30m: sin baseline auto_9am, skip")
             return
 
-        baseline = await asyncio.to_thread(load_country_prices_for_version, baseline_version_id)
+        baseline = await load_country_prices_for_version(baseline_version_id)
         if not baseline:
             logger.info("[rates] 30m: baseline sin country prices, skip")
             return
 
+        # I/O Binance síncrono
         client = BinanceP2PClient()
         triggers: list[str] = []
         any_unverified_now = False
@@ -119,51 +107,58 @@ class RatesScheduler:
                     return float(v) if v is not None else float(fallback)
                 except Exception:
                     return float(fallback)
-            for code, cfg in COUNTRIES.items():
-                if code not in baseline:
-                    continue
 
-                try:
-                    buy_q = client.fetch_first_price(
-                        fiat=cfg.fiat, trade_type="BUY", pay_methods=cfg.buy_methods[:1], trans_amount=_trans_amount_for_fiat(cfg.fiat, cfg.trans_amount)
-                    )
-                    sell_q = client.fetch_first_price(
-                        fiat=cfg.fiat, trade_type="SELL", pay_methods=cfg.sell_methods[:1], trans_amount=_trans_amount_for_fiat(cfg.fiat, cfg.trans_amount)
-                    )
-                    if not (buy_q.is_verified and sell_q.is_verified):
-                        any_unverified_now = True
+            def fetch_current_prices():
+                local_triggers = []
+                local_any_unverified = False
+                local_failed = []
+                for code, cfg in COUNTRIES.items():
+                    if code not in baseline:
+                        continue
+                    try:
+                        buy_q = client.fetch_first_price(
+                            fiat=cfg.fiat, trade_type="BUY", pay_methods=cfg.buy_methods[:1], trans_amount=_trans_amount_for_fiat(cfg.fiat, cfg.trans_amount)
+                        )
+                        sell_q = client.fetch_first_price(
+                            fiat=cfg.fiat, trade_type="SELL", pay_methods=cfg.sell_methods[:1], trans_amount=_trans_amount_for_fiat(cfg.fiat, cfg.trans_amount)
+                        )
+                        if not (buy_q.is_verified and sell_q.is_verified):
+                            local_any_unverified = True
 
-                    buy_now = Decimal(str(buy_q.price))
-                    sell_now = Decimal(str(sell_q.price))
+                        buy_now = Decimal(str(buy_q.price))
+                        sell_now = Decimal(str(sell_q.price))
 
-                except Exception:
-                    failed_now.append(code)
-                    continue
+                        buy_base = Decimal(str(baseline[code]["buy"]))
+                        sell_base = Decimal(str(baseline[code]["sell"]))
 
-                buy_base = Decimal(str(baseline[code]["buy"]))
-                sell_base = Decimal(str(baseline[code]["sell"]))
+                        # Umbral
+                        thr = Decimal(str(get_setting_float('pricing_fluctuation_threshold','percent', 0.03)))
+                        buy_trigger = Decimal('1') + thr
+                        sell_trigger = Decimal('1') - thr
 
-                thr = Decimal(str(get_setting_float('pricing_fluctuation_threshold','percent', 0.03)))
-                buy_trigger = Decimal('1') + thr
-                sell_trigger = Decimal('1') - thr
+                        if buy_now >= (buy_base * buy_trigger):
+                            pct = (buy_now / buy_base - Decimal("1")) * Decimal("100")
+                            local_triggers.append(f"BUY {code} +{pct.quantize(Decimal('0.01'))}%")
 
-                if buy_now >= (buy_base * buy_trigger):
-                    pct = (buy_now / buy_base - Decimal("1")) * Decimal("100")
-                    triggers.append(f"BUY {code} +{pct.quantize(Decimal('0.01'))}%")
+                        if sell_now <= (sell_base * sell_trigger):
+                            pct = (Decimal("1") - sell_now / sell_base) * Decimal("100")
+                            local_triggers.append(f"SELL {code} -{pct.quantize(Decimal('0.01'))}%")
 
-                if sell_now <= (sell_base * sell_trigger):
-                    pct = (Decimal("1") - sell_now / sell_base) * Decimal("100")
-                    triggers.append(f"SELL {code} -{pct.quantize(Decimal('0.01'))}%")
+                    except Exception:
+                        local_failed.append(code)
+                return local_triggers, local_any_unverified, local_failed
+
+            triggers, any_unverified_now, failed_now = await asyncio.to_thread(fetch_current_prices)
 
             if failed_now:
                 await self._notify_admin(
-                    f"?? Tasas 30m: países con error Binance: {', '.join(failed_now)}",
+                    f"⚠️ Tasas 30m: países con error Binance: {', '.join(failed_now)}",
                     key=f"30m_failed_{','.join(sorted(failed_now))}",
                 )
 
             if any_unverified_now:
                 await self._notify_admin(
-                    "?? Tasas 30m: se detectó al menos un anuncio NO verificado (fallback) en consulta actual.",
+                    "⚠️ Tasas 30m: se detectó al menos un anuncio NO verificado (fallback) en consulta actual.",
                     key="30m_unverified",
                 )
 
@@ -172,11 +167,11 @@ class RatesScheduler:
                 return
 
             reason = " | ".join(triggers[:6])
-            await self._notify_admin(f"?? Disparador tasas 30m: {reason}\nGenerando nueva versión…", key="30m_trigger")
+            await self._notify_admin(f"🚨 Disparador tasas 30m: {reason}\nGenerando nueva versión…", key="30m_trigger")
 
-            res = await asyncio.to_thread(generate_rates_full, kind="intraday_recalc", reason=f"30m trigger: {reason}")
+            res = await generate_rates_full(kind="intraday_recalc", reason=f"30m trigger: {reason}")
             await self._notify_admin(
-                f"? Nueva versión generada #{res.version_id} (intraday). OK={len(res.countries_ok)} FAIL={len(res.countries_failed)}",
+                f"✅ Nueva versión generada #{res.version_id} (intraday). OK={len(res.countries_ok)} FAIL={len(res.countries_failed)}",
                 key="30m_generated",
             )
 

@@ -9,21 +9,21 @@ Objetivo:
 """
 
 import re
+
 from telegram import Update
 from telegram.ext import (
+    CommandHandler,
     ContextTypes,
     ConversationHandler,
-    CommandHandler,
     MessageHandler,
     filters,
 )
 
 from src.db.repositories.users_repo import (
-    get_user_by_telegram_id,
-    get_user_by_alias,
     create_user,
+    get_user_by_alias,
+    get_user_by_telegram_id,
 )
-
 from src.telegram_app.handlers.menu import show_home
 
 ASK_ALIAS = 1

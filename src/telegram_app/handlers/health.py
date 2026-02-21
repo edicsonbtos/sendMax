@@ -1,8 +1,9 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.db.connection import ping_db
 from src.config.settings import settings
+from src.db.connection import ping_db
+
 
 async def health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     telegram_id = update.effective_user.id

@@ -1,14 +1,10 @@
-﻿"""
-Métodos de pago (UX pro):
-
-- Al tocar "🏦 Métodos de pago": mostrar selector de países (teclado temporal).
-- Al elegir país: mostrar métodos desde settings (ENV) con saltos de línea.
-- Guardar el message_id mostrado para borrarlo cuando el usuario salga del módulo (cleanup handler).
+"""
+Métodos de pago (UX pro).
 """
 
 from __future__ import annotations
 
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings
@@ -45,11 +41,9 @@ async def enter_payment_methods(update: Update, context: ContextTypes.DEFAULT_TY
     Entrada al módulo: mostrar selector de país.
     """
     context.user_data["pm_mode"] = True
-    # Exclusividad: salir de otros modos de menú
     context.user_data.pop("summary_mode", None)
     context.user_data.pop("rates_mode", None)
     context.user_data.pop("ref_mode", None)
-
 
     await update.message.reply_text(
         "🏦 Métodos de pago\n\nSelecciona el país para ver los datos 👇",
@@ -59,12 +53,11 @@ async def enter_payment_methods(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def handle_payment_methods_country(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Maneja selección de país dentro del módulo.
+    Maneja selección de país dentro del módulo (ASYNC).
     """
     text = (update.message.text or "").strip()
 
     if text == BTN_BACK:
-        # Salimos del modo y volvemos al menú principal
         context.user_data.pop("pm_mode", None)
         await update.message.reply_text(
             "Listo ✅",
@@ -80,8 +73,8 @@ async def handle_payment_methods_country(update: Update, context: ContextTypes.D
         )
         return
 
-    # Lee desde DB primero, fallback a .env
-    pm = get_payment_methods_for_country(country)
+    # get_payment_methods_for_country ya es async
+    pm = await get_payment_methods_for_country(country)
     if not pm:
         pm = settings.payment_methods_text(country)
 
@@ -101,5 +94,4 @@ async def handle_payment_methods_country(update: Update, context: ContextTypes.D
         reply_markup=_country_select_keyboard(),
     )
 
-    # Guardamos el último mensaje mostrado para borrarlo cuando el usuario salga del módulo
     context.user_data["pm_last_message_id"] = sent.message_id

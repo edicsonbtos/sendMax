@@ -1,10 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import time
 from typing import Any
 
-from src.db.connection import get_conn
+from src.db.connection import get_async_conn
 
 
 _cache: dict[str, Any] = {}
@@ -12,9 +12,9 @@ _cache_ts: float = 0.0
 _TTL_SECONDS = 60
 
 
-def get_setting_json(key: str) -> dict[str, Any] | None:
+async def get_setting_json(key: str) -> dict[str, Any] | None:
     """
-    Lee settings(key, value_json) desde Postgres.
+    Lee settings(key, value_json) desde Postgres (ASYNC).
     Cache 60s para no golpear DB.
     """
     global _cache_ts, _cache
@@ -23,10 +23,10 @@ def get_setting_json(key: str) -> dict[str, Any] | None:
     if (now - _cache_ts) < _TTL_SECONDS and key in _cache:
         return _cache[key]
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT value_json FROM settings WHERE key=%s", (key,))
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT value_json FROM settings WHERE key=%s", (key,))
+            row = await cur.fetchone()
 
     val = None
     if row and row[0] is not None:
@@ -43,8 +43,8 @@ def get_setting_json(key: str) -> dict[str, Any] | None:
     return val
 
 
-def get_setting_float(key: str, field: str, default: float) -> float:
-    data = get_setting_json(key)
+async def get_setting_float(key: str, field: str, default: float) -> float:
+    data = await get_setting_json(key)
     if not data:
         return default
     v = data.get(field)
@@ -56,14 +56,11 @@ def get_setting_float(key: str, field: str, default: float) -> float:
         return default
 
 
-def get_payment_methods_for_country(country: str) -> str | None:
+async def get_payment_methods_for_country(country: str) -> str | None:
     """
-    Lee metodos de pago desde DB (settings key='payment_methods').
-    Retorna texto formateado para Telegram.
-    Fallback: None (el caller usa .env como backup).
-    Cache: 60s via get_setting_json.
+    Lee metodos de pago desde DB.
     """
-    data = get_setting_json("payment_methods")
+    data = await get_setting_json("payment_methods")
     if not data:
         return None
 
@@ -82,7 +79,7 @@ def get_payment_methods_for_country(country: str) -> str | None:
         holder = m.get("holder", "")
         details = m.get("details", "")
 
-        lines.append(f"\U0001f4b3 {name}")
+        lines.append(f"💳 {name}")
         if holder:
             lines.append(f"   Titular: {holder}")
         if details:

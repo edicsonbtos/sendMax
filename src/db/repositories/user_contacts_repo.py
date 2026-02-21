@@ -1,11 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
+
+from src.db.connection import get_async_conn
 
 
-
-from src.db.connection import get_conn
-
-
-def touch_contact(telegram_user_id: int) -> None:
+async def touch_contact(telegram_user_id: int) -> None:
     """
     Guarda telegram_user_id para broadcast/post-reset.
     Idempotente: si ya existe, actualiza last_seen_at.
@@ -16,20 +14,21 @@ def touch_contact(telegram_user_id: int) -> None:
     ON CONFLICT (telegram_user_id)
     DO UPDATE SET last_seen_at = now();
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (int(telegram_user_id),))
-        conn.commit()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (int(telegram_user_id),))
+        await conn.commit()
 
 
-def list_all_telegram_ids(limit: int | None = None) -> list[int]:
+async def list_all_telegram_ids(limit: int | None = None) -> list[int]:
     sql = "SELECT telegram_user_id FROM user_contacts ORDER BY last_seen_at DESC"
     if limit is not None:
         sql += " LIMIT %s"
-    with get_conn() as conn:
-        with conn.cursor() as cur:
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
             if limit is None:
-                cur.execute(sql)
+                await cur.execute(sql)
             else:
-                cur.execute(sql, (int(limit),))
-            return [int(r[0]) for r in cur.fetchall()]
+                await cur.execute(sql, (int(limit),))
+            res = await cur.fetchall()
+            return [int(r[0]) for r in res]

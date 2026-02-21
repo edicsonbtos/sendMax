@@ -1,4 +1,5 @@
-﻿import logging
+import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -10,7 +11,7 @@ logger = logging.getLogger("admin_rates")
 
 async def rates_now(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Admin only: genera tasas ahora (baseline/manual) sin esperar 9am.
+    Admin only: genera tasas ahora (baseline/manual) sin esperar 9am (ASYNC).
     """
     telegram_id = update.effective_user.id
     admin_id = int(settings.ADMIN_TELEGRAM_USER_ID) if settings.ADMIN_TELEGRAM_USER_ID else None
@@ -22,7 +23,8 @@ async def rates_now(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("🔄 Actualizando tasas ahora…")
 
     try:
-        res = generate_rates_full(
+        # generate_rates_full ya es async
+        res = await generate_rates_full(
             kind="auto_9am",
             reason="Admin forced baseline",
         )

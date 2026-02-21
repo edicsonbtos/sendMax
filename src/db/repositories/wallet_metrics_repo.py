@@ -1,11 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
 
-
-
-from src.db.connection import get_conn
+from src.db.connection import get_async_conn
 
 
 @dataclass(frozen=True)
@@ -15,7 +13,7 @@ class WalletMetrics:
     referrals_month_usdt: Decimal
 
 
-def get_wallet_metrics(user_id: int) -> WalletMetrics:
+async def get_wallet_metrics(user_id: int) -> WalletMetrics:
     """
     Métricas basadas en ledger (append-only):
     - profit_today_usdt: suma de ORDER_PROFIT del día (UTC)
@@ -49,10 +47,10 @@ def get_wallet_metrics(user_id: int) -> WalletMetrics:
            (SELECT v FROM month_profit),
            (SELECT v FROM month_ref);
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (user_id, user_id, user_id))
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (user_id, user_id, user_id))
+            row = await cur.fetchone()
             return WalletMetrics(
                 profit_today_usdt=Decimal(str(row[0])),
                 profit_month_usdt=Decimal(str(row[1])),

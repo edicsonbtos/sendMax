@@ -1,4 +1,4 @@
-﻿"""
+"""
 Repositorio de usuarios.
 
 Aqui concentramos todas las consultas SQL sobre la tabla users.
@@ -7,14 +7,14 @@ Changelog:
 - telegram_user_id ahora es Optional[int] (nullable en DB).
   Usuarios creados desde backoffice no tienen Telegram.
   IDs negativos sinteticos eliminados; se usa NULL.
+- Migracion a ASYNC para Fase 2.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.db.connection import get_conn
-
+from src.db.connection import get_async_conn
 
 # --------------------------------------------
 # Dataclasses
@@ -61,7 +61,7 @@ class UserKYC:
 # Queries de lectura
 # --------------------------------------------
 
-def get_user_by_telegram_id(telegram_user_id: int) -> User | None:
+async def get_user_by_telegram_id(telegram_user_id: int) -> User | None:
     """Busca por telegram_user_id real (siempre >0)."""
     if telegram_user_id is None or telegram_user_id <= 0:
         return None
@@ -71,28 +71,28 @@ def get_user_by_telegram_id(telegram_user_id: int) -> User | None:
         WHERE telegram_user_id = %s
         LIMIT 1;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (telegram_user_id,))
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (telegram_user_id,))
+            row = await cur.fetchone()
             return User(*row) if row else None
 
 
-def get_user_by_alias(alias: str) -> User | None:
+async def get_user_by_alias(alias: str) -> User | None:
     sql = """
         SELECT id, telegram_user_id, alias, role, is_active, sponsor_id
         FROM users
         WHERE alias = %s
         LIMIT 1;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (alias,))
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (alias,))
+            row = await cur.fetchone()
             return User(*row) if row else None
 
 
-def get_user_by_id(user_id: int) -> User | None:
+async def get_user_by_id(user_id: int) -> User | None:
     """Busca usuario por ID interno (PK). Util para backoffice."""
     sql = """
         SELECT id, telegram_user_id, alias, role, is_active, sponsor_id
@@ -100,26 +100,26 @@ def get_user_by_id(user_id: int) -> User | None:
         WHERE id = %s
         LIMIT 1;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (user_id,))
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (user_id,))
+            row = await cur.fetchone()
             return User(*row) if row else None
 
 
-def get_telegram_id_by_user_id(user_id: int) -> int | None:
+async def get_telegram_id_by_user_id(user_id: int) -> int | None:
     """Retorna telegram_user_id o None si el usuario no tiene Telegram."""
     sql = "SELECT telegram_user_id FROM users WHERE id = %s LIMIT 1;"
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (user_id,))
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (user_id,))
+            row = await cur.fetchone()
             if row is None:
                 return None
             return int(row[0]) if row[0] is not None else None
 
 
-def get_user_kyc_by_telegram_id(telegram_user_id: int) -> UserKYC | None:
+async def get_user_kyc_by_telegram_id(telegram_user_id: int) -> UserKYC | None:
     if telegram_user_id is None or telegram_user_id <= 0:
         return None
     sql = """
@@ -134,14 +134,14 @@ def get_user_kyc_by_telegram_id(telegram_user_id: int) -> UserKYC | None:
         WHERE telegram_user_id = %s
         LIMIT 1;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (telegram_user_id,))
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (telegram_user_id,))
+            row = await cur.fetchone()
             return UserKYC(*row) if row else None
 
 
-def get_user_kyc_by_id(user_id: int) -> UserKYC | None:
+async def get_user_kyc_by_id(user_id: int) -> UserKYC | None:
     """Busca KYC por ID interno. Para backoffice sin telegram_user_id."""
     sql = """
         SELECT
@@ -155,10 +155,10 @@ def get_user_kyc_by_id(user_id: int) -> UserKYC | None:
         WHERE id = %s
         LIMIT 1;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (user_id,))
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (user_id,))
+            row = await cur.fetchone()
             return UserKYC(*row) if row else None
 
 
@@ -166,7 +166,7 @@ def get_user_kyc_by_id(user_id: int) -> UserKYC | None:
 # Creacion
 # --------------------------------------------
 
-def create_user(
+async def create_user(
     telegram_user_id: int | None,
     alias: str,
     sponsor_id: int | None,
@@ -178,11 +178,11 @@ def create_user(
         VALUES (%s, %s, %s, %s)
         RETURNING id, telegram_user_id, alias, role, is_active, sponsor_id;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (telegram_user_id, alias, sponsor_id, role))
-            row = cur.fetchone()
-            conn.commit()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (telegram_user_id, alias, sponsor_id, role))
+            row = await cur.fetchone()
+            await conn.commit()
             return User(*row)
 
 
@@ -190,20 +190,21 @@ def create_user(
 # Email check
 # --------------------------------------------
 
-def check_email_exists(email: str) -> bool:
+async def check_email_exists(email: str) -> bool:
     """Verifica si un email ya esta registrado (case-insensitive)."""
     sql = "SELECT 1 FROM users WHERE LOWER(email) = LOWER(%s) LIMIT 1;"
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (email,))
-            return cur.fetchone() is not None
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (email,))
+            res = await cur.fetchone()
+            return res is not None
 
 
 # --------------------------------------------
 # KYC
 # --------------------------------------------
 
-def submit_kyc(
+async def submit_kyc(
     *,
     telegram_user_id: int,
     full_name: str,
@@ -237,9 +238,9 @@ def submit_kyc(
             updated_at=now()
         WHERE telegram_user_id=%s;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 sql,
                 (
                     full_name, phone, address_short,
@@ -250,11 +251,11 @@ def submit_kyc(
                 ),
             )
             ok = cur.rowcount > 0
-            conn.commit()
+            await conn.commit()
             return ok
 
 
-def set_kyc_status(
+async def set_kyc_status(
     *,
     user_id: int,
     new_status: str,
@@ -272,11 +273,11 @@ def set_kyc_status(
             updated_at=now()
         WHERE id=%s;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (new_status, reason, user_id))
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (new_status, reason, user_id))
             ok = cur.rowcount > 0
-            conn.commit()
+            await conn.commit()
             return ok
 
 
@@ -284,7 +285,7 @@ def set_kyc_status(
 # Payout
 # --------------------------------------------
 
-def set_payout_method(
+async def set_payout_method(
     *,
     user_id: int,
     payout_country: str,
@@ -297,20 +298,20 @@ def set_payout_method(
             updated_at=now()
         WHERE id=%s;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (payout_country, payout_method_text, user_id))
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (payout_country, payout_method_text, user_id))
             ok = cur.rowcount > 0
-            conn.commit()
+            await conn.commit()
             return ok
 
 
-def get_payout_method(user_id: int) -> tuple[str | None, str | None]:
+async def get_payout_method(user_id: int) -> tuple[str | None, str | None]:
     sql = "SELECT payout_country, payout_method_text FROM users WHERE id=%s LIMIT 1;"
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (user_id,))
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (user_id,))
+            row = await cur.fetchone()
             if not row:
                 return (None, None)
             return (row[0], row[1])
@@ -320,7 +321,7 @@ def get_payout_method(user_id: int) -> tuple[str | None, str | None]:
 # KYC draft (progreso parcial desde Telegram)
 # --------------------------------------------
 
-def update_kyc_draft(
+async def update_kyc_draft(
     *,
     telegram_user_id: int,
     full_name: str | None = None,
@@ -377,9 +378,9 @@ def update_kyc_draft(
     """
     params.append(int(telegram_user_id))
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, tuple(params))
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, tuple(params))
             ok = cur.rowcount > 0
-            conn.commit()
+            await conn.commit()
             return ok

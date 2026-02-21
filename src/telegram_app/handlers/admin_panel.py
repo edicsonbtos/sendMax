@@ -1,16 +1,18 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings
-from src.db.connection import get_conn
-from src.telegram_app.ui.admin_keyboards import admin_panel_keyboard, admin_reset_confirm_keyboard
-from src.telegram_app.ui.keyboards import main_menu_keyboard
-
+from src.db.connection import get_async_conn
+from src.telegram_app.handlers.admin_alert_test import alert_test
 from src.telegram_app.handlers.admin_orders import admin_orders
 from src.telegram_app.handlers.admin_rates import rates_now
-from src.telegram_app.handlers.admin_alert_test import alert_test
+from src.telegram_app.ui.admin_keyboards import (
+    admin_panel_keyboard,
+    admin_reset_confirm_keyboard,
+)
+from src.telegram_app.ui.keyboards import main_menu_keyboard
 
 
 def _is_admin(update: Update) -> bool:
@@ -33,25 +35,24 @@ async def open_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Router de botones del panel admin.
-    (Solo se usa si el usuario es admin y presiona botones del panel.)
     """
     if not _is_admin(update):
         return
 
     text = (update.message.text or "").strip()
 
-    if text == "⬅️ Menú":
+    if text == "🏠 Menú":
         await update.message.reply_text(
             "Listo ✅",
             reply_markup=main_menu_keyboard(is_admin=True),
         )
         return
 
-    if text == "📋 Órdenes (CREADA)":
+    if text == "📦 Órdenes (CREADA)":
         await admin_orders(update, context)
         return
 
-    if text in ("🔄 Tasas ahora", "📈 Tasas", "📈 Tasas ahora"):
+    if text in ("⚡ Tasas ahora", "📈 Tasas", "📈 Tasas ahora"):
         await rates_now(update, context)
         return
 
@@ -59,7 +60,7 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await alert_test(update, context)
         return
 
-    if text == "🧨 Reset (modo prueba)":
+    if text == "🧹 Reset (modo prueba)":
         context.user_data["awaiting_reset_confirm"] = True
         await update.message.reply_text(
             "⚠️ Reset de datos (modo prueba)\n\n"
@@ -74,7 +75,7 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if text == "✅ Sí, resetear TODO":
         if not context.user_data.get("awaiting_reset_confirm"):
-            await update.message.reply_text("Primero pulsa 🧨 Reset (modo prueba).")
+            await update.message.reply_text("Primero pulsa 🧹 Reset (modo prueba).")
             return
 
         context.user_data.pop("awaiting_reset_confirm", None)
@@ -82,14 +83,14 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         admin_telegram = int(settings.ADMIN_TELEGRAM_USER_ID)
 
         try:
-            with get_conn() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("DELETE FROM orders;")
-                    cur.execute("DELETE FROM route_rates;")
-                    cur.execute("DELETE FROM p2p_country_prices;")
-                    cur.execute("DELETE FROM rate_versions;")
-                    cur.execute("DELETE FROM users WHERE telegram_user_id <> %s;", (admin_telegram,))
-                conn.commit()
+            async with get_async_conn() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("DELETE FROM orders;")
+                    await cur.execute("DELETE FROM route_rates;")
+                    await cur.execute("DELETE FROM p2p_country_prices;")
+                    await cur.execute("DELETE FROM rate_versions;")
+                    await cur.execute("DELETE FROM users WHERE telegram_user_id <> %s;", (admin_telegram,))
+                await conn.commit()
 
             await update.message.reply_text("✅ Reset completo. Base lista para producción.", reply_markup=main_menu_keyboard(is_admin=True))
 

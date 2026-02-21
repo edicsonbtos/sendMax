@@ -1,8 +1,16 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 from telegram import Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+    PicklePersistence,
+)
 from telegram.request import HTTPXRequest
 
 from src.config.settings import settings
@@ -57,8 +65,17 @@ async def universal_sniffer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def build_bot() -> Application:
+    # Persistencia de sesión (Fase 2)
+    persistence = PicklePersistence(filepath="bot_persistence.pickle")
+
     request = HTTPXRequest(connect_timeout=20.0, read_timeout=30.0, write_timeout=30.0, pool_timeout=30.0)
-    app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).request(request).build()
+    app = (
+        Application.builder()
+        .token(settings.TELEGRAM_BOT_TOKEN)
+        .request(request)
+        .persistence(persistence)
+        .build()
+    )
 
     app.add_error_handler(error_handler)
 
@@ -103,5 +120,5 @@ def build_bot() -> Application:
     # Menú (solo APPROVED)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router), group=6)
 
-    logger.info("Bot listo: KYC + órdenes + retiros + admin")
+    logger.info("Bot listo: KYC + órdenes + retiros + admin (Persistence: ON)")
     return app

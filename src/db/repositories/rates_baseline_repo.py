@@ -1,13 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from decimal import Decimal
 
+from src.db.connection import get_async_conn
 
 
-from src.db.connection import get_conn
-
-
-def load_country_prices_for_version(rate_version_id: int) -> dict[str, dict[str, object]]:
+async def load_country_prices_for_version(rate_version_id: int) -> dict[str, dict[str, object]]:
     """
     Devuelve precios BUY/SELL por país para una versión.
     Estructura:
@@ -22,10 +20,11 @@ def load_country_prices_for_version(rate_version_id: int) -> dict[str, dict[str,
         WHERE rate_version_id = %s;
     """
     out: dict[str, dict[str, object]] = {}
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (rate_version_id,))
-            for country, buy_price, sell_price, is_verified in cur.fetchall():
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (rate_version_id,))
+            res = await cur.fetchall()
+            for country, buy_price, sell_price, is_verified in res:
                 out[str(country)] = {
                     "buy": Decimal(str(buy_price)),
                     "sell": Decimal(str(sell_price)),
@@ -34,7 +33,7 @@ def load_country_prices_for_version(rate_version_id: int) -> dict[str, dict[str,
     return out
 
 
-def latest_9am_version_id_today() -> int | None:
+async def latest_9am_version_id_today() -> int | None:
     """
     Busca la última versión baseline del día (kind='auto_9am') en hora local VET.
     Simplificación: usamos created_at/effective_from en UTC, y tomamos la más reciente de kind auto_9am.
@@ -47,8 +46,8 @@ def latest_9am_version_id_today() -> int | None:
         ORDER BY effective_from DESC
         LIMIT 1;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql)
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql)
+            row = await cur.fetchone()
             return int(row[0]) if row else None

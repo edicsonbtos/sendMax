@@ -1,11 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import html
+
 from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler
+from telegram.ext import CommandHandler, ContextTypes
 
 from src.config.settings import settings
-from src.db.connection import get_conn
+from src.db.connection import get_async_conn
 
 
 def _is_admin(update: Update) -> bool:
@@ -30,9 +31,9 @@ async def kyc_resend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("user_id inválido.")
         return
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("""
                 SELECT id, alias, full_name, phone, address_short,
                        payout_country, payout_method_text,
                        kyc_doc_file_id, kyc_selfie_file_id, kyc_status
@@ -40,7 +41,7 @@ async def kyc_resend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 WHERE id=%s
                 LIMIT 1;
             """, (user_id,))
-            row = cur.fetchone()
+            row = await cur.fetchone()
 
     if not row:
         await update.message.reply_text("Usuario no encontrado.")

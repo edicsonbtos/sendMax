@@ -1,5 +1,43 @@
 from __future__ import annotations
 
+import asyncio
+import logging
+from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
+from telegram.ext import (
+    CommandHandler,
+    ContextTypes,
+    ConversationHandler,
+    MessageHandler,
+    filters,
+)
+
+from src.config.settings import settings
+from src.db.repositories.orders_repo import create_order, update_order_status
+from src.db.repositories.rates_repo import (
+    get_latest_active_rate_version,
+    get_route_rate,
+)
+from src.db.repositories.users_repo import get_user_by_telegram_id
+from src.telegram_app.handlers.panic import MENU_BUTTONS_REGEX, panic_handler
+from src.telegram_app.ui.labels import BTN_NEW_ORDER
+from src.telegram_app.ui.routes_popular import (
+    COUNTRY_FLAGS,
+    COUNTRY_LABELS,
+    format_rate_no_noise,
+)
+from src.telegram_app.utils.text_escape import esc_html
+
+logger = logging.getLogger(__name__)
+
 """
 Flujo: 📤 Nuevo envío (PRO)  FIAT -> FIAT (coherente con profit puente)
 
@@ -14,30 +52,6 @@ UX:
 - Pantalla única (edit_message_text) best-effort
 - Aislamiento con context.user_data["order_mode"]=True
 """
-
-import logging
-from datetime import datetime
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-
-from telegram import (
-    Update,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-)
-from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, CommandHandler, filters
-
-from src.config.settings import settings
-from src.db.repositories.users_repo import get_user_by_telegram_id
-from src.db.repositories.rates_repo import get_latest_active_rate_version, get_route_rate
-from src.db.repositories.orders_repo import create_order
-from src.telegram_app.ui.routes_popular import COUNTRY_FLAGS, COUNTRY_LABELS, format_rate_no_noise
-from src.telegram_app.ui.labels import BTN_NEW_ORDER
-from src.telegram_app.utils.text_escape import esc_html
-from src.telegram_app.handlers.panic import panic_handler, MENU_BUTTONS_REGEX
-
-logger = logging.getLogger(__name__)
 
 # Estados
 ASK_ORIGIN, ASK_DEST, ASK_AMOUNT, ASK_BENEF, ASK_PROOF, ASK_CONFIRM, ASK_EDIT, ASK_EDIT_FIELD = range(8)
@@ -428,7 +442,12 @@ async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     file_id = update.message.photo[-1].file_id
     context.user_data["order"]["proof_file_id"] = file_id
 
-    rv = get_latest_active_rate_version()
+    try:
+        rv = await asyncio.wait_for(get_latest_active_rate_version(), timeout=5.0)
+    except asyncio.TimeoutError:
+        await _screen_send_or_edit(update, context, "⏳ Error de conexión. Reintenta en un momento.")
+        return ASK_PROOF
+
     if not rv:
         await _screen_send_or_edit(update, context, "No tengo tasas activas ahora mismo. Intenta de nuevo en unos minutos.")
         _reset_flow_memory(context)
@@ -437,7 +456,7 @@ async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     origin = context.user_data["order"]["origin"]
     dest = context.user_data["order"]["dest"]
 
-    rr = get_route_rate(rate_version_id=rv.id, origin_country=origin, dest_country=dest)
+    rr = await get_route_rate(rate_version_id=rv.id, origin_country=origin, dest_country=dest)
     if not rr:
         await _screen_send_or_edit(update, context, "Esa ruta no está disponible ahora mismo. Intenta otra ruta.")
         _reset_flow_memory(context)
@@ -458,7 +477,7 @@ async def _show_confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYP
     origin = order_data.get("origin")
     dest = order_data.get("dest")
 
-    rr = get_route_rate(rate_version_id=rv_id, origin_country=origin, dest_country=dest)
+    rr = await get_route_rate(rate_version_id=rv_id, origin_country=origin, dest_country=dest)
     if not rr:
         await _screen_send_or_edit(update, context, "No pude reconstruir la ruta ahora mismo. Intenta de nuevo.")
         _reset_flow_memory(context)
@@ -486,7 +505,7 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return ASK_CONFIRM
 
     telegram_id = update.effective_user.id
-    user = get_user_by_telegram_id(telegram_id)
+    user = await get_user_by_telegram_id(telegram_id)
     if not user:
         await _screen_send_or_edit(update, context, "No estás registrado. Escribe /start para registrarte.")
         _reset_flow_memory(context)
@@ -505,23 +524,29 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     payout_dest = (amount_origin * rate_client)
 
-    order = create_order(
-        operator_user_id=user.id,
-        origin_country=origin,
-        dest_country=dest,
-        amount_origin=amount_origin,
-        rate_version_id=rate_version_id,
-        commission_pct=commission_pct,
-        rate_client=rate_client,
-        payout_dest=payout_dest,
-        beneficiary_text=beneficiary_text,
-        origin_payment_proof_file_id=file_id,
-    )
+    try:
+        order = await asyncio.wait_for(
+            create_order(
+                operator_user_id=user.id,
+                origin_country=origin,
+                dest_country=dest,
+                amount_origin=amount_origin,
+                rate_version_id=rate_version_id,
+                commission_pct=commission_pct,
+                rate_client=rate_client,
+                payout_dest=payout_dest,
+                beneficiary_text=beneficiary_text,
+                origin_payment_proof_file_id=file_id,
+            ),
+            timeout=5.0
+        )
+    except asyncio.TimeoutError:
+        await update.message.reply_text("⏳ Timeout al registrar orden. Por favor revisa tu historial antes de reintentar.")
+        return ConversationHandler.END
 
     # Nuevo flujo: ORIGEN primero (grupo ORIGIN_REVIEW)
     try:
-        from src.db.repositories.orders_repo import update_order_status
-        update_order_status(int(order.public_id), "ORIGEN_VERIFICANDO")
+        await update_order_status(int(order.public_id), "ORIGEN_VERIFICANDO")
     except Exception as e:
         _flow_dbg(f"update_order_status ORIGEN_VERIFICANDO failed: {e}")
 

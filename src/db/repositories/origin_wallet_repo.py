@@ -1,18 +1,15 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
-logger = logging.getLogger(__name__)
-
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-import psycopg
 from psycopg.rows import dict_row
 
+from src.db.connection import get_async_conn
 
-
-from src.db.connection import get_conn
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -26,7 +23,7 @@ class OriginReceiptDaily:
     ref_order_public_id: int | None
 
 
-def add_origin_receipt_daily(
+async def add_origin_receipt_daily(
     *,
     day: date,
     origin_country: str,
@@ -47,9 +44,9 @@ def add_origin_receipt_daily(
            %s)
         RETURNING id;
     """
-    with get_conn() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
+    async with get_async_conn() as conn:
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
                 sql,
                 (
                     day,
@@ -61,6 +58,6 @@ def add_origin_receipt_daily(
                     ref_order_public_id,
                 ),
             )
-            row = cur.fetchone()
-            conn.commit()
-            return int(row["id"])
+            row = await cur.fetchone()
+            await conn.commit()
+            return int(row["id"]) if row else 0

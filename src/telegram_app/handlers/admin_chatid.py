@@ -1,6 +1,8 @@
 ﻿from telegram import Update
 from telegram.ext import ContextTypes
+
 from src.config.settings import settings
+
 
 async def chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     telegram_id = update.effective_user.id

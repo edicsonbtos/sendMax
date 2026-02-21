@@ -1,22 +1,24 @@
-﻿from __future__ import annotations
-
-from dataclasses import dataclass
-from datetime import date
-from decimal import Decimal, ROUND_HALF_UP
-
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CallbackQueryHandler
+from __future__ import annotations
 
 import asyncio
+from decimal import ROUND_HALF_UP, Decimal
+
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
+from telegram.ext import CallbackQueryHandler, ContextTypes
 
 from src.config.settings import settings
-from src.db.connection import get_conn
-from src.db.repositories.users_repo import get_user_by_telegram_id
+from src.db.connection import get_async_conn
 from src.db.repositories.operator_summary_repo import list_recent_orders_for_operator
+from src.db.repositories.users_repo import get_user_by_telegram_id
 from src.db.repositories.wallet_metrics_repo import get_wallet_metrics
-from src.telegram_app.ui.routes_popular import COUNTRY_FLAGS, COUNTRY_LABELS
 from src.telegram_app.ui.keyboards import main_menu_keyboard
-
+from src.telegram_app.ui.routes_popular import COUNTRY_FLAGS, COUNTRY_LABELS
 
 BTN_DASH = "📊 Dashboard"
 BTN_HISTORY = "🧾 Historial (8)"
@@ -87,14 +89,12 @@ async def _count_orders(operator_user_id: int, *, only_today: bool) -> dict[str,
         """
 
     out = {"CREADA": 0, "EN_PROCESO": 0, "PAGADA": 0, "CANCELADA": 0}
-    def _query():
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, (operator_user_id,))
-                return cur.fetchall()
-    rows = await asyncio.get_event_loop().run_in_executor(None, _query)
-    for status, cnt in rows:
-        out[str(status)] = int(cnt)
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (operator_user_id,))
+            rows = await cur.fetchall()
+            for status, cnt in rows:
+                out[str(status)] = int(cnt)
     return out
 
 
@@ -106,12 +106,10 @@ async def _latest_paid(operator_user_id: int, limit: int = 3):
         ORDER BY updated_at DESC
         LIMIT %s;
     """
-    def _query():
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, (operator_user_id, limit))
-                return cur.fetchall()
-    return await asyncio.get_event_loop().run_in_executor(None, _query)
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (operator_user_id, limit))
+            return await cur.fetchall()
 
 
 def _build_dashboard_text(user_alias: str, today_counts: dict[str, int], all_counts: dict[str, int], latest_paid_rows) -> str:
@@ -147,8 +145,8 @@ def _build_dashboard_text(user_alias: str, today_counts: dict[str, int], all_cou
     return "\n".join(lines)
 
 
-def _build_profit_text(me_id: int, alias: str) -> str:
-    m = get_wallet_metrics(me_id)
+async def _build_profit_text(me_id: int, alias: str) -> str:
+    m = await get_wallet_metrics(me_id)
     def f2(x: Decimal) -> str:
         return f"{Decimal(str(x)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}"
 
@@ -196,7 +194,7 @@ async def enter_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     context.user_data.pop("ref_mode", None)
 
     telegram_id = update.effective_user.id
-    me = get_user_by_telegram_id(telegram_id)
+    me = await get_user_by_telegram_id(telegram_id)
     if not me:
         await update.message.reply_text("Primero regístrate con /start.")
         return
@@ -210,7 +208,7 @@ async def summary_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     telegram_id = update.effective_user.id
-    me = get_user_by_telegram_id(telegram_id)
+    me = await get_user_by_telegram_id(telegram_id)
     if not me:
         context.user_data.pop("summary_mode", None)
         await update.message.reply_text("Primero regístrate con /start.")
@@ -225,32 +223,45 @@ async def summary_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     if text == BTN_DASH:
-        today_counts = await _count_orders(me.id, only_today=True)
-        all_counts = await _count_orders(me.id, only_today=False)
-        latest_paid_rows = await _latest_paid(me.id, limit=3)
-        await update.message.reply_text(_build_dashboard_text(me.alias, today_counts, all_counts, latest_paid_rows), reply_markup=_summary_keyboard())
+        try:
+            today_counts = await asyncio.wait_for(_count_orders(me.id, only_today=True), timeout=5.0)
+            all_counts = await asyncio.wait_for(_count_orders(me.id, only_today=False), timeout=5.0)
+            latest_paid_rows = await asyncio.wait_for(_latest_paid(me.id, limit=3), timeout=5.0)
+            await update.message.reply_text(_build_dashboard_text(me.alias, today_counts, all_counts, latest_paid_rows), reply_markup=_summary_keyboard())
+        except asyncio.TimeoutError:
+            await update.message.reply_text("⏳ Timeout cargando dashboard.")
         return
 
     if text == BTN_HISTORY:
-        rows = list_recent_orders_for_operator(me.id, limit=8)
-        if not rows:
-            await update.message.reply_text("Aún no tienes operaciones 🧾", reply_markup=_summary_keyboard())
-            return
-        context.user_data["summary_cache"] = {int(o.public_id): o for o in rows}
-        await update.message.reply_text(_build_history_text(rows), reply_markup=_history_keyboard())
+        try:
+            rows = await asyncio.wait_for(list_recent_orders_for_operator(me.id, limit=8), timeout=5.0)
+            if not rows:
+                await update.message.reply_text("Aún no tienes operaciones 🧾", reply_markup=_summary_keyboard())
+                return
+            context.user_data["summary_cache"] = {int(o.public_id): o for o in rows}
+            await update.message.reply_text(_build_history_text(rows), reply_markup=_history_keyboard())
+        except asyncio.TimeoutError:
+            await update.message.reply_text("⏳ Timeout cargando historial.")
         return
 
     if text == BTN_PROOF:
-        rows = list_recent_orders_for_operator(me.id, limit=8)
-        if not rows:
-            await update.message.reply_text("Aún no tienes operaciones 🧾", reply_markup=_summary_keyboard())
-            return
-        context.user_data["summary_cache"] = {int(o.public_id): o for o in rows}
-        await update.message.reply_text("Elige la operación (últimos 3 dígitos) 👇", reply_markup=_proof_buttons(rows))
+        try:
+            rows = await asyncio.wait_for(list_recent_orders_for_operator(me.id, limit=8), timeout=5.0)
+            if not rows:
+                await update.message.reply_text("Aún no tienes operaciones 🧾", reply_markup=_summary_keyboard())
+                return
+            context.user_data["summary_cache"] = {int(o.public_id): o for o in rows}
+            await update.message.reply_text("Elige la operación (últimos 3 dígitos) 👇", reply_markup=_proof_buttons(rows))
+        except asyncio.TimeoutError:
+            await update.message.reply_text("⏳ Timeout cargando comprobantes.")
         return
 
     if text == BTN_PROFIT:
-        await update.message.reply_text(_build_profit_text(me.id, me.alias), reply_markup=_summary_keyboard())
+        try:
+            text_profit = await asyncio.wait_for(_build_profit_text(me.id, me.alias), timeout=5.0)
+            await update.message.reply_text(text_profit, reply_markup=_summary_keyboard())
+        except asyncio.TimeoutError:
+            await update.message.reply_text("⏳ Timeout cargando ganancias.")
         return
 
     await update.message.reply_text("Usa los botones del resumen 👇", reply_markup=_summary_keyboard())

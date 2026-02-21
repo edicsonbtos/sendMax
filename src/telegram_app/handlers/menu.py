@@ -1,47 +1,51 @@
-﻿"""
+"""
 Handlers del menú principal (botones fijos).
 Regla: el menú de operador SOLO funciona si kyc_status == APPROVED.
 Usa labels.py como fuente única de textos (evita bugs de encoding).
 Incluye rate-limit anti-spam para taps de menú.
 """
 
-import time
-import logging
+from __future__ import annotations
 
-logger = logging.getLogger(__name__)
+import logging
+import time
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings
-from src.telegram_app.ui.keyboards import main_menu_keyboard
-from src.telegram_app.ui.inline_buttons import support_whatsapp_button
+from src.db.repositories.users_repo import get_user_kyc_by_telegram_id
+from src.telegram_app.handlers.admin_panel import admin_panel_router, open_admin_panel
+from src.telegram_app.handlers.payment_methods import (
+    enter_payment_methods,
+    handle_payment_methods_country,
+)
 from src.telegram_app.handlers.rates import show_rates
-from src.telegram_app.handlers.payment_methods import enter_payment_methods, handle_payment_methods_country
-from src.telegram_app.handlers.admin_panel import open_admin_panel, admin_panel_router
 from src.telegram_app.handlers.referrals import enter_referrals, referrals_router
 from src.telegram_app.handlers.summary import enter_summary, summary_router
 from src.telegram_app.handlers.wallet import wallet_menu
-
-from src.db.repositories.users_repo import get_user_kyc_by_telegram_id
-
+from src.telegram_app.ui.inline_buttons import support_whatsapp_button
+from src.telegram_app.ui.keyboards import main_menu_keyboard
 from src.telegram_app.ui.labels import (
-    BTN_RATES,
-    BTN_WALLET,
-    BTN_NEW_ORDER,
-    BTN_SUMMARY,
-    BTN_REFERRALS,
-    BTN_PAYMENT_METHODS,
-    BTN_HELP,
     BTN_ADMIN,
-    BTN_ADMIN_ORDERS,
-    BTN_ADMIN_WITHDRAWALS,
-    BTN_ADMIN_RATES_NOW,
     BTN_ADMIN_ALERT_TEST,
-    BTN_ADMIN_RESET,
-    BTN_ADMIN_RESET_YES,
-    BTN_ADMIN_RESET_CANCEL,
     BTN_ADMIN_MENU,
+    BTN_ADMIN_ORDERS,
+    BTN_ADMIN_RATES_NOW,
+    BTN_ADMIN_RESET,
+    BTN_ADMIN_RESET_CANCEL,
+    BTN_ADMIN_RESET_YES,
+    BTN_ADMIN_WITHDRAWALS,
+    BTN_HELP,
+    BTN_NEW_ORDER,
+    BTN_PAYMENT_METHODS,
+    BTN_RATES,
+    BTN_REFERRALS,
+    BTN_SUMMARY,
+    BTN_WALLET,
 )
+
+logger = logging.getLogger(__name__)
 
 MENU_BUTTONS = {
     BTN_RATES,
@@ -67,8 +71,8 @@ def _is_admin(update: Update) -> bool:
     return settings.is_admin_id(getattr(update.effective_user, "id", None))
 
 
-def _kyc_status(update: Update) -> str | None:
-    u = get_user_kyc_by_telegram_id(update.effective_user.id)
+async def _kyc_status(update: Update) -> str | None:
+    u = await get_user_kyc_by_telegram_id(update.effective_user.id)
     return getattr(u, "kyc_status", None) if u else None
 
 
@@ -108,7 +112,7 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         context.user_data["menu_last_ts"] = now
 
     # Gate KYC: menú solo si APPROVED
-    st = _kyc_status(update)
+    st = await _kyc_status(update)
     if st != "APPROVED":
         if text in MENU_BUTTONS:
             await update.message.reply_text(
