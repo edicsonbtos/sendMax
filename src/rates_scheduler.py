@@ -92,14 +92,17 @@ class RatesScheduler:
             logger.info("[rates] 30m: baseline sin country prices, skip")
             return
 
-        # I/O Binance síncrono
+        # I/O Binance ahora es asíncrono
         client = BinanceP2PClient()
         triggers: list[str] = []
         any_unverified_now = False
         failed_now: list[str] = []
 
         try:
-            ref_map = get_setting_json("p2p_reference_amounts") or {}
+            # Configuración desde DB (AWAITED)
+            ref_map = await get_setting_json("p2p_reference_amounts") or {}
+            thr_val = await get_setting_float('pricing_fluctuation_threshold', 'percent', 0.03)
+            thr = Decimal(str(thr_val))
 
             def _trans_amount_for_fiat(fiat: str, fallback: float) -> float:
                 try:
@@ -108,47 +111,46 @@ class RatesScheduler:
                 except Exception:
                     return float(fallback)
 
-            def fetch_current_prices():
-                local_triggers = []
-                local_any_unverified = False
-                local_failed = []
-                for code, cfg in COUNTRIES.items():
-                    if code not in baseline:
-                        continue
-                    try:
-                        buy_q = client.fetch_first_price(
-                            fiat=cfg.fiat, trade_type="BUY", pay_methods=cfg.buy_methods[:1], trans_amount=_trans_amount_for_fiat(cfg.fiat, cfg.trans_amount)
-                        )
-                        sell_q = client.fetch_first_price(
-                            fiat=cfg.fiat, trade_type="SELL", pay_methods=cfg.sell_methods[:1], trans_amount=_trans_amount_for_fiat(cfg.fiat, cfg.trans_amount)
-                        )
-                        if not (buy_q.is_verified and sell_q.is_verified):
-                            local_any_unverified = True
+            for code, cfg in COUNTRIES.items():
+                if code not in baseline:
+                    continue
+                try:
+                    buy_q = await client.fetch_first_price(
+                        fiat=cfg.fiat,
+                        trade_type="BUY",
+                        pay_methods=cfg.buy_methods[:1],
+                        trans_amount=_trans_amount_for_fiat(cfg.fiat, cfg.trans_amount)
+                    )
+                    sell_q = await client.fetch_first_price(
+                        fiat=cfg.fiat,
+                        trade_type="SELL",
+                        pay_methods=cfg.sell_methods[:1],
+                        trans_amount=_trans_amount_for_fiat(cfg.fiat, cfg.trans_amount)
+                    )
 
-                        buy_now = Decimal(str(buy_q.price))
-                        sell_now = Decimal(str(sell_q.price))
+                    if not (buy_q.is_verified and sell_q.is_verified):
+                        any_unverified_now = True
 
-                        buy_base = Decimal(str(baseline[code]["buy"]))
-                        sell_base = Decimal(str(baseline[code]["sell"]))
+                    buy_now = Decimal(str(buy_q.price))
+                    sell_now = Decimal(str(sell_q.price))
 
-                        # Umbral
-                        thr = Decimal(str(get_setting_float('pricing_fluctuation_threshold','percent', 0.03)))
-                        buy_trigger = Decimal('1') + thr
-                        sell_trigger = Decimal('1') - thr
+                    buy_base = Decimal(str(baseline[code]["buy"]))
+                    sell_base = Decimal(str(baseline[code]["sell"]))
 
-                        if buy_now >= (buy_base * buy_trigger):
-                            pct = (buy_now / buy_base - Decimal("1")) * Decimal("100")
-                            local_triggers.append(f"BUY {code} +{pct.quantize(Decimal('0.01'))}%")
+                    # Umbral de fluctuación
+                    buy_trigger = Decimal('1') + thr
+                    sell_trigger = Decimal('1') - thr
 
-                        if sell_now <= (sell_base * sell_trigger):
-                            pct = (Decimal("1") - sell_now / sell_base) * Decimal("100")
-                            local_triggers.append(f"SELL {code} -{pct.quantize(Decimal('0.01'))}%")
+                    if buy_now >= (buy_base * buy_trigger):
+                        pct = (buy_now / buy_base - Decimal("1")) * Decimal("100")
+                        triggers.append(f"BUY {code} +{pct.quantize(Decimal('0.01'))}%")
 
-                    except Exception:
-                        local_failed.append(code)
-                return local_triggers, local_any_unverified, local_failed
+                    if sell_now <= (sell_base * sell_trigger):
+                        pct = (Decimal("1") - sell_now / sell_base) * Decimal("100")
+                        triggers.append(f"SELL {code} -{pct.quantize(Decimal('0.01'))}%")
 
-            triggers, any_unverified_now, failed_now = await asyncio.to_thread(fetch_current_prices)
+                except Exception:
+                    failed_now.append(code)
 
             if failed_now:
                 await self._notify_admin(
@@ -176,4 +178,4 @@ class RatesScheduler:
             )
 
         finally:
-            client.close()
+            await client.close()

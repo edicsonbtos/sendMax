@@ -2,7 +2,6 @@
 
 import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from src.db.settings_store import get_setting_float
 
 logger = logging.getLogger(__name__)
 
@@ -90,23 +89,31 @@ class Settings(BaseSettings):
             return None
         return raw.replace("\\n", "\n")
 
-    def commission_pct(self, origin: str, dest: str) -> float:
+    def commission_pct(
+        self,
+        origin: str,
+        dest: str,
+        *,
+        override_default: float | None = None,
+        override_venez: float | None = None,
+        override_usa_venez: float | None = None
+    ) -> float:
+        """
+        Calcula el % de comisión para una ruta.
+        Permite overrides manuales (ej. desde DB) para evitar I/O síncrono.
+        """
         origin_u = (origin or "").upper()
         dest_u = (dest or "").upper()
 
-        default_margin = float(self.COMMISSION_DEFAULT)
-        vene_margin = float(self.COMMISSION_VENEZUELA)
-        usa_ve_margin = float(self.COMMISSION_USA_TO_VENEZUELA)
-
-        default_margin = get_setting_float("margin_default", "percent", default_margin)
-        vene_margin = get_setting_float("margin_dest_venez", "percent", vene_margin)
-        usa_ve_margin = get_setting_float("margin_route_usa_venez", "percent", usa_ve_margin)
+        m_default = override_default if override_default is not None else float(self.COMMISSION_DEFAULT)
+        m_venez = override_venez if override_venez is not None else float(self.COMMISSION_VENEZUELA)
+        m_usa_venez = override_usa_venez if override_usa_venez is not None else float(self.COMMISSION_USA_TO_VENEZUELA)
 
         if dest_u == "VENEZUELA" and origin_u == "USA":
-            return _clamp_commission(float(usa_ve_margin), "usa->venez")
+            return _clamp_commission(m_usa_venez, "usa->venez")
         if dest_u == "VENEZUELA":
-            return _clamp_commission(float(vene_margin), "->venez")
-        return _clamp_commission(float(default_margin), "default")
+            return _clamp_commission(m_venez, "->venez")
+        return _clamp_commission(m_default, "default")
 
 
 settings = Settings()

@@ -31,12 +31,12 @@ class P2PQuote:
 
 class BinanceP2PClient:
     def __init__(self, timeout_seconds: float = 10.0) -> None:
-        self._client = httpx.Client(timeout=timeout_seconds)
+        self._client = httpx.AsyncClient(timeout=timeout_seconds)
 
-    def close(self) -> None:
-        self._client.close()
+    async def close(self) -> None:
+        await self._client.aclose()
 
-    def fetch_first_price(
+    async def fetch_first_price(
         self,
         *,
         fiat: str,
@@ -46,7 +46,7 @@ class BinanceP2PClient:
         asset: str = "USDT",
     ) -> P2PQuote:
         """
-        Devuelve un precio P2P.
+        Devuelve un precio P2P (ASYNC).
         Política:
         1) si hay anuncios de merchant verificado, toma el primero verificado
         2) si no hay verificados, toma el primer anuncio disponible (fallback)
@@ -54,9 +54,12 @@ class BinanceP2PClient:
 
         pay_types = list(pay_methods)
 
+        # Configuración dinámica desde DB
+        p2p_rows = await get_setting_float("p2p_rows", "rows", 10.0)
+
         payload = {
             "page": 1,
-            "rows": int(get_setting_float("p2p_rows","rows",10)),
+            "rows": int(p2p_rows),
             "payTypes": pay_types,
             "asset": asset,
             "fiat": fiat,
@@ -72,7 +75,7 @@ class BinanceP2PClient:
         }
 
         try:
-            resp = self._client.post(BINANCE_P2P_URL, json=payload, headers=headers)
+            resp = await self._client.post(BINANCE_P2P_URL, json=payload, headers=headers)
             resp.raise_for_status()
         except httpx.TimeoutException:
             raise RuntimeError(f"Tiempo de espera agotado al consultar Binance P2P ({fiat}/{trade_type}).")
