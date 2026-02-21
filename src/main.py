@@ -74,6 +74,9 @@ async def lifespan(app: FastAPI):
     # 4. Webhook + Start
     if settings.WEBHOOK_URL:
         url = f"{settings.WEBHOOK_URL}/{settings.TELEGRAM_BOT_TOKEN}"
+        print(f"\n--- SETTING WEBHOOK ---")
+        print(f"URL: {url}")
+        logger.info(f"Setting webhook to: {url}")
         await bot_app.bot.set_webhook(url=url, allowed_updates=["message", "callback_query"])
         logger.info(f"Webhook set: {url}")
 
@@ -96,10 +99,18 @@ app = FastAPI(lifespan=lifespan)
 @app.post(f"/{settings.TELEGRAM_BOT_TOKEN}")
 async def telegram_webhook(request: Request):
     """Endpoint to receive Telegram updates."""
-    data = await request.json()
-    update = Update.de_json(data, bot_app.bot)
-    await bot_app.process_update(update)
-    return Response(status_code=200)
+    try:
+        data = await request.json()
+        print(f"\n--- WEBHOOK INBOUND ---")
+        print(f"Update ID: {data.get('update_id')}")
+        logger.info(f"Webhook received update_id={data.get('update_id')}")
+
+        update = Update.de_json(data, bot_app.bot)
+        await bot_app.process_update(update)
+        return Response(status_code=200)
+    except Exception as e:
+        logger.error(f"Error processing webhook: {e}", exc_info=True)
+        return Response(status_code=500)
 
 @app.get("/health")
 async def health():
