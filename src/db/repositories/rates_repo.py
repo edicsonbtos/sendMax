@@ -1,4 +1,4 @@
-﻿"""
+"""
 Repositorio de tasas (rates).
 
 Responsabilidad:
@@ -6,6 +6,9 @@ Responsabilidad:
 - Guardar precios BUY/SELL por país usados en esa versión (p2p_country_prices)
 - Guardar tasas por ruta para esa versión (route_rates)
 - Leer la última versión activa para mostrar "📈 Tasas" en el bot
+
+Changelog:
+- Migracion a ASYNC para Fase 2.
 """
 
 from __future__ import annotations
@@ -13,9 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from src.db.connection import get_conn
 
-
+from src.db.connection import get_async_conn
 
 # --- Modelos simples (DTOs) ---
 
@@ -49,12 +51,12 @@ class CountryPrice:
     sell_price: Decimal
 
 
-# get_conn importado desde connection.py (pool centralizado)
+# get_async_conn importado desde connection.py (pool centralizado)
 
 
 # --- Escritura ---
 
-def create_rate_version(
+async def create_rate_version(
     *,
     kind: str,
     effective_from: datetime,
@@ -66,31 +68,31 @@ def create_rate_version(
         VALUES (%s, %s, %s, %s)
         RETURNING id;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (kind, reason, effective_from, is_active))
-            (rid,) = cur.fetchone()
-            conn.commit()
-            return int(rid)
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (kind, reason, effective_from, is_active))
+            res = await cur.fetchone()
+            await conn.commit()
+            return int(res[0]) if res else 0
 
 
-def deactivate_all_rate_versions() -> None:
+async def deactivate_all_rate_versions() -> None:
     sql = "UPDATE rate_versions SET is_active = false WHERE is_active = true;"
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql)
-            conn.commit()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql)
+            await conn.commit()
 
 
-def activate_rate_version(rate_version_id: int) -> None:
+async def activate_rate_version(rate_version_id: int) -> None:
     sql = "UPDATE rate_versions SET is_active = true WHERE id = %s;"
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (rate_version_id,))
-            conn.commit()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (rate_version_id,))
+            await conn.commit()
 
 
-def insert_country_price(
+async def insert_country_price(
     *,
     rate_version_id: int,
     country: str,
@@ -111,9 +113,9 @@ def insert_country_price(
         )
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s);
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 sql,
                 (
                     rate_version_id,
@@ -123,10 +125,10 @@ def insert_country_price(
                     source, is_verified,
                 ),
             )
-            conn.commit()
+            await conn.commit()
 
 
-def insert_route_rate(
+async def insert_route_rate(
     *,
     rate_version_id: int,
     origin_country: str,
@@ -147,9 +149,9 @@ def insert_route_rate(
         )
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s);
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 sql,
                 (
                     rate_version_id,
@@ -159,12 +161,12 @@ def insert_route_rate(
                     rate_base, rate_client,
                 ),
             )
-            conn.commit()
+            await conn.commit()
 
 
 # --- Lectura ---
 
-def get_latest_active_rate_version() -> RateVersion | None:
+async def get_latest_active_rate_version() -> RateVersion | None:
     sql = """
         SELECT id, kind, reason, created_at, effective_from, effective_to, is_active
         FROM rate_versions
@@ -172,16 +174,16 @@ def get_latest_active_rate_version() -> RateVersion | None:
         ORDER BY effective_from DESC
         LIMIT 1;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql)
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql)
+            row = await cur.fetchone()
             if not row:
                 return None
             return RateVersion(*row)
 
 
-def get_route_rate(
+async def get_route_rate(
     *,
     rate_version_id: int,
     origin_country: str,
@@ -196,16 +198,16 @@ def get_route_rate(
           AND dest_country = %s
         LIMIT 1;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (rate_version_id, origin_country, dest_country))
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (rate_version_id, origin_country, dest_country))
+            row = await cur.fetchone()
             if not row:
                 return None
             return RouteRate(*row)
 
 
-def list_route_rates_for_version(
+async def list_route_rates_for_version(
     *,
     rate_version_id: int,
     routes: list[tuple[str, str]],
@@ -230,14 +232,14 @@ def list_route_rates_for_version(
           AND ({' OR '.join(clauses)});
     """
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            rows = cur.fetchall()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, params)
+            rows = await cur.fetchall()
             return [RouteRate(*r) for r in rows]
 
 
-def list_all_route_pairs_for_version(
+async def list_all_route_pairs_for_version(
     *,
     rate_version_id: int,
 ) -> list[tuple[str, str]]:
@@ -249,13 +251,14 @@ def list_all_route_pairs_for_version(
         FROM route_rates
         WHERE rate_version_id = %s;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (rate_version_id,))
-            return [(r[0], r[1]) for r in cur.fetchall()]
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (rate_version_id,))
+            res = await cur.fetchall()
+            return [(r[0], r[1]) for r in res]
 
 
-def get_country_price_for_version(*, rate_version_id: int, country: str) -> CountryPrice | None:
+async def get_country_price_for_version(*, rate_version_id: int, country: str) -> CountryPrice | None:
     sql = """
         SELECT country, fiat, buy_price, sell_price
         FROM p2p_country_prices
@@ -263,28 +266,28 @@ def get_country_price_for_version(*, rate_version_id: int, country: str) -> Coun
           AND country = %s
         LIMIT 1;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (rate_version_id, country))
-            row = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (rate_version_id, country))
+            row = await cur.fetchone()
             if not row:
                 return None
             return CountryPrice(*row)
 
 
-def get_latest_active_country_sell(*, country: str) -> tuple[str, Decimal] | None:
+async def get_latest_active_country_sell(*, country: str) -> tuple[str, Decimal] | None:
     """
     Returns (fiat, sell_price) for country using latest active rate_version.
     """
-    rv = get_latest_active_rate_version()
+    rv = await get_latest_active_rate_version()
     if not rv:
         return None
-    cp = get_country_price_for_version(rate_version_id=rv.id, country=country)
+    cp = await get_country_price_for_version(rate_version_id=rv.id, country=country)
     if not cp:
         return None
     return (cp.fiat, cp.sell_price)
 
-def list_route_rates_by_origin(
+async def list_route_rates_by_origin(
     *,
     rate_version_id: int,
     origin_country: str,
@@ -301,8 +304,8 @@ def list_route_rates_by_origin(
           AND origin_country = %s
         ORDER BY dest_country ASC;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (rate_version_id, origin_country))
-            rows = cur.fetchall()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (rate_version_id, origin_country))
+            rows = await cur.fetchall()
             return [RouteRate(*r) for r in rows]

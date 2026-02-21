@@ -1,10 +1,19 @@
 from __future__ import annotations
+
 import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
+
 from src.telegram_app.ui.labels import (
-    BTN_RATES, BTN_WALLET, BTN_NEW_ORDER, BTN_SUMMARY,
-    BTN_REFERRALS, BTN_PAYMENT_METHODS, BTN_HELP, BTN_ADMIN
+    BTN_ADMIN,
+    BTN_HELP,
+    BTN_NEW_ORDER,
+    BTN_PAYMENT_METHODS,
+    BTN_RATES,
+    BTN_REFERRALS,
+    BTN_SUMMARY,
+    BTN_WALLET,
 )
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,8 @@
 ﻿from telegram import Update
 from telegram.ext import ContextTypes
+
 from src.config.settings import settings
+
 
 async def alert_test(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Solo admin

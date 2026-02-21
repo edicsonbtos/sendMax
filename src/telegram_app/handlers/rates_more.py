@@ -4,8 +4,10 @@ Con manejo robusto de errores en todos los callbacks.
 """
 
 from __future__ import annotations
+
 import logging
 from typing import List, Tuple
+
 from telegram import Update
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
@@ -13,15 +15,19 @@ from telegram.ext import ContextTypes
 from src.db.repositories.rates_repo import (
     get_latest_active_rate_version,
     list_all_route_pairs_for_version,
-    list_route_rates_for_version,
     list_route_rates_by_origin,
+    list_route_rates_for_version,
 )
-from src.telegram_app.ui.routes_popular import POPULAR_ROUTES, route_label, format_rate_no_noise
 from src.telegram_app.ui.rates_buttons import (
+    rates_country_result_buttons,
+    rates_country_select_buttons,
     rates_main_buttons,
     rates_pagination_buttons,
-    rates_country_select_buttons,
-    rates_country_result_buttons,
+)
+from src.telegram_app.ui.routes_popular import (
+    POPULAR_ROUTES,
+    format_rate_no_noise,
+    route_label,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,7 +82,7 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         # 1. VOLVER AL MENÚ PRINCIPAL
         if data == "rates_more:home":
-            from src.telegram_app.handlers.menu import main_menu_keyboard, _is_admin
+            from src.telegram_app.handlers.menu import _is_admin, main_menu_keyboard
             try:
                 await q.message.delete()
             except Exception:
@@ -91,12 +97,12 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         # 2. VOLVER A TASAS INICIALES
         if data == "rates_more:back":
-            rv = get_latest_active_rate_version()
+            rv = await get_latest_active_rate_version()
             if not rv:
                 await _safe_edit(q, "Aún no hay tasas.")
                 return
 
-            rates = list_route_rates_for_version(rate_version_id=rv.id, routes=POPULAR_ROUTES)
+            rates = await list_route_rates_for_version(rate_version_id=rv.id, routes=POPULAR_ROUTES)
             rate_map = {(r.origin_country, r.dest_country): r for r in rates}
 
             blocks = []
@@ -118,12 +124,12 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         # 4. MOSTRAR TASAS POR PAÍS
         if data.startswith("rates_more:origin="):
             origin = _parse_origin(data)
-            rv = get_latest_active_rate_version()
+            rv = await get_latest_active_rate_version()
             if not rv:
                 await _safe_edit(q, "No hay tasas activas.")
                 return
 
-            rates = list_route_rates_by_origin(rate_version_id=rv.id, origin_country=origin)
+            rates = await list_route_rates_by_origin(rate_version_id=rv.id, origin_country=origin)
             if not rates:
                 await _safe_edit(
                     q,
@@ -143,12 +149,12 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         # 5. PAGINACIÓN
         if data.startswith("rates_more:page="):
             page = _parse_page(data)
-            rv = get_latest_active_rate_version()
+            rv = await get_latest_active_rate_version()
             if not rv:
                 await _safe_edit(q, "Aún no hay tasas.")
                 return
 
-            all_pairs = list_all_route_pairs_for_version(rate_version_id=rv.id)
+            all_pairs = await list_all_route_pairs_for_version(rate_version_id=rv.id)
             popular_set = set(POPULAR_ROUTES)
             rest = [pair for pair in all_pairs if pair not in popular_set]
             rest = _sort_routes_dest_first(rest)
@@ -160,7 +166,7 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             has_prev = page > 1
             has_next = end < total
 
-            rates = list_route_rates_for_version(rate_version_id=rv.id, routes=page_pairs)
+            rates = await list_route_rates_for_version(rate_version_id=rv.id, routes=page_pairs)
             rate_map = {(r.origin_country, r.dest_country): r for r in rates}
 
             blocks = []

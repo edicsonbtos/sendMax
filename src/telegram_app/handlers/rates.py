@@ -1,4 +1,4 @@
-﻿"""
+"""
 Handler: 📈 Tasas (populares) + filtro por país origen
 REDISEÑO: Todo en un solo mensaje con botones inline (sin teclado de texto)
 """
@@ -10,23 +10,27 @@ from src.db.repositories.rates_repo import (
     get_latest_active_rate_version,
     list_route_rates_for_version,
 )
-from src.telegram_app.ui.routes_popular import POPULAR_ROUTES, route_label, format_rate_no_noise
-from src.telegram_app.ui.rates_buttons import rates_main_buttons
 from src.telegram_app.ui.labels import BTN_NEW_ORDER
+from src.telegram_app.ui.rates_buttons import rates_main_buttons
+from src.telegram_app.ui.routes_popular import (
+    POPULAR_ROUTES,
+    format_rate_no_noise,
+    route_label,
+)
 
 
 async def show_rates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Muestra tasas populares con botones inline"""
+    """Muestra tasas populares con botones inline (ASYNC)"""
     # Limpiar cualquier modo anterior
     context.user_data.pop("rates_mode", None)
     context.user_data.pop("rates_message_id", None)
 
-    rv = get_latest_active_rate_version()
+    rv = await get_latest_active_rate_version()
     if not rv:
         await update.message.reply_text("Aún no tengo tasas listas. Vuelve en unos minutos.")
         return
 
-    rates = list_route_rates_for_version(rate_version_id=rv.id, routes=POPULAR_ROUTES)
+    rates = await list_route_rates_for_version(rate_version_id=rv.id, routes=POPULAR_ROUTES)
     rate_map = {(r.origin_country, r.dest_country): r for r in rates}
 
     blocks = []
@@ -59,7 +63,3 @@ async def show_rates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     
     # Guardar ID del mensaje para poder editarlo después
     context.user_data["rates_message_id"] = msg.message_id
-
-
-# NOTA: La función rates_country_router ya NO se necesita
-# porque todo el flujo ahora es por callbacks inline

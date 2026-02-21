@@ -1,10 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler
+from telegram.ext import CommandHandler, ContextTypes
 
 from src.config.settings import settings
-from src.db.connection import get_conn
+from src.db.connection import get_async_conn
 
 
 def _is_admin(update: Update) -> bool:
@@ -30,27 +30,27 @@ async def set_sponsor_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("No puedes asignar un usuario como su propio padrino.")
         return
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, alias FROM users WHERE alias=%s LIMIT 1;", (child_alias,))
-            child = cur.fetchone()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT id, alias FROM users WHERE alias=%s LIMIT 1;", (child_alias,))
+            child = await cur.fetchone()
             if not child:
                 await update.message.reply_text(f"No encontré al hijo con alias: {child_alias}")
                 return
             child_id, child_alias_db = int(child[0]), child[1]
 
-            cur.execute("SELECT id, alias FROM users WHERE alias=%s LIMIT 1;", (sponsor_alias,))
-            sp = cur.fetchone()
+            await cur.execute("SELECT id, alias FROM users WHERE alias=%s LIMIT 1;", (sponsor_alias,))
+            sp = await cur.fetchone()
             if not sp:
                 await update.message.reply_text(f"No encontré al padrino con alias: {sponsor_alias}")
                 return
             sponsor_id, sponsor_alias_db = int(sp[0]), sp[1]
 
-            cur.execute(
+            await cur.execute(
                 "UPDATE users SET sponsor_id=%s, updated_at=now() WHERE id=%s;",
                 (sponsor_id, child_id),
             )
-        conn.commit()
+        await conn.commit()
 
     await update.message.reply_text(
         f"✅ Sponsor actualizado.\nHijo: {child_alias_db} (id={child_id})\nPadrino: {sponsor_alias_db} (id={sponsor_id})"

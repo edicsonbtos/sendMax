@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 
 from src.config.settings import settings
-from src.telegram_app.ui.routes_popular import COUNTRY_FLAGS, COUNTRY_LABELS
 from src.telegram_app.ui.keyboards import main_menu_keyboard
+from src.telegram_app.ui.routes_popular import COUNTRY_FLAGS, COUNTRY_LABELS
 
 ASK_COUNTRY = 1
 BTN_BACK = "⬅️ Volver"

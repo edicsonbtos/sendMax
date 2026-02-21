@@ -1,6 +1,8 @@
-﻿from telegram import Update
+﻿import logging
+
+from telegram import Update
 from telegram.ext import ContextTypes
-import logging
+
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -48,7 +50,9 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
     mode = context.user_data.get("admin_mode")
 
     if mode == "withdrawal_proof":
-        from src.telegram_app.handlers.admin_withdrawals import process_withdrawal_proof_photo
+        from src.telegram_app.handlers.admin_withdrawals import (
+            process_withdrawal_proof_photo,
+        )
         await process_withdrawal_proof_photo(update, context)
         return
 

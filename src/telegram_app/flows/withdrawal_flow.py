@@ -1,26 +1,33 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import asyncio
+import logging
 from decimal import Decimal, InvalidOperation
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardRemove,
+    Update,
+)
 from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
-    ConversationHandler,
     ContextTypes,
+    ConversationHandler,
     MessageHandler,
     filters,
 )
 
-import logging
 from src.config.settings import settings
-from src.telegram_app.handlers.panic import panic_handler, MENU_BUTTONS_REGEX
-logger = logging.getLogger(__name__)
-
 from src.db.repositories import rates_repo
-from src.db.repositories.users_repo import get_user_by_telegram_id, get_payout_method
-from src.db.repositories.wallet_repo import get_balance, get_conn as db_conn
+from src.db.repositories.users_repo import get_payout_method, get_user_by_telegram_id
+from src.db.repositories.wallet_repo import get_async_conn as db_async_conn
+from src.db.repositories.wallet_repo import get_balance
 from src.db.repositories.withdrawals_repo import WithdrawalsRepo
+from src.telegram_app.handlers.panic import MENU_BUTTONS_REGEX, panic_handler
+
+logger = logging.getLogger(__name__)
 
 
 def _reset_withdraw_state(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -151,13 +158,19 @@ async def start_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         msg = await update.message.reply_text("Cargando retiro…")
         _set_panel(context, msg.chat_id, msg.message_id)
 
-    db_user = get_user_by_telegram_id(update.effective_user.id)
+    try:
+        db_user = await asyncio.wait_for(get_user_by_telegram_id(update.effective_user.id), timeout=5.0)
+    except asyncio.TimeoutError:
+        await _edit_panel(update, context, "⏳ Error DB. Reintenta.")
+        context.user_data.pop("withdraw_mode", None)
+        return ConversationHandler.END
+
     if not db_user:
         await _edit_panel(update, context, "❌ No estás registrado. Usa /start.")
         context.user_data.pop("withdraw_mode", None)
         return ConversationHandler.END
 
-    payout_country, payout_method_text = get_payout_method(db_user.id)
+    payout_country, payout_method_text = await get_payout_method(db_user.id)
     if not payout_country or not payout_method_text:
         await _edit_panel(
             update,
@@ -168,7 +181,7 @@ async def start_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context.user_data.pop("withdraw_mode", None)
         return ConversationHandler.END
 
-    balance = get_balance(db_user.id)
+    balance = await get_balance(db_user.id)
 
     context.user_data["withdrawal"] = {
         "country": payout_country,
@@ -224,20 +237,20 @@ async def on_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await _edit_panel(update, context, f"Monto inválido. El mínimo es {MIN_WITHDRAW_USDT} USDT.", reply_markup=_kb_cancel_inline())
         return W_AMOUNT
 
-    db_user = get_user_by_telegram_id(update.effective_user.id)
+    db_user = await get_user_by_telegram_id(update.effective_user.id)
     if not db_user:
         await update.message.reply_text("No estás registrado. Usa /start.")
         context.user_data.pop("withdraw_mode", None)
         return ConversationHandler.END
 
-    balance = get_balance(db_user.id)
+    balance = await get_balance(db_user.id)
     if amount > balance:
         await _edit_panel(update, context, f"Saldo insuficiente. Tu balance es {balance:.8f} USDT.", reply_markup=_kb_cancel_inline())
         return W_AMOUNT
 
     country = wd["country"]
 
-    result = rates_repo.get_latest_active_country_sell(country=country)
+    result = await rates_repo.get_latest_active_country_sell(country=country)
     if not result:
         await _edit_panel(update, context, f"No tengo tasa activa para {country}. Intenta más tarde.")
         context.user_data.pop("withdraw_mode", None)
@@ -282,7 +295,7 @@ async def on_confirm_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data.pop("withdraw_mode", None)
         return ConversationHandler.END
 
-    db_user = get_user_by_telegram_id(q.from_user.id)
+    db_user = await get_user_by_telegram_id(q.from_user.id)
     if not db_user:
         context.user_data.pop("withdrawal", None)
         context.user_data.pop("withdraw_panel", None)
@@ -296,21 +309,28 @@ async def on_confirm_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
     fiat_amount = Decimal(wd["fiat_amount"])
     dest_text = wd["dest_text"]
 
-    with db_conn() as conn:
-        repo = WithdrawalsRepo(conn)
-        try:
-            withdrawal_id = repo.create_withdrawal_request_fiat(
-                user_id=db_user.id,
-                amount_usdt=amount,
-                country=country,
-                fiat=fiat,
-                fiat_amount=fiat_amount,
-                dest_text=dest_text,
-            )
-            conn.commit()
-        except ValueError as e:
-            await _edit_panel(update, context, f"❌ {str(e)}", reply_markup=_kb_cancel_inline())
-            return W_AMOUNT
+    try:
+        async with db_async_conn() as conn:
+            repo = WithdrawalsRepo(conn)
+            try:
+                withdrawal_id = await asyncio.wait_for(
+                    repo.create_withdrawal_request_fiat(
+                        user_id=db_user.id,
+                        amount_usdt=amount,
+                        country=country,
+                        fiat=fiat,
+                        fiat_amount=fiat_amount,
+                        dest_text=dest_text,
+                    ),
+                    timeout=5.0
+                )
+                await conn.commit()
+            except ValueError as e:
+                await _edit_panel(update, context, f"❌ {str(e)}", reply_markup=_kb_cancel_inline())
+                return W_AMOUNT
+    except asyncio.TimeoutError:
+        await q.message.reply_text("⏳ Timeout registrando retiro. Reintenta.")
+        return W_CONFIRM
 
     context.user_data.pop("withdrawal", None)
     context.user_data.pop("withdraw_panel", None)

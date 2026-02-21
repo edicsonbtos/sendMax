@@ -1,11 +1,11 @@
-﻿from decimal import Decimal
+from decimal import Decimal
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from src.db.repositories.users_repo import get_user_by_telegram_id
-from src.db.repositories.wallet_repo import get_balance
 from src.db.repositories.wallet_metrics_repo import get_wallet_metrics
+from src.db.repositories.wallet_repo import get_balance
 
 
 def _fmt8(x: Decimal) -> str:
@@ -24,25 +24,19 @@ def _fmt2(x: Decimal) -> str:
 
 async def wallet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Panel Billetera:
-    - Muestra saldo REAL desde wallets.balance_usdt (por users.id).
-    - Muestra métricas desde wallet_ledger:
-        - Ganancia hoy (ORDER_PROFIT)
-        - Ganancia del mes (ORDER_PROFIT)
-        - Referidos del mes (SPONSOR_COMMISSION)
-    - Botón "Solicitar Retiro" dispara callback withdraw_start (withdrawal_flow).
+    Panel Billetera (ASYNC).
     """
     user = update.effective_user
     if not user:
         return
 
-    db_user = get_user_by_telegram_id(user.id)
+    db_user = await get_user_by_telegram_id(user.id)
     if not db_user:
         await update.message.reply_text("❌ No estás registrado. Usa /start.")
         return
 
-    balance = get_balance(db_user.id)
-    m = get_wallet_metrics(db_user.id)
+    balance = await get_balance(db_user.id)
+    m = await get_wallet_metrics(db_user.id)
 
     text = (
         f"💼 *Billetera*\n\n"

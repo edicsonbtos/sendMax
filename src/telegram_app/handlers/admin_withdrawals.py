@@ -1,23 +1,23 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from decimal import Decimal
 import logging
+from decimal import Decimal
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
-    ConversationHandler,
     ContextTypes,
+    ConversationHandler,
     MessageHandler,
     filters,
 )
 
 from src.config.settings import settings
-from src.telegram_app.handlers.panic import panic_handler, MENU_BUTTONS_REGEX
+from src.db.connection import get_async_conn as db_async_conn
 from src.db.repositories.users_repo import get_telegram_id_by_user_id
-from src.db.repositories.wallet_repo import get_conn as db_conn
 from src.db.repositories.withdrawals_repo import WithdrawalsRepo
+from src.telegram_app.handlers.panic import MENU_BUTTONS_REGEX, panic_handler
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,6 @@ def build_admin_withdrawals_conversation_handler() -> ConversationHandler:
         ],
         states={
             A_WAIT_PROOF: [
-                # Nota: la foto real se procesa por el router global según admin_mode
                 MessageHandler(filters.PHOTO, noop_photo),
                 CallbackQueryHandler(admin_withdrawals_list, pattern=f"^{CB_BACK}$"),
             ],
@@ -78,7 +77,6 @@ def build_admin_withdrawals_conversation_handler() -> ConversationHandler:
 
 
 async def noop_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # El router global consumirá la foto según admin_mode.
     return ConversationHandler.END
 
 
@@ -95,9 +93,9 @@ async def admin_withdrawals_list(update: Update, context: ContextTypes.DEFAULT_T
         except Exception:
             pass
 
-    with db_conn() as conn:
+    async with db_async_conn() as conn:
         repo = WithdrawalsRepo(conn)
-        items = repo.list_withdrawals_by_status("SOLICITADA", limit=20)
+        items = await repo.list_withdrawals_by_status("SOLICITADA", limit=20)
 
     if not items:
         await target.reply_text("✅ No hay retiros SOLICITADOS.")
@@ -133,9 +131,6 @@ async def on_click_approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def process_withdrawal_proof_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Procesa la foto cuando admin_mode == withdrawal_proof.
-    """
     if not _is_admin(update):
         return
 
@@ -149,23 +144,25 @@ async def process_withdrawal_proof_photo(update: Update, context: ContextTypes.D
 
     proof_file_id = update.message.photo[-1].file_id
 
-    with db_conn() as conn:
+    async with db_async_conn() as conn:
         wrepo = WithdrawalsRepo(conn)
-        wd = wrepo.get_withdrawal_by_id(withdrawal_id)
+        wd = await wrepo.get_withdrawal_by_id(withdrawal_id)
         if not wd:
             return
 
-        wrepo.set_withdrawal_resolved(withdrawal_id, proof_file_id)
-        conn.commit()
+        await wrepo.set_withdrawal_resolved(withdrawal_id, proof_file_id)
+        await conn.commit()
 
-    # limpiar modo
     context.user_data.pop("admin_withdrawal_action", None)
     context.user_data.pop("admin_mode", None)
 
-    tg_id = get_telegram_id_by_user_id(wd.user_id)
+    tg_id = await get_telegram_id_by_user_id(wd.user_id)
     if tg_id:
-        await context.bot.send_message(chat_id=int(tg_id), text="✅ Retiro exitoso. Ya fue procesado.")
-        await context.bot.send_photo(chat_id=int(tg_id), photo=proof_file_id, caption="Comprobante")
+        try:
+            await context.bot.send_message(chat_id=int(tg_id), text="✅ Retiro exitoso. Ya fue procesado.")
+            await context.bot.send_photo(chat_id=int(tg_id), photo=proof_file_id, caption="Comprobante")
+        except Exception:
+            pass
 
     try:
         await update.message.reply_text(f"✅ Retiro {withdrawal_id} marcado como RESUELTO.")
@@ -206,19 +203,22 @@ async def on_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("Sesión expirada. Usa /withdrawals.")
         return ConversationHandler.END
 
-    with db_conn() as conn:
+    async with db_async_conn() as conn:
         wrepo = WithdrawalsRepo(conn)
-        wd = wrepo.get_withdrawal_by_id(withdrawal_id)
+        wd = await wrepo.get_withdrawal_by_id(withdrawal_id)
         if not wd:
             await update.message.reply_text("No encontré ese retiro.")
             return ConversationHandler.END
 
-        wrepo.set_withdrawal_rejected(withdrawal_id, reason)
-        conn.commit()
+        await wrepo.set_withdrawal_rejected(withdrawal_id, reason)
+        await conn.commit()
 
-    tg_id = get_telegram_id_by_user_id(wd.user_id)
+    tg_id = await get_telegram_id_by_user_id(wd.user_id)
     if tg_id:
-        await context.bot.send_message(chat_id=int(tg_id), text=f"❌ Tu retiro fue rechazado.\nMotivo: {reason}")
+        try:
+            await context.bot.send_message(chat_id=int(tg_id), text=f"❌ Tu retiro fue rechazado.\nMotivo: {reason}")
+        except Exception:
+            pass
 
     await update.message.reply_text(f"❌ Retiro {withdrawal_id} RECHAZADO y saldo revertido.")
     context.user_data.pop("admin_withdrawal_action", None)
@@ -229,4 +229,3 @@ admin_withdrawals_callbacks = [
     CallbackQueryHandler(on_click_approve, pattern=f"^{CB_ADMIN_APPROVE}"),
     CallbackQueryHandler(on_click_reject, pattern=f"^{CB_ADMIN_REJECT}"),
 ]
-

@@ -1,16 +1,20 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
-from decimal import Decimal, ROUND_DOWN
+from decimal import ROUND_DOWN, Decimal
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CallbackQueryHandler, MessageHandler, filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
 from src.config.settings import settings
-from src.db.connection import get_conn
-from src.db.repositories.orders_repo import mark_order_paid, get_order_by_public_id, set_profit_usdt
-from src.db.repositories.users_repo import get_telegram_id_by_user_id
+from src.db.connection import get_async_conn
 from src.db.repositories import rates_repo
+from src.db.repositories.orders_repo import (
+    get_order_by_public_id,
+    mark_order_paid,
+    set_profit_usdt,
+)
+from src.db.repositories.users_repo import get_telegram_id_by_user_id
 from src.db.repositories.wallet_repo import add_ledger_entry
 
 logger = logging.getLogger(__name__)
@@ -119,19 +123,19 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     file_id = msg.photo[-1].file_id
 
-    ok = mark_order_paid(int(pid), file_id)
+    ok = await mark_order_paid(int(pid), file_id)
     if not ok:
         await msg.reply_text("❌ No pude marcar la orden como PAGADA. Verifica el ID.")
         context.user_data.pop("pending_paid_dm_order_id", None)
         return
 
-    order = get_order_by_public_id(int(pid))
+    order = await get_order_by_public_id(int(pid))
     if not order:
         await msg.reply_text("❌ Orden marcada PAGADA, pero no pude cargarla para contabilizar.")
         context.user_data.pop("pending_paid_dm_order_id", None)
         return
 
-    rr = rates_repo.get_route_rate(
+    rr = await rates_repo.get_route_rate(
         rate_version_id=int(order.rate_version_id),
         origin_country=str(order.origin_country),
         dest_country=str(order.dest_country),
@@ -147,15 +151,15 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     sell_dest = Decimal(str(rr.sell_dest))
 
     profit_usdt = _q8((amount_origin / buy_origin) - (payout_dest / sell_dest))
-    set_profit_usdt(int(pid), profit_usdt)
+    await set_profit_usdt(int(pid), profit_usdt)
 
-    # Sponsor lookup usando pool
+    # Sponsor lookup usando async conn
     sponsor_id = None
     try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT sponsor_id FROM users WHERE id=%s LIMIT 1;", (int(order.operator_user_id),))
-                row = cur.fetchone()
+        async with get_async_conn() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT sponsor_id FROM users WHERE id=%s LIMIT 1;", (int(order.operator_user_id),))
+                row = await cur.fetchone()
                 sponsor_id = int(row[0]) if row and row[0] is not None else None
     except Exception:
         sponsor_id = None
@@ -163,7 +167,7 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if sponsor_id:
         op_share = _q8(profit_usdt * Decimal("0.45"))
         sp_share = _q8(profit_usdt * Decimal("0.10"))
-        add_ledger_entry(
+        await add_ledger_entry(
             user_id=int(order.operator_user_id),
             amount_usdt=op_share,
             entry_type="ORDER_PROFIT",
@@ -171,7 +175,7 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             memo="Profit orden (45%)",
             idempotency=True,
         )
-        add_ledger_entry(
+        await add_ledger_entry(
             user_id=int(sponsor_id),
             amount_usdt=sp_share,
             entry_type="SPONSOR_COMMISSION",
@@ -181,7 +185,7 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
     else:
         op_share = _q8(profit_usdt * Decimal("0.50"))
-        add_ledger_entry(
+        await add_ledger_entry(
             user_id=int(order.operator_user_id),
             amount_usdt=op_share,
             entry_type="ORDER_PROFIT",
@@ -190,7 +194,7 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             idempotency=True,
         )
 
-    operator_tid = get_telegram_id_by_user_id(int(order.operator_user_id))
+    operator_tid = await get_telegram_id_by_user_id(int(order.operator_user_id))
     if operator_tid:
         try:
             await context.bot.send_message(

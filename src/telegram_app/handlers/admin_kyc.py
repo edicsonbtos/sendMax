@@ -1,13 +1,13 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings
-from src.db.connection import get_conn
-from src.db.repositories.users_repo import set_kyc_status, get_telegram_id_by_user_id
-from src.telegram_app.handlers.menu import show_home
+from src.db.connection import get_async_conn
+from src.db.repositories.users_repo import get_telegram_id_by_user_id, set_kyc_status
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +21,9 @@ def _is_admin(update: Update) -> bool:
     return settings.is_admin_id(getattr(update.effective_user, "id", None))
 
 
-def _reset_kyc_fields(user_id: int) -> None:
+async def _reset_kyc_fields(user_id: int) -> None:
     """
     Limpia campos KYC para permitir re-registro.
-    (No borra alias ni sponsor.)
     """
     sql = """
     UPDATE users
@@ -43,10 +42,10 @@ def _reset_kyc_fields(user_id: int) -> None:
       updated_at=now()
     WHERE id=%s;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (int(user_id),))
-        conn.commit()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (int(user_id),))
+        await conn.commit()
 
 
 async def handle_kyc_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -81,17 +80,16 @@ async def handle_kyc_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     if action == "approve":
-        ok = set_kyc_status(user_id=user_id, new_status="APPROVED", reason=None)
+        ok = await set_kyc_status(user_id=user_id, new_status="APPROVED", reason=None)
 
         if ok:
-            tg_id = get_telegram_id_by_user_id(user_id)
+            tg_id = await get_telegram_id_by_user_id(user_id)
             if tg_id:
                 try:
                     await context.bot.send_message(
                         chat_id=int(tg_id),
                         text="✅ Tu verificación fue aprobada. Ya puedes usar el bot.",
                     )
-                    fake_update = Update(update.update_id, message=None)
                 except Exception:
                     pass
 
@@ -131,10 +129,10 @@ async def handle_kyc_reject_reason(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text("Motivo muy corto. Intenta de nuevo:")
         return
 
-    set_kyc_status(user_id=int(user_id), new_status="REJECTED", reason=reason)
-    _reset_kyc_fields(int(user_id))
+    await set_kyc_status(user_id=int(user_id), new_status="REJECTED", reason=reason)
+    await _reset_kyc_fields(int(user_id))
 
-    tg_id = get_telegram_id_by_user_id(int(user_id))
+    tg_id = await get_telegram_id_by_user_id(int(user_id))
     if tg_id:
         try:
             await context.bot.send_message(

@@ -1,12 +1,14 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import asyncio
 import logging
 import re
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
+    CommandHandler,
     ContextTypes,
     ConversationHandler,
-    CommandHandler,
     MessageHandler,
     filters,
 )
@@ -14,16 +16,16 @@ from telegram.ext import (
 from src.config.settings import settings
 from src.db.repositories.user_contacts_repo import touch_contact
 from src.db.repositories.users_repo import (
-    get_user_by_telegram_id,
-    get_user_by_alias,
+    check_email_exists,
     create_user,
+    get_user_by_alias,
+    get_user_by_telegram_id,
     get_user_kyc_by_telegram_id,
     submit_kyc,
     update_kyc_draft,
-    check_email_exists,
 )
 from src.telegram_app.handlers.menu import show_home
-from src.telegram_app.handlers.panic import panic_handler, MENU_BUTTONS_REGEX
+from src.telegram_app.handlers.panic import MENU_BUTTONS_REGEX, panic_handler
 from src.utils.crypto import get_password_hash
 
 logger = logging.getLogger(__name__)
@@ -117,14 +119,14 @@ async def _prompt_for_step(update: Update, step: int) -> None:
 
 async def start_kyc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     tg_id = int(update.effective_user.id)
-    touch_contact(tg_id)
+    await touch_contact(tg_id)
 
     # FIX H-01: capturar sponsor aqui donde context.args existe
     sponsor_alias = parse_sponsor_alias_from_start_args(context)
     if sponsor_alias:
         context.user_data["sponsor_from_link"] = sponsor_alias
 
-    ukyc = get_user_kyc_by_telegram_id(tg_id)
+    ukyc = await get_user_kyc_by_telegram_id(tg_id)
     if ukyc:
         if ukyc.kyc_status == "APPROVED":
             await show_home(update, context, alias=ukyc.alias)
@@ -141,7 +143,7 @@ async def start_kyc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 msg += f"\nMotivo: {reason}"
             msg += "\n\nVamos a enviarla nuevamente."
             await update.message.reply_text(msg)
-            ukyc = get_user_kyc_by_telegram_id(tg_id)
+            ukyc = await get_user_kyc_by_telegram_id(tg_id)
 
         await update.message.reply_text("🧾 Verificación requerida. Vamos paso a paso.")
         step = _next_kyc_step(ukyc)
@@ -166,7 +168,7 @@ async def receive_alias(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text("❌ Alias inválido. Debe tener 3-15 caracteres (letras, números, _). Intenta de nuevo:")
         return ASK_ALIAS
 
-    if get_user_by_alias(alias):
+    if await get_user_by_alias(alias):
         await update.message.reply_text("❌ Ese alias ya existe. Escribe otro:")
         return ASK_ALIAS
 
@@ -175,12 +177,12 @@ async def receive_alias(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # FIX H-01: leer sponsor desde user_data (guardado en start_kyc)
     sponsor_alias = context.user_data.pop("sponsor_from_link", None)
     if sponsor_alias:
-        sponsor = get_user_by_alias(sponsor_alias)
+        sponsor = await get_user_by_alias(sponsor_alias)
         sponsor_id = sponsor.id if sponsor else None
 
         # FIX M-01: try/except en create_user
         try:
-            create_user(
+            await create_user(
                 telegram_user_id=int(update.effective_user.id),
                 alias=alias,
                 sponsor_id=sponsor_id,
@@ -218,7 +220,7 @@ async def receive_sponsor(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if raw == "2":
         sponsor_id = None
     else:
-        sponsor = get_user_by_alias(raw)
+        sponsor = await get_user_by_alias(raw)
         if not sponsor:
             await update.message.reply_text("❌ No encontré ese padrino. Intenta de nuevo o escribe 2:")
             return ASK_SPONSOR
@@ -226,7 +228,7 @@ async def receive_sponsor(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # FIX M-01: try/except en create_user
     try:
-        create_user(
+        await create_user(
             telegram_user_id=int(update.effective_user.id),
             alias=alias,
             sponsor_id=sponsor_id,
@@ -247,7 +249,7 @@ async def receive_full_name(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if len(v) < 5:
         await update.message.reply_text("❌ Nombre muy corto. Intenta de nuevo:")
         return ASK_FULL_NAME
-    update_kyc_draft(telegram_user_id=int(update.effective_user.id), full_name=v)
+    await update_kyc_draft(telegram_user_id=int(update.effective_user.id), full_name=v)
     await _prompt_for_step(update, ASK_PHONE)
     return ASK_PHONE
 
@@ -257,7 +259,7 @@ async def receive_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if len(v) < 7:
         await update.message.reply_text("❌ Teléfono inválido. Intenta de nuevo:")
         return ASK_PHONE
-    update_kyc_draft(telegram_user_id=int(update.effective_user.id), phone=v)
+    await update_kyc_draft(telegram_user_id=int(update.effective_user.id), phone=v)
     await _prompt_for_step(update, ASK_ADDRESS)
     return ASK_ADDRESS
 
@@ -267,7 +269,7 @@ async def receive_address(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if len(v) < 4:
         await update.message.reply_text("❌ Dirección muy corta. Intenta de nuevo:")
         return ASK_ADDRESS
-    update_kyc_draft(telegram_user_id=int(update.effective_user.id), address_short=v)
+    await update_kyc_draft(telegram_user_id=int(update.effective_user.id), address_short=v)
     await _prompt_for_step(update, ASK_EMAIL)
     return ASK_EMAIL
 
@@ -279,11 +281,11 @@ async def receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text("❌ Email inválido. Debe ser algo como: nombre@gmail.com\n\nIntenta de nuevo:")
         return ASK_EMAIL
 
-    if check_email_exists(v):
+    if await check_email_exists(v):
         await update.message.reply_text("❌ Este email ya está registrado. Usa otro email:")
         return ASK_EMAIL
 
-    update_kyc_draft(telegram_user_id=int(update.effective_user.id), email=v)
+    await update_kyc_draft(telegram_user_id=int(update.effective_user.id), email=v)
     await _prompt_for_step(update, ASK_PASSWORD)
     return ASK_PASSWORD
 
@@ -296,7 +298,7 @@ async def receive_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return ASK_PASSWORD
 
     hashed = get_password_hash(v)
-    update_kyc_draft(telegram_user_id=int(update.effective_user.id), hashed_password=hashed)
+    await update_kyc_draft(telegram_user_id=int(update.effective_user.id), hashed_password=hashed)
 
     try:
         await update.message.delete()
@@ -313,7 +315,7 @@ async def receive_payout_country(update: Update, context: ContextTypes.DEFAULT_T
     if len(v) < 3:
         await update.message.reply_text("❌ País inválido. Intenta de nuevo:")
         return ASK_PAYOUT_COUNTRY
-    update_kyc_draft(telegram_user_id=int(update.effective_user.id), payout_country=v)
+    await update_kyc_draft(telegram_user_id=int(update.effective_user.id), payout_country=v)
     await _prompt_for_step(update, ASK_PAYOUT_METHOD)
     return ASK_PAYOUT_METHOD
 
@@ -323,7 +325,7 @@ async def receive_payout_method(update: Update, context: ContextTypes.DEFAULT_TY
     if len(v) < 8:
         await update.message.reply_text("❌ Método muy corto. Intenta de nuevo:")
         return ASK_PAYOUT_METHOD
-    update_kyc_draft(telegram_user_id=int(update.effective_user.id), payout_method_text=v)
+    await update_kyc_draft(telegram_user_id=int(update.effective_user.id), payout_method_text=v)
     await _prompt_for_step(update, ASK_DOC_PHOTO)
     return ASK_DOC_PHOTO
 
@@ -333,7 +335,7 @@ async def receive_doc_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("❌ Necesito una foto. Intenta de nuevo:")
         return ASK_DOC_PHOTO
     doc_id = update.message.photo[-1].file_id
-    update_kyc_draft(telegram_user_id=int(update.effective_user.id), kyc_doc_file_id=doc_id)
+    await update_kyc_draft(telegram_user_id=int(update.effective_user.id), kyc_doc_file_id=doc_id)
     await _prompt_for_step(update, ASK_SELFIE_PHOTO)
     return ASK_SELFIE_PHOTO
 
@@ -345,9 +347,9 @@ async def receive_selfie_photo(update: Update, context: ContextTypes.DEFAULT_TYP
 
     tg_id = int(update.effective_user.id)
     selfie_id = update.message.photo[-1].file_id
-    update_kyc_draft(telegram_user_id=tg_id, kyc_selfie_file_id=selfie_id)
+    await update_kyc_draft(telegram_user_id=tg_id, kyc_selfie_file_id=selfie_id)
 
-    ukyc = get_user_kyc_by_telegram_id(tg_id)
+    ukyc = await get_user_kyc_by_telegram_id(tg_id)
     if not ukyc:
         await update.message.reply_text("❌ Error. Escribe /start de nuevo.")
         return ConversationHandler.END
@@ -374,18 +376,24 @@ async def receive_selfie_photo(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # FIX M-02: pasar valores directos sin str() + try/except
     try:
-        ok = submit_kyc(
-            telegram_user_id=tg_id,
-            full_name=ukyc.full_name,
-            phone=ukyc.phone,
-            address_short=ukyc.address_short,
-            email=ukyc.email,
-            hashed_password=ukyc.hashed_password,
-            payout_country=ukyc.payout_country,
-            payout_method_text=ukyc.payout_method_text,
-            kyc_doc_file_id=ukyc.kyc_doc_file_id,
-            kyc_selfie_file_id=ukyc.kyc_selfie_file_id,
+        ok = await asyncio.wait_for(
+            submit_kyc(
+                telegram_user_id=tg_id,
+                full_name=ukyc.full_name,
+                phone=ukyc.phone,
+                address_short=ukyc.address_short,
+                email=ukyc.email,
+                hashed_password=ukyc.hashed_password,
+                payout_country=ukyc.payout_country,
+                payout_method_text=ukyc.payout_method_text,
+                kyc_doc_file_id=ukyc.kyc_doc_file_id,
+                kyc_selfie_file_id=ukyc.kyc_selfie_file_id,
+            ),
+            timeout=5.0
         )
+    except asyncio.TimeoutError:
+        await update.message.reply_text("⏳ Timeout enviando verificación. Reintenta.")
+        return ASK_SELFIE_PHOTO
     except Exception:
         logger.exception("submit_kyc DB error for tg_id=%s", tg_id)
         await update.message.reply_text("❌ Error al enviar verificación. Intenta /start de nuevo.")
@@ -397,7 +405,7 @@ async def receive_selfie_photo(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if settings.KYC_TELEGRAM_CHAT_ID:
         try:
-            db_user = get_user_by_telegram_id(tg_id)
+            db_user = await get_user_by_telegram_id(tg_id)
             if not db_user:
                 raise ValueError(f"User not found after submit for tg_id={tg_id}")
             text = (

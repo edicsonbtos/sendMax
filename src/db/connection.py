@@ -1,17 +1,19 @@
-# Version: 20260220-bot-db-hardened
+# Version: 20260220-bot-db-hardened-async
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import time
-import logging
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 import psycopg
-from psycopg_pool import ConnectionPool
+from psycopg_pool import AsyncConnectionPool
 
 logger = logging.getLogger("db")
 
-_pool: ConnectionPool | None = None
+_pool: AsyncConnectionPool | None = None
 
 _MAX_ATTEMPTS = 3
 _BACKOFF_DELAYS = [0.2, 0.8, 2.0]
@@ -60,64 +62,86 @@ def _get_database_url() -> str:
     return url
 
 
-def get_pool() -> ConnectionPool:
+def get_pool() -> AsyncConnectionPool:
     """
-    Pool endurecido para Neon/Railway:
-    - Recicla conexiones antes de que Neon las mate (max_lifetime)
-    - Cierra conexiones idle (max_idle)
-    - Timeouts para no colgar handlers
+    Pool async endurecido para Neon/Railway.
     """
     global _pool
     if _pool is None:
-        logger.info("Creando pool de conexiones DB (hardened)...")
-        _pool = ConnectionPool(
+        logger.info("Creando pool de conexiones ASYNC DB (hardened)...")
+        _pool = AsyncConnectionPool(
             _get_database_url(),
             min_size=1,
-            max_size=5,
-            open=True,
+            max_size=10, # Aumentado para mayor concurrencia
+            open=False, # Se abrirá explícitamente o al primer uso
             timeout=10,
             max_lifetime=300,      # 5 min
             max_idle=120,          # 2 min
             reconnect_timeout=5,
-            check=ConnectionPool.check_connection,
+            check=AsyncConnectionPool.check_connection,
         )
     return _pool
 
 
-def get_conn():
+@asynccontextmanager
+async def get_async_conn() -> AsyncGenerator[psycopg.AsyncConnection, None]:
     """
-    Retorna conexion del pool. Usar:
-      with get_conn() as conn:
-        ...
-    Nota: psycopg_pool descarta conexiones BAD automáticamente.
+    Context manager asíncrono para conexiones.
+    Incluye logging de tiempo de ejecución (Middleware de Diagnóstico).
     """
-    return get_pool().connection()
+    pool = get_pool()
+    start_time = time.perf_counter()
+
+    # Asegurar que el pool esté abierto
+    # AsyncConnectionPool.connection() abrirá el pool si no lo está,
+    # pero es mejor ser explícitos si quisiéramos controlar el inicio.
+
+    async with pool.connection() as conn:
+        try:
+            yield conn
+        finally:
+            elapsed = time.perf_counter() - start_time
+            if elapsed > 2.0:
+                logger.warning(f"SLOW QUERY DETECTED: {elapsed:.3f}s")
+            elif elapsed > 0.5:
+                logger.info(f"Query info: {elapsed:.3f}s")
 
 
-def close_pool() -> None:
-    """Cerrar pool en shutdown (evita hilos colgados y conexiones zombie)."""
+async def close_pool() -> None:
+    """Cerrar pool en shutdown."""
     global _pool
     if _pool is not None:
         try:
-            _pool.close()
-            logger.info("DB pool cerrado correctamente")
+            await _pool.close()
+            logger.info("DB async pool cerrado correctamente")
         except Exception:
-            logger.exception("Error cerrando DB pool")
+            logger.exception("Error cerrando DB async pool")
         _pool = None
 
 
-def ping_db() -> bool:
+async def ping_db() -> bool:
     for attempt in range(_MAX_ATTEMPTS):
         try:
-            with get_conn() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT 1;")
-                    cur.fetchone()
+            async with get_async_conn() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT 1;")
+                    await cur.fetchone()
             return True
         except Exception as e:
             if attempt < _MAX_ATTEMPTS - 1 and _is_transient(e):
-                time.sleep(_backoff_delay(attempt))
+                await asyncio.sleep(_backoff_delay(attempt))
                 continue
             logger.exception("DB ping failed: %s", e)
             return False
     return False
+
+# Mantener get_conn sync para compatibilidad temporal si es necesario,
+# pero idealmente migrar todo a get_async_conn.
+# Por ahora lo dejamos para no romper el arranque hasta migrar repos.
+def get_conn():
+    # ADVERTENCIA: Esto es síncrono y usa un pool que ahora queremos que sea async.
+    # Necesitamos una transición suave.
+    # Si psycopg_pool.AsyncConnectionPool se usa con código sync fallará.
+    # Por ahora, mantendremos el pool sync disponible si es necesario,
+    # pero el objetivo es borrarlo.
+    raise RuntimeError("Usar get_async_conn() en lugar de get_conn()")

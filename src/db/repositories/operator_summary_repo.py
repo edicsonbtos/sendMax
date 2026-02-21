@@ -1,9 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
 
+from src.db.connection import get_async_conn
 
 
 @dataclass(frozen=True)
@@ -19,10 +20,7 @@ class OrderSummaryRow:
     dest_payment_proof_file_id: str | None
 
 
-from src.db.connection import get_conn
-
-
-def list_recent_orders_for_operator(operator_user_id: int, limit: int = 10) -> list[OrderSummaryRow]:
+async def list_recent_orders_for_operator(operator_user_id: int, limit: int = 10) -> list[OrderSummaryRow]:
     sql = """
         SELECT
             public_id,
@@ -39,8 +37,8 @@ def list_recent_orders_for_operator(operator_user_id: int, limit: int = 10) -> l
         ORDER BY created_at DESC
         LIMIT %s;
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (operator_user_id, limit))
-            rows = cur.fetchall()
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (operator_user_id, limit))
+            rows = await cur.fetchall()
             return [OrderSummaryRow(*r) for r in rows]

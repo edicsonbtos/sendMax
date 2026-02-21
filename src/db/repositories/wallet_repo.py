@@ -1,8 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
 
+import psycopg
+
+from src.db.connection import get_async_conn
 
 
 @dataclass(frozen=True)
@@ -11,31 +14,29 @@ class Wallet:
     balance_usdt: Decimal
 
 
-from src.db.connection import get_conn
-
-
-def get_or_create_wallet(user_id: int) -> Wallet:
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT user_id, balance_usdt FROM wallets WHERE user_id = %s LIMIT 1;", (user_id,))
-            row = cur.fetchone()
+async def get_or_create_wallet(user_id: int) -> Wallet:
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT user_id, balance_usdt FROM wallets WHERE user_id = %s LIMIT 1;", (user_id,))
+            row = await cur.fetchone()
             if row:
                 return Wallet(int(row[0]), Decimal(str(row[1])))
 
-            cur.execute(
+            await cur.execute(
                 "INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0) RETURNING user_id, balance_usdt;",
                 (user_id,),
             )
-            row = cur.fetchone()
-            conn.commit()
-            return Wallet(int(row[0]), Decimal(str(row[1])))
+            row = await cur.fetchone()
+            await conn.commit()
+            return Wallet(int(row[0]), Decimal(str(row[1]))) if row else None
 
 
-def get_balance(user_id: int) -> Decimal:
-    return get_or_create_wallet(user_id).balance_usdt
+async def get_balance(user_id: int) -> Decimal:
+    w = await get_or_create_wallet(user_id)
+    return w.balance_usdt
 
 
-def add_ledger_entry(
+async def add_ledger_entry(
     *,
     user_id: int,
     amount_usdt: Decimal,
@@ -53,17 +54,18 @@ def add_ledger_entry(
       y tipo de movimiento (ej: ORDER_PROFIT para ref_order_public_id=123).
       Esto protege contra reintentos del admin/bot.
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
             # Asegura wallet
-            cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
-            if not cur.fetchone():
-                cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
+            await cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
+            res = await cur.fetchone()
+            if not res:
+                await cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
 
             if idempotency and ref_order_public_id is not None:
                 # Chequeo idempotente (MVP seguro) sin migraciones:
                 # "si ya existe un ledger con mismo user_id + type + ref_order_public_id + amount_usdt, no repitas".
-                cur.execute(
+                await cur.execute(
                     """
                     SELECT 1
                     FROM wallet_ledger
@@ -75,13 +77,14 @@ def add_ledger_entry(
                     """,
                     (user_id, entry_type, ref_order_public_id, amount_usdt),
                 )
-                if cur.fetchone():
+                res_idemp = await cur.fetchone()
+                if res_idemp:
                     # Ya aplicado: no tocar balance de nuevo.
-                    conn.commit()
+                    await conn.commit()
                     return
 
             # Ledger (audit)
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO wallet_ledger (user_id, amount_usdt, type, ref_order_public_id, memo)
                 VALUES (%s, %s, %s, %s, %s);
@@ -90,7 +93,7 @@ def add_ledger_entry(
             )
 
             # Wallet (saldo materializado)
-            cur.execute(
+            await cur.execute(
                 """
                 UPDATE wallets
                 SET balance_usdt = balance_usdt + %s,
@@ -99,23 +102,24 @@ def add_ledger_entry(
                 """,
                 (amount_usdt, user_id),
             )
-        conn.commit()
+        await conn.commit()
 
 
-def create_withdrawal_request(*, user_id: int, amount_usdt: Decimal, dest_text: str) -> int:
+async def create_withdrawal_request(*, user_id: int, amount_usdt: Decimal, dest_text: str) -> int:
     """
     Crea una solicitud de retiro simple (status=SOLICITADA).
     NOTA: tu flujo principal usa WithdrawalsRepo.create_withdrawal_request_fiat()
     que hace HOLD atómico. Esta función se mantiene por compatibilidad.
     """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
             # asegura wallet
-            cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
-            if not cur.fetchone():
-                cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
+            await cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
+            res = await cur.fetchone()
+            if not res:
+                await cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
 
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO withdrawals (user_id, amount_usdt, status, dest_text)
                 VALUES (%s, %s, 'SOLICITADA', %s)
@@ -123,13 +127,14 @@ def create_withdrawal_request(*, user_id: int, amount_usdt: Decimal, dest_text: 
                 """,
                 (user_id, amount_usdt, dest_text),
             )
-            (wid,) = cur.fetchone()
-        conn.commit()
+            res_wid = await cur.fetchone()
+            wid = res_wid[0] if res_wid else 0
+        await conn.commit()
         return int(wid)
 
 
-def add_ledger_entry_tx(
-    conn,
+async def add_ledger_entry_tx(
+    conn: psycopg.AsyncConnection,
     *,
     user_id: int,
     amount_usdt: Decimal,
@@ -142,14 +147,15 @@ def add_ledger_entry_tx(
     Igual que add_ledger_entry, pero usando la conexión/transacción existente.
     NO hace commit. Ideal para cierres atómicos.
     """
-    with conn.cursor() as cur:
+    async with conn.cursor() as cur:
         # Asegura wallet
-        cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
-        if not cur.fetchone():
-            cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
+        await cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
+        res = await cur.fetchone()
+        if not res:
+            await cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
 
         if idempotency and ref_order_public_id is not None:
-            cur.execute(
+            await cur.execute(
                 """
                 SELECT 1
                 FROM wallet_ledger
@@ -161,11 +167,12 @@ def add_ledger_entry_tx(
                 """,
                 (user_id, entry_type, ref_order_public_id, amount_usdt),
             )
-            if cur.fetchone():
+            res_idemp = await cur.fetchone()
+            if res_idemp:
                 return
 
         # Ledger (audit)
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO wallet_ledger (user_id, amount_usdt, type, ref_order_public_id, memo)
             VALUES (%s, %s, %s, %s, %s);
@@ -174,7 +181,7 @@ def add_ledger_entry_tx(
         )
 
         # Wallet (saldo materializado)
-        cur.execute(
+        await cur.execute(
             """
             UPDATE wallets
             SET balance_usdt = balance_usdt + %s,

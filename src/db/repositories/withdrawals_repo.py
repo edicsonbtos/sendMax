@@ -1,11 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from psycopg import Connection
+import psycopg
 
 
 @dataclass
@@ -34,12 +34,15 @@ class WithdrawalsRepo:
       2) insert ledger entry (WITHDRAWAL_HOLD)
       3) insert withdrawal row (SOLICITADA)
     - reject reverses the hold (credits wallet + ledger reversal)
+
+    Changelog:
+    - Migracion a ASYNC para Fase 2.
     """
 
-    def __init__(self, conn: Connection):
+    def __init__(self, conn: psycopg.AsyncConnection):
         self.conn = conn
 
-    def create_withdrawal_request_fiat(
+    async def create_withdrawal_request_fiat(
         self,
         user_id: int,
         amount_usdt: Decimal,
@@ -51,15 +54,16 @@ class WithdrawalsRepo:
         if amount_usdt <= 0:
             raise ValueError("amount_usdt must be > 0")
 
-        with self.conn.transaction():
-            with self.conn.cursor() as cur:
+        async with self.conn.transaction():
+            async with self.conn.cursor() as cur:
                 # Ensure wallet exists
-                cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
-                if not cur.fetchone():
-                    cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
+                await cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
+                res = await cur.fetchone()
+                if not res:
+                    await cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
 
                 # Atomic hold (prevents double-spend / races)
-                cur.execute(
+                await cur.execute(
                     """
                     UPDATE wallets
                     SET balance_usdt = balance_usdt - %s,
@@ -70,11 +74,12 @@ class WithdrawalsRepo:
                     """,
                     (amount_usdt, user_id, amount_usdt),
                 )
-                if not cur.fetchone():
+                res_bal = await cur.fetchone()
+                if not res_bal:
                     raise ValueError("Saldo insuficiente")
 
                 # Create withdrawal
-                cur.execute(
+                await cur.execute(
                     """
                     INSERT INTO withdrawals (user_id, amount_usdt, status, dest_text, country, fiat, fiat_amount)
                     VALUES (%s, %s, 'SOLICITADA', %s, %s, %s, %s)
@@ -82,10 +87,11 @@ class WithdrawalsRepo:
                     """,
                     (user_id, amount_usdt, dest_text, country, fiat, fiat_amount),
                 )
-                (withdrawal_id,) = cur.fetchone()
+                res_wid = await cur.fetchone()
+                withdrawal_id = res_wid[0] if res_wid else 0
 
                 # Ledger record for audit
-                cur.execute(
+                await cur.execute(
                     """
                     INSERT INTO wallet_ledger (user_id, amount_usdt, type, memo)
                     VALUES (%s, %s, %s, %s)
@@ -95,10 +101,10 @@ class WithdrawalsRepo:
 
                 return int(withdrawal_id)
 
-    def set_withdrawal_resolved(self, withdrawal_id: int, proof_file_id: str) -> None:
-        with self.conn.transaction():
-            with self.conn.cursor() as cur:
-                cur.execute(
+    async def set_withdrawal_resolved(self, withdrawal_id: int, proof_file_id: str) -> None:
+        async with self.conn.transaction():
+            async with self.conn.cursor() as cur:
+                await cur.execute(
                     """
                     UPDATE withdrawals
                     SET status='RESUELTA',
@@ -110,10 +116,10 @@ class WithdrawalsRepo:
                     (proof_file_id, withdrawal_id),
                 )
 
-    def set_withdrawal_rejected(self, withdrawal_id: int, reject_reason: str) -> None:
-        with self.conn.transaction():
-            with self.conn.cursor() as cur:
-                cur.execute(
+    async def set_withdrawal_rejected(self, withdrawal_id: int, reject_reason: str) -> None:
+        async with self.conn.transaction():
+            async with self.conn.cursor() as cur:
+                await cur.execute(
                     """
                     SELECT user_id, amount_usdt, status
                     FROM withdrawals
@@ -121,7 +127,7 @@ class WithdrawalsRepo:
                     """,
                     (withdrawal_id,),
                 )
-                row = cur.fetchone()
+                row = await cur.fetchone()
                 if not row:
                     raise ValueError("withdrawal not found")
 
@@ -129,7 +135,7 @@ class WithdrawalsRepo:
                 if status != "SOLICITADA":
                     raise ValueError("only SOLICITADA can be rejected")
 
-                cur.execute(
+                await cur.execute(
                     """
                     UPDATE withdrawals
                     SET status='RECHAZADA',
@@ -141,7 +147,7 @@ class WithdrawalsRepo:
                 )
 
                 # release hold back to wallet
-                cur.execute(
+                await cur.execute(
                     """
                     UPDATE wallets
                     SET balance_usdt = balance_usdt + %s,
@@ -151,7 +157,7 @@ class WithdrawalsRepo:
                     (amount_usdt, user_id),
                 )
 
-                cur.execute(
+                await cur.execute(
                     """
                     INSERT INTO wallet_ledger (user_id, amount_usdt, type, memo)
                     VALUES (%s, %s, %s, %s)
@@ -159,9 +165,9 @@ class WithdrawalsRepo:
                     (user_id, amount_usdt, "WITHDRAWAL_HOLD_REVERSAL", f"withdrawal_id={withdrawal_id}"),
                 )
 
-    def get_withdrawal_by_id(self, withdrawal_id: int) -> Optional[WithdrawalRow]:
-        with self.conn.cursor() as cur:
-            cur.execute(
+    async def get_withdrawal_by_id(self, withdrawal_id: int) -> Optional[WithdrawalRow]:
+        async with self.conn.cursor() as cur:
+            await cur.execute(
                 """
                 SELECT id, user_id, amount_usdt, status, dest_text, proof_file_id,
                        created_at, updated_at, country, fiat, fiat_amount, reject_reason, resolved_at
@@ -170,14 +176,14 @@ class WithdrawalsRepo:
                 """,
                 (withdrawal_id,),
             )
-            row = cur.fetchone()
+            row = await cur.fetchone()
             if not row:
                 return None
             return WithdrawalRow(*row)
 
-    def list_withdrawals_by_status(self, status: str, limit: int = 50) -> list[WithdrawalRow]:
-        with self.conn.cursor() as cur:
-            cur.execute(
+    async def list_withdrawals_by_status(self, status: str, limit: int = 50) -> list[WithdrawalRow]:
+        async with self.conn.cursor() as cur:
+            await cur.execute(
                 """
                 SELECT id, user_id, amount_usdt, status, dest_text, proof_file_id,
                        created_at, updated_at, country, fiat, fiat_amount, reject_reason, resolved_at
@@ -188,4 +194,5 @@ class WithdrawalsRepo:
                 """,
                 (status, limit),
             )
-            return [WithdrawalRow(*r) for r in cur.fetchall()]
+            res = await cur.fetchall()
+            return [WithdrawalRow(*r) for r in res]

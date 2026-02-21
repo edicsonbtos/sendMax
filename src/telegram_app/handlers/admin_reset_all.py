@@ -1,11 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
+
 from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler
+from telegram.ext import CommandHandler, ContextTypes
 
 from src.config.settings import settings
-from src.db.connection import get_conn
+from src.db.connection import get_async_conn
 from src.db.repositories.user_contacts_repo import list_all_telegram_ids
 
 
@@ -28,7 +29,7 @@ async def reset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     # 1) Broadcast
-    ids = list_all_telegram_ids()
+    ids = await list_all_telegram_ids()
     msg = "🔄 Sendmax se reinició.\n\nEscribe /start para registrarte de nuevo."
     sent = 0
     failed = 0
@@ -45,17 +46,17 @@ async def reset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     admin_ids = settings.admin_user_ids
     admin_tg_id = next(iter(admin_ids)) if admin_ids else None
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM withdrawals;")
-            cur.execute("DELETE FROM wallet_ledger;")
-            cur.execute("DELETE FROM wallets;")
-            cur.execute("DELETE FROM orders;")
-            cur.execute("ALTER SEQUENCE orders_public_id_seq RESTART WITH 1;")
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("DELETE FROM withdrawals;")
+            await cur.execute("DELETE FROM wallet_ledger;")
+            await cur.execute("DELETE FROM wallets;")
+            await cur.execute("DELETE FROM orders;")
+            await cur.execute("ALTER SEQUENCE orders_public_id_seq RESTART WITH 1;")
 
             if admin_tg_id:
-                cur.execute("DELETE FROM users WHERE telegram_user_id <> %s;", (admin_tg_id,))
-                cur.execute(
+                await cur.execute("DELETE FROM users WHERE telegram_user_id <> %s;", (admin_tg_id,))
+                await cur.execute(
                     """
                     UPDATE users
                     SET sponsor_id=NULL,
@@ -76,7 +77,7 @@ async def reset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     (admin_tg_id,),
                 )
 
-        conn.commit()
+        await conn.commit()
 
     await update.message.reply_text(
         "✅ RESET TOTAL completado.\n\n"
