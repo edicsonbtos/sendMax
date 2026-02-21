@@ -107,6 +107,37 @@ async def get_async_conn() -> AsyncGenerator[psycopg.AsyncConnection, None]:
                 logger.info(f"Query info: {elapsed:.3f}s")
 
 
+async def open_pool() -> None:
+    """Abre el pool de conexiones de forma explícita e idempotente."""
+    pool = get_pool()
+    # pool.open() es idempotente; si ya está abierto no hace nada.
+    # Evitamos el check de 'pool.closed' porque en algunas versiones
+    # puede no reflejar fielmente si el pool está listo para usarse.
+    logger.info("Abriendo pool ASYNC DB...")
+    await pool.open()
+    logger.info("Pool ASYNC DB abierto")
+
+
+def is_pool_open() -> bool:
+    """Retorna True si el pool está inicializado y efectivamente abierto."""
+    global _pool
+    if _pool is None or _pool.closed:
+        return False
+    # _opened es un atributo interno de psycopg_pool que indica si se llamó a open()
+    return getattr(_pool, "_opened", False)
+
+
+async def wait_db_ready() -> None:
+    """
+    Garantiza que el pool esté abierto y responde a un ping.
+    Lanza RuntimeError si no se logra tras reintentos (fail-fast).
+    """
+    await open_pool()
+    # ping_db ya incluye reintentos y backoff internamente.
+    if not await ping_db():
+        raise RuntimeError("La base de datos no respondió al ping inicial tras varios reintentos (fail-fast)")
+
+
 async def close_pool() -> None:
     """Cerrar pool en shutdown."""
     global _pool
