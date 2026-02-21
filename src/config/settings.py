@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     ENV: str = "SANDBOX"
 
     WEBHOOK_URL: str | None = None
-    PORT: int = 8443
+    PORT: int = 8080  # Railway usa $PORT; este default es solo fallback local
 
     SUPPORT_WHATSAPP_NUMBER: str = "584242686434"
 
