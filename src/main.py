@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import logging
 import warnings
 from contextlib import asynccontextmanager
@@ -97,8 +99,18 @@ app = FastAPI(lifespan=lifespan)
 async def telegram_webhook(request: Request):
     """Endpoint to receive Telegram updates."""
     data = await request.json()
+    try:
+        upd_id = data.get("update_id")
+        logger.info(f"[WEBHOOK] update_id={upd_id}")
+    except Exception:
+        pass
+
     update = Update.de_json(data, bot_app.bot)
-    await bot_app.process_update(update)
+
+    # Encolar para que PTB lo procese en su loop normal
+    await bot_app.update_queue.put(update)
+
+    # Responder rápido a Telegram
     return Response(status_code=200)
 
 @app.get("/health")
@@ -112,7 +124,7 @@ def main() -> None:
     try:
         if settings.WEBHOOK_URL:
             logger.info(f"Running in WEBHOOK mode (FastAPI) on port {settings.PORT}")
-            uvicorn.run(app, host="0.0.0.0", port=settings.PORT, log_level="info")
+            uvicorn.run(app, host="0.0.0.0", port=settings.PORT, log_level="info", access_log=True)
         else:
             logger.info("Running in POLLING mode (Development)")
             bot_app.run_polling(allowed_updates=["message", "callback_query"])
