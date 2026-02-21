@@ -76,6 +76,9 @@ async def lifespan(app: FastAPI):
     # 4. Webhook + Start
     if settings.WEBHOOK_URL:
         url = f"{settings.WEBHOOK_URL}/{settings.TELEGRAM_BOT_TOKEN}"
+        print(f"\n--- SETTING WEBHOOK ---")
+        print(f"URL: {url}")
+        logger.info(f"Setting webhook to: {url}")
         await bot_app.bot.set_webhook(url=url, allowed_updates=["message", "callback_query"])
         logger.info(f"Webhook set: {url}")
 

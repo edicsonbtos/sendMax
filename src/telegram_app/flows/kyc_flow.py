@@ -118,47 +118,56 @@ async def _prompt_for_step(update: Update, step: int) -> None:
 
 
 async def start_kyc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    tg_id = int(update.effective_user.id)
-    await touch_contact(tg_id)
+    print(f"\n--- HANDLER /start triggered for user {update.effective_user.id} ---")
+    logger.info(f"start_kyc called for user_id={update.effective_user.id}")
 
-    # FIX H-01: capturar sponsor aqui donde context.args existe
-    sponsor_alias = parse_sponsor_alias_from_start_args(context)
-    if sponsor_alias:
-        context.user_data["sponsor_from_link"] = sponsor_alias
+    try:
+        tg_id = int(update.effective_user.id)
+        await touch_contact(tg_id)
 
-    ukyc = await get_user_kyc_by_telegram_id(tg_id)
-    if ukyc:
-        if ukyc.kyc_status == "APPROVED":
-            await show_home(update, context, alias=ukyc.alias)
-            return ConversationHandler.END
+        # FIX H-01: capturar sponsor aqui donde context.args existe
+        sponsor_alias = parse_sponsor_alias_from_start_args(context)
+        if sponsor_alias:
+            context.user_data["sponsor_from_link"] = sponsor_alias
 
-        if ukyc.kyc_status == "SUBMITTED":
-            await update.message.reply_text("📨 Tu verificación ya fue enviada. ⏳ Está en revisión.")
-            return ConversationHandler.END
+        ukyc = await get_user_kyc_by_telegram_id(tg_id)
+        if ukyc:
+            if ukyc.kyc_status == "APPROVED":
+                await show_home(update, context, alias=ukyc.alias)
+                return ConversationHandler.END
 
-        if ukyc.kyc_status == "REJECTED":
-            reason = (ukyc.kyc_review_reason or "").strip()
-            msg = "❌ Tu verificación fue rechazada."
-            if reason:
-                msg += f"\nMotivo: {reason}"
-            msg += "\n\nVamos a enviarla nuevamente."
-            await update.message.reply_text(msg)
-            ukyc = await get_user_kyc_by_telegram_id(tg_id)
+            if ukyc.kyc_status == "SUBMITTED":
+                await update.message.reply_text("📨 Tu verificación ya fue enviada. ⏳ Está en revisión.")
+                return ConversationHandler.END
 
-        await update.message.reply_text("🧾 Verificación requerida. Vamos paso a paso.")
-        step = _next_kyc_step(ukyc)
-        await _prompt_for_step(update, step)
-        return step
+            if ukyc.kyc_status == "REJECTED":
+                reason = (ukyc.kyc_review_reason or "").strip()
+                msg = "❌ Tu verificación fue rechazada."
+                if reason:
+                    msg += f"\nMotivo: {reason}"
+                msg += "\n\nVamos a enviarla nuevamente."
+                await update.message.reply_text(msg)
+                ukyc = await get_user_kyc_by_telegram_id(tg_id)
 
-    await update.message.reply_text(
-        "👋 Bienvenido a Sendmax.\n\n"
-        "Crea tu alias (nombre de operador):\n"
-        "• 3 a 15 caracteres\n"
-        "• Solo letras, números y _\n"
-        "Ejemplo: rigo_01\n\n"
-        "Escribe tu alias ahora:"
-    )
-    return ASK_ALIAS
+            await update.message.reply_text("🧾 Verificación requerida. Vamos paso a paso.")
+            step = _next_kyc_step(ukyc)
+            await _prompt_for_step(update, step)
+            return step
+
+        await update.message.reply_text(
+            "👋 Bienvenido a Sendmax.\n\n"
+            "Crea tu alias (nombre de operador):\n"
+            "• 3 a 15 caracteres\n"
+            "• Solo letras, números y _\n"
+            "Ejemplo: rigo_01\n\n"
+            "Escribe tu alias ahora:"
+        )
+        return ASK_ALIAS
+    except Exception as e:
+        print(f"CRITICAL ERROR in start_kyc: {e}")
+        logger.error(f"Structural error in start_kyc: {e}", exc_info=True)
+        await update.message.reply_text("❌ Hubo un error al iniciar el proceso. Por favor, intenta de nuevo en unos momentos.")
+        return ConversationHandler.END
 
 
 async def receive_alias(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
