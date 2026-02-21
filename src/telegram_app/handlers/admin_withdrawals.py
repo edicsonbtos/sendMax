@@ -14,6 +14,7 @@ from telegram.ext import (
 )
 
 from src.config.settings import settings
+from src.telegram_app.handlers.panic import panic_handler, MENU_BUTTONS_REGEX
 from src.db.repositories.users_repo import get_telegram_id_by_user_id
 from src.db.repositories.wallet_repo import get_conn as db_conn
 from src.db.repositories.withdrawals_repo import WithdrawalsRepo
@@ -64,7 +65,9 @@ def build_admin_withdrawals_conversation_handler() -> ConversationHandler:
         },
         fallbacks=[
             CallbackQueryHandler(admin_withdrawals_list, pattern=f"^{CB_BACK}$"),
-            CommandHandler("cancel", admin_withdrawals_list),
+            CommandHandler("cancel", panic_handler),
+            CommandHandler("start", panic_handler),
+            MessageHandler(filters.Regex(MENU_BUTTONS_REGEX), panic_handler),
         ],
         name="admin_withdrawals",
         persistent=False,

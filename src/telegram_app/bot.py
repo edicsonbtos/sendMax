@@ -33,6 +33,7 @@ from src.telegram_app.handlers.admin_set_sponsor import build_set_sponsor_handle
 from src.telegram_app.handlers.rates_more import handle_rates_more
 from src.telegram_app.handlers.summary import build_summary_callback_handler
 from src.telegram_app.handlers.menu import menu_router
+from src.telegram_app.handlers.panic import panic_handler
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,8 @@ def build_bot() -> Application:
     if int(getattr(settings, "FLOW_DEBUG", 0) or 0) == 1:
         app.add_handler(MessageHandler(filters.ALL, universal_sniffer), group=-1)
 
-    # /start = KYC
+    # /start = KYC. /cancel = Pánico.
+    app.add_handler(CommandHandler("cancel", panic_handler), group=0)
     app.add_handler(build_kyc_conversation(), group=0)
 
     # Flujos operativos

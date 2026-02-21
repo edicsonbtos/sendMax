@@ -14,6 +14,7 @@ from telegram.ext import (
 
 import logging
 from src.config.settings import settings
+from src.telegram_app.handlers.panic import panic_handler, MENU_BUTTONS_REGEX
 logger = logging.getLogger(__name__)
 
 from src.db.repositories import rates_repo
@@ -23,9 +24,9 @@ from src.db.repositories.withdrawals_repo import WithdrawalsRepo
 
 
 def _reset_withdraw_state(context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.user_data.pop("withdrawal ", None)
-    context.user_data.pop("withdraw_panel ", None)
-    context.user_data.pop("withdraw_mode ", None)
+    context.user_data.pop("withdrawal", None)
+    context.user_data.pop("withdraw_panel", None)
+    context.user_data.pop("withdraw_mode", None)
 
 MIN_WITHDRAW_USDT = Decimal("10")
 
@@ -116,7 +117,9 @@ def build_withdrawal_conversation_handler() -> ConversationHandler:
         },
         fallbacks=[
             CallbackQueryHandler(on_cancel_cb, pattern=f"^{CB_CANCEL}$"),
-            CommandHandler("cancel", cancel_withdrawal),
+            CommandHandler("cancel", panic_handler),
+            CommandHandler("start", panic_handler),
+            MessageHandler(filters.Regex(MENU_BUTTONS_REGEX), panic_handler),
         ],
         name="withdrawal_flow_user",
         persistent=False,
@@ -191,9 +194,9 @@ async def on_cancel_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     q = update.callback_query
     await _safe_answer(q)
 
-    context.user_data.pop("withdrawal ", None)
-    context.user_data.pop("withdraw_panel ", None)
-    context.user_data.pop("withdraw_mode ", None)
+    context.user_data.pop("withdrawal", None)
+    context.user_data.pop("withdraw_panel", None)
+    context.user_data.pop("withdraw_mode", None)
 
     await q.message.reply_text("Operación cancelada.")
     return ConversationHandler.END
@@ -309,9 +312,9 @@ async def on_confirm_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
             await _edit_panel(update, context, f"❌ {str(e)}", reply_markup=_kb_cancel_inline())
             return W_AMOUNT
 
-    context.user_data.pop("withdrawal ", None)
-    context.user_data.pop("withdraw_panel ", None)
-    context.user_data.pop("withdraw_mode ", None)
+    context.user_data.pop("withdrawal", None)
+    context.user_data.pop("withdraw_panel", None)
+    context.user_data.pop("withdraw_mode", None)
 
     await q.message.reply_text("✅ Solicitud creada. Te avisaré cuando sea procesada.")
 
@@ -330,8 +333,8 @@ async def on_confirm_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def cancel_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data.pop("withdrawal ", None)
-    context.user_data.pop("withdraw_panel ", None)
-    context.user_data.pop("withdraw_mode ", None)
+    context.user_data.pop("withdrawal", None)
+    context.user_data.pop("withdraw_panel", None)
+    context.user_data.pop("withdraw_mode", None)
     await update.message.reply_text("Operación cancelada.")
     return ConversationHandler.END

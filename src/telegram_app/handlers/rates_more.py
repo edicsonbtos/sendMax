@@ -83,7 +83,7 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 pass
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="Elige una opción del menú ??",
+                text="Elige una opción del menú 👇",
                 reply_markup=main_menu_keyboard(is_admin=_is_admin(update)),
                 parse_mode="Markdown",
             )
@@ -106,13 +106,13 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     continue
                 blocks.append(f"{route_label(o, d)}\nTasa: {format_rate_no_noise(rr.rate_client)}")
 
-            text = "?? *Tasas de hoy* (Rutas populares)\n\n" + "\n\n".join(blocks)
+            text = "📈 *Tasas de hoy* (Rutas populares)\n\n" + "\n\n".join(blocks)
             await _safe_edit(q, text, rates_main_buttons())
             return
 
         # 3. SELECCIONAR PAÍS
         if data == "rates_more:by_country":
-            await _safe_edit(q, "?? *Selecciona el país de ORIGEN:*", rates_country_select_buttons(AVAILABLE_COUNTRIES))
+            await _safe_edit(q, "🌎 *Selecciona el país de ORIGEN:*", rates_country_select_buttons(AVAILABLE_COUNTRIES))
             return
 
         # 4. MOSTRAR TASAS POR PAÍS
@@ -127,7 +127,7 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             if not rates:
                 await _safe_edit(
                     q,
-                    f"? No encontré tasas para *{origin}*.\n\nIntenta con otro país.",
+                    f"❌ No encontré tasas para *{origin}*.\n\nIntenta con otro país.",
                     rates_country_select_buttons(AVAILABLE_COUNTRIES)
                 )
                 return
@@ -136,7 +136,7 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             for rr in rates:
                 blocks.append(f"{route_label(rr.origin_country, rr.dest_country)}\nTasa: {format_rate_no_noise(rr.rate_client)}")
 
-            text = f"?? *Tasas desde {origin}*\n\n" + "\n\n".join(blocks)
+            text = f"🌎 *Tasas desde {origin}*\n\n" + "\n\n".join(blocks)
             await _safe_edit(q, text, rates_country_result_buttons())
             return
 
@@ -170,13 +170,13 @@ async def handle_rates_more(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     continue
                 blocks.append(f"{route_label(o, d)}\nTasa: {format_rate_no_noise(rr.rate_client)}")
 
-            text = f"?? *Todas las tasas* (Página {page})\n\n" + ("\n\n".join(blocks) if blocks else "No hay rutas.")
+            text = f"📋 *Todas las tasas* (Página {page})\n\n" + ("\n\n".join(blocks) if blocks else "No hay rutas.")
             await _safe_edit(q, text, rates_pagination_buttons(page=page, has_prev=has_prev, has_next=has_next))
             return
 
     except Exception as e:
         logger.error(f"Error en rates callback: {e}", exc_info=True)
         try:
-            await q.answer("?? Error temporal. Intenta de nuevo.", show_alert=True)
+            await q.answer("⚠️ Error temporal. Intenta de nuevo.", show_alert=True)
         except Exception:
             pass

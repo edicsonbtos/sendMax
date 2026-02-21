@@ -1,15 +1,15 @@
 ﻿from __future__ import annotations
 
 import logging
+import asyncio
 from decimal import Decimal, ROUND_HALF_UP
 
-import psycopg
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings
 from src.db.connection import get_conn
-from src.telegram_app.ui.routes_popular import COUNTRY_FLAGS, format_rate_no_noise
+from src.telegram_app.ui.routes_popular import format_rate_no_noise
 from src.db.repositories import rates_repo
 from src.db.repositories.orders_repo import (
     list_orders_by_status,
@@ -17,17 +17,14 @@ from src.db.repositories.orders_repo import (
     mark_origin_verified,
     get_order_by_public_id,
     cancel_order,
-    mark_order_paid,
     mark_order_paid_tx,
-    set_profit_usdt,
     set_profit_usdt_tx,
     set_awaiting_paid_proof,
-    clear_awaiting_paid_proof,
     clear_awaiting_paid_proof_tx,
     list_orders_awaiting_paid_proof_by,
 )
 from src.db.repositories.users_repo import get_telegram_id_by_user_id
-from src.db.repositories.wallet_repo import add_ledger_entry, add_ledger_entry_tx
+from src.db.repositories.wallet_repo import add_ledger_entry_tx
 from src.db.repositories.origin_wallet_repo import add_origin_receipt_daily
 from src.integrations.binance_p2p import BinanceP2PClient
 from src.integrations.p2p_config import COUNTRIES
@@ -153,12 +150,18 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
     if not q:
         return
 
+    # Mantenemos el answer() lo más arriba posible para evitar lag UI
     if not _is_authorized(update):
         try:
-            await q.answer("\u26d4 Acceso denegado.", show_alert=True)
+            await q.answer("⛔ No tienes permiso para esta acción.", show_alert=True)
         except Exception:
             pass
         return
+
+    try:
+        await q.answer()
+    except Exception:
+        pass
 
     data = q.data or ""
     parts = data.split(":")
@@ -377,8 +380,10 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         profit_usdt = _q8((amount_origin / buy_origin_snapshot) - (payout_dest / sell_dest_snapshot))
 
         # 2. Profit REAL (con precios actuales de Binance)
-        exec_buy, exec_sell = _fetch_realtime_prices(
-            str(order.origin_country), str(order.dest_country)
+        exec_buy, exec_sell = await asyncio.to_thread(
+            _fetch_realtime_prices,
+            str(order.origin_country),
+            str(order.dest_country)
         )
 
         if exec_buy and exec_sell:
