@@ -481,7 +481,7 @@ def build_kyc_conversation() -> ConversationHandler:
             ],
         },
         fallbacks=[
-            CommandHandler("cancel", panic_handler),
+            CommandHandler(["cancel", "panic"], panic_handler),
             MessageHandler(filters.Regex(MENU_BUTTONS_REGEX), panic_handler),
         ],
         allow_reentry=True,

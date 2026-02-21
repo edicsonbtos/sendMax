@@ -109,6 +109,7 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not _is_authorized(update):
         return
 
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     try:
         orders = await asyncio.wait_for(list_orders_by_status("CREADA", limit=10), timeout=5.0)
     except asyncio.TimeoutError:
@@ -159,6 +160,7 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
     if not q:
         return
 
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     # Mantenemos el answer() lo más arriba posible para evitar lag UI
     if not _is_authorized(update):
         try:
@@ -356,6 +358,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
     if not update.message or not update.message.photo:
         return
 
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     public_id = await _pick_pending_order_id_from_db(update.effective_user.id)
     if not public_id:
         await update.message.reply_text("⚠️ No hay ordenes en espera de comprobante.")
@@ -367,6 +370,10 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         order = await get_order_by_public_id(public_id)
         if not order:
             await update.message.reply_text("❌ Error: Orden no encontrada.")
+            return
+
+        if order.status != "EN_PROCESO":
+            await update.message.reply_text("ℹ️ Esta orden ya fue gestionada previamente por otro administrador o su estado cambió.")
             return
 
         # 1. Profit TEORICO

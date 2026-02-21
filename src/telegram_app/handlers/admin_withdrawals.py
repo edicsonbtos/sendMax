@@ -64,7 +64,7 @@ def build_admin_withdrawals_conversation_handler() -> ConversationHandler:
         },
         fallbacks=[
             CallbackQueryHandler(admin_withdrawals_list, pattern=f"^{CB_BACK}$"),
-            CommandHandler("cancel", panic_handler),
+            CommandHandler(["cancel", "panic"], panic_handler),
             CommandHandler("start", panic_handler),
             MessageHandler(filters.Regex(MENU_BUTTONS_REGEX), panic_handler),
         ],
