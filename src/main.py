@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 import logging
 import warnings
@@ -98,6 +99,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+@app.get("/")
+async def root():
+    return {"status": "ok"}
+
 @app.post(f"/{settings.TELEGRAM_BOT_TOKEN}")
 async def telegram_webhook(request: Request):
     """Endpoint to receive Telegram updates."""
@@ -126,8 +131,10 @@ def main() -> None:
 
     try:
         if settings.WEBHOOK_URL:
-            logger.info(f"Running in WEBHOOK mode (FastAPI) on port {settings.PORT}")
-            uvicorn.run(app, host="0.0.0.0", port=settings.PORT, log_level="info", access_log=True)
+            port = int(os.environ.get("PORT", 8080))
+            print(f"Iniciando servidor en el puerto: {port}")
+            logger.info(f"Running in WEBHOOK mode (FastAPI) on port {port}")
+            uvicorn.run(app, host="0.0.0.0", port=port, log_level="info", access_log=True)
         else:
             logger.info("Running in POLLING mode (Development)")
             bot_app.run_polling(allowed_updates=["message", "callback_query"])
