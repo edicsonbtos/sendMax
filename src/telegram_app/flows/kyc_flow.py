@@ -23,6 +23,7 @@ from src.db.repositories.users_repo import (
     check_email_exists,
 )
 from src.telegram_app.handlers.menu import show_home
+from src.telegram_app.handlers.panic import panic_handler, MENU_BUTTONS_REGEX
 from src.utils.crypto import get_password_hash
 
 logger = logging.getLogger(__name__)
@@ -471,6 +472,9 @@ def build_kyc_conversation() -> ConversationHandler:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, _photo_state_text_fallback_selfie),
             ],
         },
-        fallbacks=[CommandHandler("cancel", cancel_kyc)],
+        fallbacks=[
+            CommandHandler("cancel", panic_handler),
+            MessageHandler(filters.Regex(MENU_BUTTONS_REGEX), panic_handler),
+        ],
         allow_reentry=True,
     )
