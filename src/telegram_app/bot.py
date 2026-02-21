@@ -1,53 +1,68 @@
 from __future__ import annotations
 
 import logging
+
 from telegram import Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
-    MessageHandler,
-    filters,
     ContextTypes,
+    MessageHandler,
     PicklePersistence,
+    filters,
 )
 from telegram.request import HTTPXRequest
 
 from src.config.settings import settings
-
 from src.telegram_app.flows.kyc_flow import build_kyc_conversation
 from src.telegram_app.flows.new_order_flow import build_new_order_conversation
 from src.telegram_app.flows.withdrawal_flow import build_withdrawal_conversation_handler
-
-from src.telegram_app.handlers.admin_rates import rates_now
-from src.telegram_app.handlers.admin_chatid import chat_id
 from src.telegram_app.handlers.admin_alert_test import alert_test
+from src.telegram_app.handlers.admin_awaiting_paid import admin_awaiting_paid
+from src.telegram_app.handlers.admin_chatid import chat_id
+from src.telegram_app.handlers.admin_kyc import (
+    handle_kyc_callback,
+    handle_kyc_reject_reason,
+)
+from src.telegram_app.handlers.admin_kyc_resend import build_kyc_resend_handler
+from src.telegram_app.handlers.admin_media_router import admin_photo_router
 from src.telegram_app.handlers.admin_orders import (
     admin_orders,
     handle_admin_order_action,
     handle_cancel_reason_text,
 )
-from src.telegram_app.handlers.admin_withdrawals import (
-    build_admin_withdrawals_conversation_handler,
-    admin_withdrawals_callbacks,
-)
-from src.telegram_app.handlers.admin_media_router import admin_photo_router
-from src.telegram_app.handlers.admin_awaiting_paid import admin_awaiting_paid
-from src.telegram_app.handlers.admin_kyc import handle_kyc_callback, handle_kyc_reject_reason
+from src.telegram_app.handlers.admin_rates import rates_now
 from src.telegram_app.handlers.admin_reset_all import build_reset_all_handler
-from src.telegram_app.handlers.admin_kyc_resend import build_kyc_resend_handler
 from src.telegram_app.handlers.admin_set_sponsor import build_set_sponsor_handler
-
-from src.telegram_app.handlers.rates_more import handle_rates_more
-from src.telegram_app.handlers.summary import build_summary_callback_handler
+from src.telegram_app.handlers.admin_withdrawals import (
+    admin_withdrawals_callbacks,
+    build_admin_withdrawals_conversation_handler,
+)
 from src.telegram_app.handlers.menu import menu_router
 from src.telegram_app.handlers.panic import panic_handler
+from src.telegram_app.handlers.rates_more import handle_rates_more
+from src.telegram_app.handlers.summary import build_summary_callback_handler
 
 logger = logging.getLogger(__name__)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.exception("UNHANDLED ERROR: %s", context.error)
+
+    # 1. Reset user state to avoid loops
+    if context.user_data is not None:
+        context.user_data.clear()
+
+    # 2. Notify user if possible
+    if isinstance(update, Update) and update.effective_chat:
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="⚠️ Lo siento, experimenté un inconveniente técnico momentáneo. Por favor, usa /start para continuar.",
+            )
+        except Exception:
+            pass
 
 
 # --- SNIFFER DEBUG (solo si FLOW_DEBUG=1) ---
@@ -82,8 +97,8 @@ def build_bot() -> Application:
     if int(getattr(settings, "FLOW_DEBUG", 0) or 0) == 1:
         app.add_handler(MessageHandler(filters.ALL, universal_sniffer), group=-1)
 
-    # /start = KYC. /cancel = Pánico.
-    app.add_handler(CommandHandler("cancel", panic_handler), group=0)
+    # /start = KYC. /cancel /panic = Pánico.
+    app.add_handler(CommandHandler(["cancel", "panic"], panic_handler), group=0)
     app.add_handler(build_kyc_conversation(), group=0)
 
     # Flujos operativos

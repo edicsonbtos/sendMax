@@ -95,13 +95,27 @@ def main() -> None:
     setup_logging()
     _configure_warnings()
 
-    if settings.WEBHOOK_URL:
-        logger.info(f"Corriendo en modo WEBHOOK (FastAPI) en puerto {settings.PORT}")
-        uvicorn.run(app, host="0.0.0.0", port=settings.PORT, log_level="info")
-    else:
-        logger.info("Corriendo en modo POLLING (Desarrollo)")
-        # En polling usamos el loop de PTB normal
-        bot_app.run_polling(allowed_updates=["message", "callback_query"])
+    try:
+        if settings.WEBHOOK_URL:
+            logger.info(f"Corriendo en modo WEBHOOK (FastAPI) en puerto {settings.PORT}")
+            uvicorn.run(app, host="0.0.0.0", port=settings.PORT, log_level="info")
+        else:
+            logger.info("Corriendo en modo POLLING (Desarrollo)")
+            # En polling usamos el loop de PTB normal
+            bot_app.run_polling(allowed_updates=["message", "callback_query"])
+    finally:
+        # Aseguramos cierre de pool si run_polling termina (Ctrl+C)
+        # y no estamos en modo FastAPI (que ya tiene su lifespan)
+        if not settings.WEBHOOK_URL:
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(close_pool())
+                else:
+                    asyncio.run(close_pool())
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

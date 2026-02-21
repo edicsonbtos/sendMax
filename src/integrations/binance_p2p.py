@@ -11,9 +11,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable
-import httpx
-from src.db.settings_store import get_setting_float
 
+import httpx
+
+from src.db.settings_store import get_setting_float
 
 BINANCE_P2P_URL = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
 
@@ -29,7 +30,7 @@ class P2PQuote:
 
 
 class BinanceP2PClient:
-    def __init__(self, timeout_seconds: float = 15.0) -> None:
+    def __init__(self, timeout_seconds: float = 10.0) -> None:
         self._client = httpx.Client(timeout=timeout_seconds)
 
     def close(self) -> None:
@@ -70,8 +71,13 @@ class BinanceP2PClient:
             "user-agent": "sendmax-bot/1.0",
         }
 
-        resp = self._client.post(BINANCE_P2P_URL, json=payload, headers=headers)
-        resp.raise_for_status()
+        try:
+            resp = self._client.post(BINANCE_P2P_URL, json=payload, headers=headers)
+            resp.raise_for_status()
+        except httpx.TimeoutException:
+            raise RuntimeError(f"Tiempo de espera agotado al consultar Binance P2P ({fiat}/{trade_type}).")
+        except Exception as e:
+            raise RuntimeError(f"Error de red al consultar Binance P2P: {e}")
 
         data = resp.json()
         items = data.get("data") or []

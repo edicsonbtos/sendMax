@@ -644,7 +644,7 @@ def build_new_order_conversation() -> ConversationHandler:
             ASK_EDIT_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_after_edit)],
         },
         fallbacks=[
-            CommandHandler("cancel", panic_handler),
+            CommandHandler(["cancel", "panic"], panic_handler),
             CommandHandler("start", panic_handler),
             MessageHandler(filters.Regex(MENU_BUTTONS_REGEX), panic_handler),
         ],

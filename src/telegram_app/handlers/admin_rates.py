@@ -44,4 +44,4 @@ async def rates_now(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     except Exception as e:
         logger.exception("Error en rates_now: %s", e)
-        await update.message.reply_text(f"⚠️ Error actualizando tasas: {e}")
+        await update.message.reply_text("No pude obtener las tasas actuales, intenta de nuevo en unos segundos.")
