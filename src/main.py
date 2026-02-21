@@ -20,7 +20,6 @@ from src.telegram_app.bot import build_bot
 logger = logging.getLogger("main")
 VET = ZoneInfo("America/Caracas")
 
-
 def _configure_warnings() -> None:
     warnings.filterwarnings(
         "ignore",
@@ -28,24 +27,21 @@ def _configure_warnings() -> None:
         category=PTBUserWarning,
     )
 
-
-# --- INTEGRACION FASTAPI + PTB ---
-
 bot_app = build_bot()
 rates_scheduler = RatesScheduler(bot_app)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Setup secuencial
+    # Sequential Setup
     try:
         # 1. DB (Fail-fast)
         await wait_db_ready()
     except Exception as e:
-        logger.error(f"FATAL: No se pudo iniciar la DB: {e}")
+        logger.error(f"FATAL: Database initialization failed: {e}")
         raise
 
     # 2. PTB Initialize
-    logger.info("Iniciando PTB Application...")
+    logger.info("Starting PTB Application...")
     await bot_app.initialize()
 
     # 3. Scheduler + Guards
@@ -73,7 +69,7 @@ async def lifespan(app: FastAPI):
         first=60,
         name="rates_30m_check",
     )
-    logger.info("Scheduler tasas registrado")
+    logger.info("Rates scheduler registered")
 
     # 4. Webhook + Start
     if settings.WEBHOOK_URL:
@@ -86,12 +82,12 @@ async def lifespan(app: FastAPI):
     yield
 
     # Teardown
-    logger.info("Cerrando Sendmax...")
+    logger.info("Shutting down Sendmax...")
     try:
         await bot_app.stop()
         await bot_app.shutdown()
     except Exception as e:
-        logger.error(f"Error apagando PTB: {e}")
+        logger.error(f"Error stopping PTB: {e}")
 
     await close_pool()
 
@@ -99,7 +95,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.post(f"/{settings.TELEGRAM_BOT_TOKEN}")
 async def telegram_webhook(request: Request):
-    """Endpoint para recibir updates de Telegram."""
+    """Endpoint to receive Telegram updates."""
     data = await request.json()
     update = Update.de_json(data, bot_app.bot)
     await bot_app.process_update(update)
@@ -109,22 +105,18 @@ async def telegram_webhook(request: Request):
 async def health():
     return {"status": "ok", "service": "sendmax-bot"}
 
-
 def main() -> None:
     setup_logging()
     _configure_warnings()
 
     try:
         if settings.WEBHOOK_URL:
-            logger.info(f"Corriendo en modo WEBHOOK (FastAPI) en puerto {settings.PORT}")
+            logger.info(f"Running in WEBHOOK mode (FastAPI) on port {settings.PORT}")
             uvicorn.run(app, host="0.0.0.0", port=settings.PORT, log_level="info")
         else:
-            logger.info("Corriendo en modo POLLING (Desarrollo)")
-            # En polling usamos el loop de PTB normal
+            logger.info("Running in POLLING mode (Development)")
             bot_app.run_polling(allowed_updates=["message", "callback_query"])
     finally:
-        # Aseguramos cierre de pool si run_polling termina (Ctrl+C)
-        # y no estamos en modo FastAPI (que ya tiene su lifespan)
         if not settings.WEBHOOK_URL:
             import asyncio
             try:
@@ -135,7 +127,6 @@ def main() -> None:
                     asyncio.run(close_pool())
             except Exception:
                 pass
-
 
 if __name__ == "__main__":
     main()

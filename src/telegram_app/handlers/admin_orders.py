@@ -70,8 +70,8 @@ def _order_actions_kb(public_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def _fetch_realtime_prices(origin_country: str, dest_country: str):
-    """Consulta precios actuales de Binance P2P para calcular profit real"""
+async def _fetch_realtime_prices(origin_country: str, dest_country: str):
+    """Consulta precios actuales de Binance P2P (ASYNC) para calcular profit real"""
     origin_cfg = COUNTRIES.get(origin_country)
     dest_cfg = COUNTRIES.get(dest_country)
 
@@ -80,13 +80,13 @@ def _fetch_realtime_prices(origin_country: str, dest_country: str):
 
     client = BinanceP2PClient()
     try:
-        buy_quote = client.fetch_first_price(
+        buy_quote = await client.fetch_first_price(
             fiat=origin_cfg.fiat,
             trade_type="BUY",
             pay_methods=origin_cfg.buy_methods,
             trans_amount=origin_cfg.trans_amount,
         )
-        sell_quote = client.fetch_first_price(
+        sell_quote = await client.fetch_first_price(
             fiat=dest_cfg.fiat,
             trade_type="SELL",
             pay_methods=dest_cfg.sell_methods,
@@ -97,7 +97,7 @@ def _fetch_realtime_prices(origin_country: str, dest_country: str):
         logger.warning(f"No pude obtener precios real-time de Binance: {e}")
         return None, None
     finally:
-        client.close()
+        await client.close()
 
 
 def _get_fiat_currency(country: str) -> str:
@@ -392,9 +392,8 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         sell_dest_snapshot = Decimal(str(rr.sell_dest))
         profit_usdt = _q8((amount_origin / buy_origin_snapshot) - (payout_dest / sell_dest_snapshot))
 
-        # 2. Profit REAL
-        exec_buy, exec_sell = await asyncio.to_thread(
-            _fetch_realtime_prices,
+        # 2. Profit REAL (ASYNC)
+        exec_buy, exec_sell = await _fetch_realtime_prices(
             str(order.origin_country),
             str(order.dest_country)
         )

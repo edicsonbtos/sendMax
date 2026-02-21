@@ -7,39 +7,49 @@ from typing import Any
 from src.db.connection import get_async_conn
 
 
-_cache: dict[str, Any] = {}
-_cache_ts: float = 0.0
+# Cache por llave con su propio timestamp de expiración
+_cache: dict[str, tuple[Any, float]] = {}
 _TTL_SECONDS = 60
 
 
 async def get_setting_json(key: str) -> dict[str, Any] | None:
     """
     Lee settings(key, value_json) desde Postgres (ASYNC).
-    Cache 60s para no golpear DB.
+    Cache 60s por llave.
     """
-    global _cache_ts, _cache
-
     now = time.time()
-    if (now - _cache_ts) < _TTL_SECONDS and key in _cache:
-        return _cache[key]
+    if key in _cache:
+        val, ts = _cache[key]
+        if (now - ts) < _TTL_SECONDS:
+            return val
 
-    async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("SELECT value_json FROM settings WHERE key=%s", (key,))
-            row = await cur.fetchone()
+    try:
+        async with get_async_conn() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT value_json FROM settings WHERE key=%s", (key,))
+                row = await cur.fetchone()
+    except Exception:
+        # Si falla la DB, intentamos usar cache expirada como fallback
+        if key in _cache:
+            return _cache[key][0]
+        return None
 
     val = None
     if row and row[0] is not None:
-        if isinstance(row[0], dict):
-            val = row[0]
-        else:
+        raw_val = row[0]
+        if isinstance(raw_val, dict):
+            val = raw_val
+        elif isinstance(raw_val, str):
             try:
-                val = json.loads(row[0])
+                val = json.loads(raw_val)
             except Exception:
+                # Si es un string pero no JSON, lo envolvemos si parece útil
+                # o lo dejamos como None si se espera dict.
                 val = None
+        else:
+            val = None
 
-    _cache[key] = val
-    _cache_ts = now
+    _cache[key] = (val, now)
     return val
 
 
