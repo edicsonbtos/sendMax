@@ -400,6 +400,16 @@ async def receive_benef(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Acepta comprobante como FOTO o como DOCUMENTO (imagen/archivo)
+    file_id = None
+    if update.message and update.message.photo:
+        file_id = update.message.photo[-1].file_id
+    elif update.message and update.message.document:
+        file_id = update.message.document.file_id
+    if not file_id:
+        await _screen_send_or_edit(update, context, "Envía el comprobante como foto o archivo, por favor.", reply_markup=_cancel_keyboard())
+        return ASK_PROOF
+
     if update.message and update.message.text and update.message.text.lower() == BTN_CANCEL.lower():
         await _screen_send_or_edit(update, context, "Listo, cancelado ?")
         _reset_flow_memory(context)
@@ -584,6 +594,7 @@ def build_new_order_conversation() -> ConversationHandler:
             ASK_BENEF: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_benef)],
             ASK_PROOF: [
                 MessageHandler(filters.PHOTO, receive_proof),
+                MessageHandler(filters.Document.ALL, receive_proof),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_proof),
             ],
             ASK_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_confirm)],
