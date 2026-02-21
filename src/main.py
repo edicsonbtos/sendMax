@@ -13,7 +13,7 @@ from telegram.warnings import PTBUserWarning
 
 from src.config.logging import setup_logging
 from src.config.settings import settings
-from src.db.connection import close_pool
+from src.db.connection import close_pool, wait_db_ready, is_pool_open
 from src.rates_scheduler import RatesScheduler
 from src.telegram_app.bot import build_bot
 
@@ -36,15 +36,29 @@ rates_scheduler = RatesScheduler(bot_app)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Setup
+    # Setup secuencial
+    try:
+        # 1. DB (Fail-fast)
+        await wait_db_ready()
+    except Exception as e:
+        logger.error(f"FATAL: No se pudo iniciar la DB: {e}")
+        raise
+
+    # 2. PTB Initialize
     logger.info("Iniciando PTB Application...")
     await bot_app.initialize()
 
-    # Scheduler
+    # 3. Scheduler + Guards
     async def job_9am(context):
+        if not is_pool_open():
+            logger.warning("skipped job_9am: DB pool not ready")
+            return
         await rates_scheduler.run_9am_baseline()
 
     async def job_30m(context):
+        if not is_pool_open():
+            logger.warning("skipped job_30m: DB pool not ready")
+            return
         await rates_scheduler.run_30m_check()
 
     bot_app.job_queue.run_daily(
@@ -61,6 +75,7 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Scheduler tasas registrado")
 
+    # 4. Webhook + Start
     if settings.WEBHOOK_URL:
         url = f"{settings.WEBHOOK_URL}/{settings.TELEGRAM_BOT_TOKEN}"
         await bot_app.bot.set_webhook(url=url, allowed_updates=["message", "callback_query"])
@@ -72,8 +87,12 @@ async def lifespan(app: FastAPI):
 
     # Teardown
     logger.info("Cerrando Sendmax...")
-    await bot_app.stop()
-    await bot_app.shutdown()
+    try:
+        await bot_app.stop()
+        await bot_app.shutdown()
+    except Exception as e:
+        logger.error(f"Error apagando PTB: {e}")
+
     await close_pool()
 
 app = FastAPI(lifespan=lifespan)
