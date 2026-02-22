@@ -76,7 +76,8 @@ async def lifespan(app: FastAPI):
 
     # 4. Webhook + Start
     if settings.WEBHOOK_URL:
-        url = f"{settings.WEBHOOK_URL}/{settings.TELEGRAM_BOT_TOKEN}"
+        # Usamos /webhook fijo para evitar problemas con tokens que tengan caracteres especiales
+        url = f"{settings.WEBHOOK_URL}/webhook"
         print(f"\n--- SETTING WEBHOOK ---")
         print(f"URL: {url}")
         logger.info(f"Setting webhook to: {url}")
@@ -103,7 +104,7 @@ app = FastAPI(lifespan=lifespan)
 async def root():
     return {"status": "ok"}
 
-@app.post(f"/{settings.TELEGRAM_BOT_TOKEN}")
+@app.post("/webhook")
 async def telegram_webhook(request: Request):
     """Endpoint to receive Telegram updates."""
     data = await request.json()
@@ -115,8 +116,8 @@ async def telegram_webhook(request: Request):
 
     update = Update.de_json(data, bot_app.bot)
 
-    # Encolar para que PTB lo procese en su loop normal
-    await bot_app.update_queue.put(update)
+    # Procesamos directamente para evitar fallas en la cola del webhook (fix_webhook_queue)
+    await bot_app.process_update(update)
 
     # Responder rápido a Telegram
     return Response(status_code=200)
