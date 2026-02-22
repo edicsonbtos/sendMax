@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import os
@@ -79,7 +79,7 @@ async def lifespan(app: FastAPI):
 
     # 4. Webhook + Start
     if settings.WEBHOOK_URL:
-        url = f"{settings.WEBHOOK_URL}/{settings.TELEGRAM_BOT_TOKEN}"
+        url = f"{settings.WEBHOOK_URL}/webhook"
         print(f"\n--- SETTING WEBHOOK ---")
         print(f"URL: {url}")
         logger.info(f"Setting webhook to: {url}")
@@ -106,7 +106,7 @@ app = FastAPI(lifespan=lifespan)
 async def root():
     return {"status": "ok"}
 
-@app.post(f"/{settings.TELEGRAM_BOT_TOKEN}")
+@app.post("/webhook")
 async def telegram_webhook(request: Request):
     """Endpoint to receive Telegram updates."""
     data = await request.json()
