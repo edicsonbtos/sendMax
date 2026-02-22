@@ -3,6 +3,7 @@ from decimal import Decimal
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from src.telegram_app.handlers.ephemeral_cleanup import track_message
 from src.db.repositories.users_repo import get_user_by_telegram_id
 from src.db.repositories.wallet_metrics_repo import get_wallet_metrics
 from src.db.repositories.wallet_repo import get_balance
@@ -54,4 +55,5 @@ async def wallet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         ]
     )
 
-    await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+    msg = await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+    await track_message(msg, context)

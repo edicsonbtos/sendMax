@@ -10,6 +10,7 @@ from src.db.repositories.rates_repo import (
     get_latest_active_rate_version,
     list_route_rates_for_version,
 )
+from src.telegram_app.handlers.ephemeral_cleanup import track_message
 from src.telegram_app.ui.labels import BTN_NEW_ORDER
 from src.telegram_app.ui.rates_buttons import rates_main_buttons
 from src.telegram_app.ui.routes_popular import (
@@ -62,5 +63,8 @@ async def show_rates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         parse_mode="Markdown"
     )
     
+    # Guardar ID del mensaje para limpieza
+    await track_message(msg, context)
+
     # Guardar ID del mensaje para poder editarlo después
     context.user_data["rates_message_id"] = msg.message_id

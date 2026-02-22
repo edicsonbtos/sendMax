@@ -45,14 +45,15 @@ class Order:
     cancel_reason: str | None = None
 
 
-VALID_STATUSES = {"CREADA", "ORIGEN_VERIFICANDO", "ORIGEN_CONFIRMADO", "EN_PROCESO", "PAGADA", "CANCELADA"}
+VALID_STATUSES = {"CREADA", "ORIGEN_VERIFICANDO", "ORIGEN_CONFIRMADO", "EN_PROCESO", "PAGADA", "COMPLETADA", "CANCELADA"}
 
 VALID_TRANSITIONS = {
     "CREADA":             {"ORIGEN_VERIFICANDO", "CANCELADA"},
     "ORIGEN_VERIFICANDO": {"ORIGEN_CONFIRMADO", "CANCELADA"},
     "ORIGEN_CONFIRMADO":  {"EN_PROCESO", "CANCELADA"},
-    "EN_PROCESO":         {"PAGADA", "CANCELADA"},
-    "PAGADA":             set(),
+    "EN_PROCESO":         {"PAGADA", "COMPLETADA", "CANCELADA"},
+    "PAGADA":             {"COMPLETADA"},
+    "COMPLETADA":         set(),
     "CANCELADA":          set(),
 }
 
@@ -216,12 +217,12 @@ async def mark_order_paid(public_id: int, dest_payment_proof_file_id: str) -> bo
     sql = """
         UPDATE orders
         SET
-            status = 'PAGADA',
+            status = 'COMPLETADA',
             dest_payment_proof_file_id = %s,
             paid_at = now(),
             updated_at = now()
         WHERE public_id = %s
-          AND status = 'EN_PROCESO';
+          AND status IN ('EN_PROCESO', 'PAGADA');
     """
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
@@ -349,15 +350,18 @@ async def list_orders_awaiting_paid_proof_by(by_telegram_user_id: int, limit: in
 
 
 async def mark_order_paid_tx(conn: psycopg.AsyncConnection, public_id: int, dest_payment_proof_file_id: str) -> bool:
+    """
+    Marca orden como COMPLETADA (antes PAGADA) para compatibilidad con Backoffice 2.0
+    """
     sql = """
         UPDATE orders
         SET
-            status = 'PAGADA',
+            status = 'COMPLETADA',
             dest_payment_proof_file_id = %s,
             paid_at = now(),
             updated_at = now()
         WHERE public_id = %s
-          AND status = 'EN_PROCESO';
+          AND status IN ('EN_PROCESO', 'PAGADA');
     """
     async with conn.cursor() as cur:
         await cur.execute(sql, (dest_payment_proof_file_id, public_id))

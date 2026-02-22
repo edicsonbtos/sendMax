@@ -36,11 +36,17 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # 1) Prioridad: órdenes en espera en DB (anti-caídas)
     try:
-        from src.db.repositories.orders_repo import list_orders_awaiting_paid_proof_by
+        from src.db.repositories.orders_repo import (
+            list_orders_awaiting_paid_proof_by,
+        )
 
-        pending = list_orders_awaiting_paid_proof_by(update.effective_user.id, limit=1)
+        pending = await list_orders_awaiting_paid_proof_by(
+            update.effective_user.id, limit=1
+        )
         if pending:
-            from src.telegram_app.handlers.admin_orders import process_paid_proof_photo
+            from src.telegram_app.handlers.admin_orders import (
+                process_paid_proof_photo,
+            )
             await process_paid_proof_photo(update, context)
             return
     except Exception as e:
