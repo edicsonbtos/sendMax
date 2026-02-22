@@ -52,16 +52,17 @@ logger = logging.getLogger(__name__)
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.exception("UNHANDLED ERROR: %s", context.error)
 
-    # 1. Reset user state to avoid loops
-    if context.user_data is not None:
-        context.user_data.clear()
+    # NO borrar user_data para preservar conversación
 
-    # 2. Notify user if possible
     if isinstance(update, Update) and update.effective_chat:
         try:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="⚠️ Lo siento, experimenté un inconveniente técnico momentáneo. Por favor, usa /start para continuar.",
+                text=(
+                    "⚠️ Ocurrió un error temporal.\n"
+                    "Por favor, intenta de nuevo.\n\n"
+                    "Tus datos ya ingresados están guardados."
+                ),
             )
         except Exception:
             pass
