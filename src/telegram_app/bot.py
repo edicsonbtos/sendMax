@@ -52,16 +52,16 @@ logger = logging.getLogger(__name__)
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.exception("UNHANDLED ERROR: %s", context.error)
 
-    # 1. Reset user state to avoid loops
+    # Preservar user_data para no perder estado de conversacion
     if context.user_data is not None:
-        context.user_data.clear()
+        pass  # user_data.clear() removido: preservar estado KYC
 
     # 2. Notify user if possible
     if isinstance(update, Update) and update.effective_chat:
         try:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="⚠️ Lo siento, experimenté un inconveniente técnico momentáneo. Por favor, usa /start para continuar.",
+                text="âš ï¸ Lo siento, experimentÃ© un inconveniente tÃ©cnico momentÃ¡neo. Por favor, usa /start para continuar.",
             )
         except Exception:
             pass
@@ -82,7 +82,7 @@ async def universal_sniffer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def build_bot() -> Application:
-    # Persistencia de sesión (Fase 2)
+    # Persistencia de sesiÃ³n (Fase 2)
     persistence = PicklePersistence(filepath="bot_persistence.pickle")
 
     request = HTTPXRequest(connect_timeout=20.0, read_timeout=30.0, write_timeout=30.0, pool_timeout=30.0)
@@ -99,7 +99,7 @@ def build_bot() -> Application:
     if int(getattr(settings, "FLOW_DEBUG", 0) or 0) == 1:
         app.add_handler(MessageHandler(filters.ALL, universal_sniffer), group=-1)
 
-    # /start = KYC. /cancel /panic = Pánico.
+    # /start = KYC. /cancel /panic = PÃ¡nico.
     app.add_handler(CommandHandler(["cancel", "panic"], panic_handler), group=0)
     app.add_handler(build_kyc_conversation(), group=0)
 
@@ -135,8 +135,8 @@ def build_bot() -> Application:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_cancel_reason_text), group=5)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_kyc_reject_reason), group=5)
 
-    # Menú (solo APPROVED)
+    # MenÃº (solo APPROVED)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router), group=6)
 
-    logger.info("Bot listo: KYC + órdenes + retiros + admin (Persistence: ON)")
+    logger.info("Bot listo: KYC + Ã³rdenes + retiros + admin (Persistence: ON)")
     return app

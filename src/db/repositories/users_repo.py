@@ -192,12 +192,12 @@ async def create_user(
 
 async def check_email_exists(email: str) -> bool:
     """Verifica si un email ya esta registrado (case-insensitive)."""
-    sql = "SELECT 1 FROM users WHERE LOWER(email) = LOWER(%s) LIMIT 1;"
+    sql = "SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(email) = LOWER(%s));"
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (email,))
-            res = await cur.fetchone()
-            return res is not None
+            row = await cur.fetchone()
+            return bool(row[0]) if row else False
 
 
 # --------------------------------------------
