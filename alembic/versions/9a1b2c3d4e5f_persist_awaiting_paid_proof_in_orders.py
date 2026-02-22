@@ -1,4 +1,4 @@
-﻿"""persist awaiting paid proof state in orders
+"""persist awaiting paid proof state in orders
 
 Revision ID: 9a1b2c3d4e5f
 Revises: 3c3f537e3f23

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Funciones de criptografía para el bot.
 Compatible con backoffice_api (mismo algoritmo bcrypt).
 """

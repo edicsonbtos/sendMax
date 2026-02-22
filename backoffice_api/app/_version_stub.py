@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Query, Request
 import os, hashlib, subprocess
 from .db import fetch_one, fetch_all
 from .audit import get_stuck_orders  # si existe

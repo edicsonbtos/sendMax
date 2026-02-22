@@ -1,4 +1,4 @@
-﻿"""add cancel reason to orders
+"""add cancel reason to orders
 
 Revision ID: c525e594bdd5
 Revises: 4876012249fd

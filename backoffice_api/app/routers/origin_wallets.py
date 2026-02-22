@@ -1,4 +1,4 @@
-﻿"""Router: Origin Wallets, Sweeps, Balances y Cierre diario
+"""Router: Origin Wallets, Sweeps, Balances y Cierre diario
    Version corregida: integridad financiera + atomicidad + advisory locks
 """
 

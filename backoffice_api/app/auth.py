@@ -1,4 +1,4 @@
-﻿"""Autenticacion para backoffice: JWT (principal) + API KEY (legacy/fallback)"""
+"""Autenticacion para backoffice: JWT (principal) + API KEY (legacy/fallback)"""
 
 import os
 from fastapi import Depends, HTTPException, Security, status, Request

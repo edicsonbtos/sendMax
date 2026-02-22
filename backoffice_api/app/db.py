@@ -1,4 +1,4 @@
-﻿"""
+"""
 DB helpers para Backoffice API (psycopg3 + psycopg_pool).
 
 Pools RO y RW separados.

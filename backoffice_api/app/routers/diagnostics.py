@@ -1,4 +1,4 @@
-﻿"""Router: Health check"""
+"""Router: Health check"""
 
 import logging
 from fastapi import APIRouter
@@ -18,23 +18,22 @@ def health():
     db_error = None
 
     try:
+        # Timeout corto para no bloquear el healthcheck de Railway
         result = fetch_one("SELECT 1 AS ok")
         db_ok = result is not None and result.get("ok") == 1
     except Exception as e:
         db_error = str(e)
         logger.warning("Health check DB failed: %s", e)
 
-    status = "ok" if db_ok else "degraded"
+    # Importante: Railway espera un 200 OK.
+    # No fallamos el healthcheck completo si la DB está caída temporalmente,
+    # pero informamos el estado 'degraded'.
 
-    response = {
+    return {
         "ok": db_ok,
-        "status": status,
+        "status": "ok" if db_ok else "degraded",
         "service": "backoffice-api",
-        "version": "0.6.0",
+        "version": "0.6.1",
         "db": "connected" if db_ok else "unreachable",
+        "db_error": db_error
     }
-
-    if db_error:
-        response["db_error"] = db_error
-
-    return response

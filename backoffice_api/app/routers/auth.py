@@ -1,4 +1,4 @@
-﻿"""
+"""
 Router de autenticacion para Backoffice.
 Endpoint: POST /auth/login
 Permite login de admin y operator.

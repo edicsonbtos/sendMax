@@ -1,4 +1,4 @@
-﻿"""create settings table
+"""create settings table
 
 Revision ID: create_settings_table_20260210
 Revises: hotfix_20260129160557_withdrawals_fiat_cols

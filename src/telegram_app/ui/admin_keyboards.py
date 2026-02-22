@@ -1,4 +1,4 @@
-﻿from telegram import ReplyKeyboardMarkup, KeyboardButton
+from telegram import ReplyKeyboardMarkup, KeyboardButton
 
 
 def admin_panel_keyboard() -> ReplyKeyboardMarkup:

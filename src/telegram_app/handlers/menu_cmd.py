@@ -1,4 +1,4 @@
-﻿from telegram import Update
+from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.db.repositories.users_repo import get_user_kyc_by_telegram_id

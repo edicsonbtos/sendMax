@@ -1,4 +1,4 @@
-﻿from src.db.connection import get_conn
+from src.db.connection import get_conn
 
 with get_conn() as conn:
     with conn.cursor() as cur:

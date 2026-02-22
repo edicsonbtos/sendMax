@@ -1,4 +1,4 @@
-﻿import os
+import os
 import psycopg
 from datetime import date
 

@@ -1,4 +1,4 @@
-﻿"""create user_contacts table for broadcast/post-reset
+"""create user_contacts table for broadcast/post-reset
 
 Revision ID: 8c8c8c8c8c8c
 Revises: 6aa111bb22cc

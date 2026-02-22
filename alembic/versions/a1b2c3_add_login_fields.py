@@ -1,4 +1,4 @@
-﻿"""add email and hashed_password to users for backoffice login
+"""add email and hashed_password to users for backoffice login
 
 Revision ID: a1b2c3_add_login_fields
 Revises: add_execution_prices_20260211

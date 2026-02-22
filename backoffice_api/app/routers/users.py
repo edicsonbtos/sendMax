@@ -1,4 +1,4 @@
-﻿"""
+"""
 Router de gestion de usuarios (admin only).
 - GET  /users              - listar con KYC, balance, busqueda
 - GET  /users/{user_id}    - detalle completo

@@ -1,4 +1,4 @@
-﻿"""hotfix withdrawals fiat columns
+"""hotfix withdrawals fiat columns
 
 Revision ID: hotfix_20260129160557_withdrawals_fiat_cols
 Revises: e62522510952

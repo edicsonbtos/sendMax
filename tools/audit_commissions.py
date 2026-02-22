@@ -1,4 +1,4 @@
-﻿import psycopg
+import psycopg
 from decimal import Decimal
 from src.config.settings import settings
 

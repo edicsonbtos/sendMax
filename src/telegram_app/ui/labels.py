@@ -1,4 +1,4 @@
-﻿# Fuente única de textos de botones (evita desalineación por encoding)
+# Fuente única de textos de botones (evita desalineación por encoding)
 
 BTN_RATES = "📈 Tasas"
 BTN_WALLET = "💼 Billetera"

@@ -1,4 +1,4 @@
-﻿"""Router: Correccion manual de profit y datos de ejecucion"""
+"""Router: Correccion manual de profit y datos de ejecucion"""
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel

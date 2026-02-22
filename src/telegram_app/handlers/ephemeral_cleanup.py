@@ -1,4 +1,4 @@
-﻿"""
+"""
 Limpieza de mensajes efímeros.
 
 Objetivo:

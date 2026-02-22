@@ -56,6 +56,10 @@ app = FastAPI(
     redoc_url=None,
 )
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "service": "backoffice-api"}
+
 
 # ==========================================
 # 3. CORS (con limpieza de espacios)

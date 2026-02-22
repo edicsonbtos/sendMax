@@ -1,4 +1,4 @@
-﻿"""
+"""
 Botones inline para paginar "Ver más" en tasas.
 REDISEÑO: Todos los botones en un solo mensaje inline.
 """

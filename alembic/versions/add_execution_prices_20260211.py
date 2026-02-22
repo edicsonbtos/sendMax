@@ -1,4 +1,4 @@
-﻿"""add execution prices and profit real
+"""add execution prices and profit real
 
 Revision ID: add_execution_prices_20260211
 Revises: 30bb5fcf3040

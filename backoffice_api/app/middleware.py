@@ -1,4 +1,4 @@
-﻿from fastapi import Request, HTTPException, status
+from fastapi import Request, HTTPException, status
 import os
 
 API_KEY = os.getenv("BACKOFFICE_API_KEY")

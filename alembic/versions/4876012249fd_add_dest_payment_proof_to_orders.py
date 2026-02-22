@@ -1,4 +1,4 @@
-﻿"""add dest payment proof to orders
+"""add dest payment proof to orders
 
 Revision ID: 4876012249fd
 Revises: 2c20eda69bd2

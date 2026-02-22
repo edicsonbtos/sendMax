@@ -1,4 +1,4 @@
-﻿"""create wallets ledger withdrawals
+"""create wallets ledger withdrawals
 
 Revision ID: 47c816e9a216
 Revises: c525e594bdd5

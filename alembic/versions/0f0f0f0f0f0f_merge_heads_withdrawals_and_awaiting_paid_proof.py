@@ -1,4 +1,4 @@
-﻿"""merge heads: withdrawals_fiat_cols + awaiting_paid_proof
+"""merge heads: withdrawals_fiat_cols + awaiting_paid_proof
 
 Revision ID: 0f0f0f0f0f0f
 Revises: 1f2_withdrawals_fiat_cols, 9a1b2c3d4e5f

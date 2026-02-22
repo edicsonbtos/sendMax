@@ -1,4 +1,4 @@
-﻿"""add profit_usdt to orders
+"""add profit_usdt to orders
 
 Revision ID: 3c3f537e3f23
 Revises: 47c816e9a216

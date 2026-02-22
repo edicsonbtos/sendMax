@@ -1,4 +1,4 @@
-﻿from telegram import Update
+from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 
 ASK = 1

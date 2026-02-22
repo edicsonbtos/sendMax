@@ -1,4 +1,4 @@
-﻿from telegram import Update
+from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings

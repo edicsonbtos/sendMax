@@ -1,4 +1,4 @@
-﻿"""
+"""
 Teclados (ReplyKeyboardMarkup) para una UI fija tipo "app".
 """
 from telegram import ReplyKeyboardMarkup, KeyboardButton

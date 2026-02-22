@@ -1,4 +1,4 @@
-﻿import os
+import os
 import psycopg
 
 url = os.environ["postgresql://neondb_owner:npg_8Eqh0xcTGVXQ@ep-damp-wave-ahgz5qnw-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require&keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5&connect_timeout=10"]

@@ -1,4 +1,4 @@
-﻿"""create origin_sweeps table (origin wallet outflows)
+"""create origin_sweeps table (origin wallet outflows)
 
 Revision ID: 9f1b8c_origin_sweeps
 Revises: 4da93e6227ac

@@ -1,4 +1,4 @@
-﻿"""Audit helpers: profit daily, operators ranking, corridors, stuck orders"""
+"""Audit helpers: profit daily, operators ranking, corridors, stuck orders"""
 
 from datetime import date, timedelta
 from .db import fetch_one, fetch_all

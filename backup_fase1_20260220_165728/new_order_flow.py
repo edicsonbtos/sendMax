@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 """
 Flujo: 📤 Nuevo envío (PRO) — FIAT -> FIAT (coherente con profit puente)

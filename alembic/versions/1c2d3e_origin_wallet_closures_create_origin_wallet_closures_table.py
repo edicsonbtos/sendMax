@@ -1,4 +1,4 @@
-﻿"""create origin_wallet_closures table
+"""create origin_wallet_closures table
 
 Revision ID: 1c2d3e_origin_wallet_closures
 Revises: 97fa8cee3e0c

@@ -1,4 +1,4 @@
-﻿"""Router: Ordenes y Trades"""
+"""Router: Ordenes y Trades"""
 
 import logging
 from fastapi import APIRouter, Depends, Query, HTTPException

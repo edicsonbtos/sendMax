@@ -1,4 +1,4 @@
-﻿"""telegram_user_id nullable
+"""telegram_user_id nullable
 
 Revision ID: tg_nullable_001
 Create Date: 2026-02-19

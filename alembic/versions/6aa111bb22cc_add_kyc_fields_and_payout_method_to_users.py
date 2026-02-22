@@ -1,4 +1,4 @@
-﻿"""add kyc fields and payout method to users
+"""add kyc fields and payout method to users
 
 Revision ID: 6aa111bb22cc
 Revises: 0f0f0f0f0f0f

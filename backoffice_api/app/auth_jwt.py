@@ -1,4 +1,4 @@
-﻿"""
+"""
 JWT Authentication para Backoffice Login.
 Archivo separado de auth.py (que maneja API KEY).
 """

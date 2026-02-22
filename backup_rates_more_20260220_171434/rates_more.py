@@ -1,4 +1,4 @@
-﻿"""
+"""
 Handler: Ver más tasas (paginación y filtros por callback inline)
 Con manejo robusto de errores en todos los callbacks.
 """

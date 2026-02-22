@@ -1,4 +1,4 @@
-﻿import psycopg
+import psycopg
 from src.config.settings import settings
 
 def main():

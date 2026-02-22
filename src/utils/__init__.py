@@ -1,1 +1,1 @@
-﻿"""Utilidades compartidas del bot."""
+"""Utilidades compartidas del bot."""
