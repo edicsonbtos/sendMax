@@ -159,7 +159,7 @@ def daily_close(day: str = Query(...), api_key: str = Depends(verify_api_key)):
           COUNT(*) FILTER (WHERE status='ORIGEN_VERIFICANDO') AS origen_verificando,
           COUNT(*) FILTER (WHERE status='ORIGEN_CONFIRMADO') AS origen_confirmado,
           COUNT(*) FILTER (WHERE status='EN_PROCESO') AS en_proceso,
-          COUNT(*) FILTER (WHERE status='PAGADA') AS pagadas,
+          COUNT(*) FILTER (WHERE status IN ('PAGADA', 'COMPLETADA')) AS pagadas,
           COUNT(*) FILTER (WHERE status='CANCELADA') AS canceladas,
           COUNT(*) FILTER (WHERE awaiting_paid_proof=true) AS awaiting_paid_proof
         FROM orders
@@ -172,7 +172,7 @@ def daily_close(day: str = Query(...), api_key: str = Depends(verify_api_key)):
         """
         SELECT COALESCE(SUM(profit_usdt), 0) AS profit_usdt
         FROM orders
-        WHERE status='PAGADA' AND paid_at >= %s AND paid_at < %s
+        WHERE status IN ('PAGADA', 'COMPLETADA') AND paid_at >= %s AND paid_at < %s
         """,
         (start_utc, end_utc),
     )

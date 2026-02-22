@@ -107,7 +107,8 @@ async def on_broadcast_content(update: Update, context: ContextTypes.DEFAULT_TYP
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SELECT COUNT(*) FROM users WHERE is_active = true;")
-            count = (await cur.fetchone())[0]
+            row = await cur.fetchone()
+            count = int(row[0]) if row else 0
 
     context.user_data["broadcast_count"] = count
 

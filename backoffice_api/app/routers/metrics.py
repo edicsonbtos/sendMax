@@ -28,9 +28,11 @@ ST_ORIGEN = "ORIGEN_VERIFICANDO"
 ST_ORIGEN_CONFIRMADO = "ORIGEN_CONFIRMADO"
 ST_PROCESO = "EN_PROCESO"
 ST_PAGADA = "PAGADA"
+ST_COMPLETADA = "COMPLETADA"
 ST_CANCELADA = "CANCELADA"
 
 PENDING_STATES = (ST_CREADA, ST_ORIGEN, ST_ORIGEN_CONFIRMADO, ST_PROCESO)
+COMPLETED_STATES = (ST_PAGADA, ST_COMPLETADA)
 
 
 # ============================================================
@@ -70,28 +72,31 @@ def metrics_overview(auth: dict = Depends(verify_api_key)):
           COUNT(*) FILTER (WHERE status=%s) AS origen_verificando,
           COUNT(*) FILTER (WHERE status=%s) AS origen_confirmado,
           COUNT(*) FILTER (WHERE status=%s) AS en_proceso,
-          COUNT(*) FILTER (WHERE status=%s) AS pagadas,
+          COUNT(*) FILTER (WHERE status IN (%s, %s)) AS completed,
           COUNT(*) FILTER (WHERE status=%s) AS canceladas,
 
           COUNT(*) FILTER (
               WHERE awaiting_paid_proof = true
-                AND status NOT IN (%s, %s)
+                AND status NOT IN (%s, %s, %s)
           ) AS awaiting_paid_proof,
 
-          COALESCE(SUM(profit_usdt) FILTER (WHERE status=%s), 0) AS total_profit_usd,
-          COALESCE(SUM(profit_real_usdt) FILTER (WHERE status=%s), 0) AS total_profit_real_usd,
+          COALESCE(SUM(profit_usdt) FILTER (WHERE status IN (%s, %s)), 0) AS total_profit_usd,
+          COALESCE(SUM(profit_real_usdt) FILTER (WHERE status IN (%s, %s)), 0) AS total_profit_real_usd,
 
           COALESCE(SUM(payout_dest) FILTER (
-              WHERE status=%s AND dest_currency IN ('USD','USDT')
+              WHERE status IN (%s, %s) AND dest_currency IN ('USD','USDT')
           ), 0) AS total_volume_usd
         FROM orders
         WHERE 1=1 {wh}
         """,
         (
-            ST_CREADA, ST_ORIGEN, ST_ORIGEN_CONFIRMADO, ST_PROCESO, ST_PAGADA, ST_CANCELADA,
-            ST_CANCELADA, ST_PAGADA,
-            ST_PAGADA, ST_PAGADA,
-            ST_PAGADA,
+            ST_CREADA, ST_ORIGEN, ST_ORIGEN_CONFIRMADO, ST_PROCESO,
+            ST_PAGADA, ST_COMPLETADA,
+            ST_CANCELADA,
+            ST_CANCELADA, ST_PAGADA, ST_COMPLETADA,
+            ST_PAGADA, ST_COMPLETADA,
+            ST_PAGADA, ST_COMPLETADA,
+            ST_PAGADA, ST_COMPLETADA,
         ) + prm,
     )
 
@@ -101,13 +106,13 @@ def metrics_overview(auth: dict = Depends(verify_api_key)):
     origen_verificando = int(row.get("origen_verificando") or 0)
     origen_confirmado = int(row.get("origen_confirmado") or 0)
     en_proceso = int(row.get("en_proceso") or 0)
-    pagadas = int(row.get("pagadas") or 0)
+    completed = int(row.get("completed") or 0)
     canceladas = int(row.get("canceladas") or 0)
 
     return {
         "total_orders": int(row.get("total_orders") or 0),
         "pending_orders": creadas + origen_verificando + origen_confirmado + en_proceso,
-        "completed_orders": pagadas,
+        "completed_orders": completed,
         "cancelled_orders": canceladas,
         "awaiting_paid_proof": int(row.get("awaiting_paid_proof") or 0),
         "total_volume_usd": float(row.get("total_volume_usd") or 0),
@@ -118,7 +123,7 @@ def metrics_overview(auth: dict = Depends(verify_api_key)):
             ST_ORIGEN: origen_verificando,
             ST_ORIGEN_CONFIRMADO: origen_confirmado,
             ST_PROCESO: en_proceso,
-            ST_PAGADA: pagadas,
+            "COMPLETED": completed,
             ST_CANCELADA: canceladas,
         },
     }
@@ -237,9 +242,9 @@ def metrics_company_overview(auth: dict = Depends(verify_api_key)):
           COUNT(*) FILTER (WHERE status IN
               ('CREADA','ORIGEN_VERIFICANDO','ORIGEN_CONFIRMADO','EN_PROCESO')
           ) AS pending_orders,
-          COUNT(*) FILTER (WHERE status='PAGADA') AS completed_orders,
-          COALESCE(SUM(profit_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_usd,
-          COALESCE(SUM(profit_real_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_real_usd
+          COUNT(*) FILTER (WHERE status IN ('PAGADA', 'COMPLETADA')) AS completed_orders,
+          COALESCE(SUM(profit_usdt) FILTER (WHERE status IN ('PAGADA', 'COMPLETADA')), 0) AS total_profit_usd,
+          COALESCE(SUM(profit_real_usdt) FILTER (WHERE status IN ('PAGADA', 'COMPLETADA')), 0) AS total_profit_real_usd
         FROM orders
         WHERE 1=1 {wh}
         """,
@@ -251,7 +256,7 @@ def metrics_company_overview(auth: dict = Depends(verify_api_key)):
         f"""
         SELECT dest_currency, COALESCE(SUM(payout_dest),0) AS vol, COUNT(*) AS cnt
         FROM orders
-        WHERE status='PAGADA' {wh}
+        WHERE status IN ('PAGADA', 'COMPLETADA') {wh}
         GROUP BY dest_currency
         ORDER BY vol DESC
         """,

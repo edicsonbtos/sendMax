@@ -410,6 +410,7 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
             by_telegram_user_id=getattr(update.effective_user, "id", None),
         )
         if ok:
+            # Asociación explícita y persistente en context
             context.user_data["active_paid_order_id"] = public_id
 
         try:
@@ -419,8 +420,8 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
 
         await q.message.reply_text(
             f"📸 <b>PAGO ORDEN #{public_id}</b>\n"
-            f"Envia la captura del pago aqui para cerrar la orden.\n\n"
-            f"<i>(Se asociará a esta orden por ser la última en la que tocaste PAGADA)</i>",
+            f"Envía la captura del pago aquí para cerrar la orden.\n\n"
+            f"⚠️ <b>IMPORTANTE:</b> La foto se asociará a la orden <b>#{public_id}</b>.",
             parse_mode="HTML"
         )
         return
@@ -454,17 +455,18 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
-    # Intentar obtener de context (lo más reciente que tocó el admin)
+    # 1. Prioridad: context.user_data (última que el admin marcó)
     public_id = context.user_data.get("active_paid_order_id")
 
-    # Verificar que esa orden realmente esté esperando comprobante
+    # Validar que siga pendiente de comprobante
     if public_id:
         order_check = await get_order_by_public_id(public_id)
+        # Si ya no está en espera o no es del admin, ignorar context
         if not order_check or not getattr(order_check, "awaiting_paid_proof", False):
-            public_id = None # No es válida o ya se cerró
+            public_id = None
             context.user_data.pop("active_paid_order_id", None)
 
-    # Si no hay en context o no era válida, buscar la más antigua en DB
+    # 2. Fallback: la más antigua pendiente de este admin en DB
     if not public_id:
         public_id = await _pick_pending_order_id_from_db(update.effective_user.id)
 

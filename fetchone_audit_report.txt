@@ -1,0 +1,32 @@
+FETCHONE AUDIT REPORT - 2026-02-23
+---------------------------------
+
+SCOPE: End-to-end audit of fetchone() usage in the SendMax Bot ecosystem.
+
+CRITICAL FINDINGS:
+1. src/db/repositories/wallet_repo.py: get_or_create_wallet
+   - STATUS: FIXED
+   - ISSUE: Race condition between SELECT and INSERT led to UniqueViolation and psycopg InterfaceError.
+   - FIX: Implemented UPSERT using ON CONFLICT ... RETURNING.
+
+2. src/telegram_app/handlers/admin_broadcast.py
+   - STATUS: FIXED
+   - ISSUE: Assumption that COUNT(*) fetchone() always returns a row object was risky.
+   - FIX: Added explicit row check and int conversion.
+
+3. src/db/repositories/users_repo.py
+   - STATUS: AUDITED (SAFE)
+   - All fetchone() calls check if 'row' is None before indexing or passing to dataclass constructors.
+
+4. backoffice_api/app/db.py: fetch_one
+   - STATUS: AUDITED (SAFE)
+   - Uses dict_row factory and returns None if cursor is empty.
+
+5. backoffice_api/app/routers/origin_wallets.py
+   - STATUS: AUDITED (SAFE)
+   - Queries used inside run_in_transaction are scalar aggregates or FOR UPDATE selects which are handled correctly.
+
+GENERAL RECOMMENDATION:
+Always check `if row` before indexing result of `fetchone()`. Use `INSERT ... ON CONFLICT ... RETURNING` for idempotent creation.
+
+REPORT END.

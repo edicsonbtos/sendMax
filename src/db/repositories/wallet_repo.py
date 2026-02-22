@@ -15,20 +15,28 @@ class Wallet:
 
 
 async def get_or_create_wallet(user_id: int) -> Wallet:
+    """
+    Obtiene o crea la wallet de un usuario de forma atómica y concurrente (UPSERT).
+    """
+    sql = """
+        INSERT INTO wallets (user_id, balance_usdt)
+        VALUES (%s, 0)
+        ON CONFLICT (user_id) DO UPDATE SET updated_at = now()
+        RETURNING user_id, balance_usdt;
+    """
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT user_id, balance_usdt FROM wallets WHERE user_id = %s LIMIT 1;", (user_id,))
-            row = await cur.fetchone()
-            if row:
-                return Wallet(int(row[0]), Decimal(str(row[1])))
-
-            await cur.execute(
-                "INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0) RETURNING user_id, balance_usdt;",
-                (user_id,),
-            )
+            await cur.execute(sql, (user_id,))
             row = await cur.fetchone()
             await conn.commit()
-            return Wallet(int(row[0]), Decimal(str(row[1]))) if row else None
+            if not row:
+                # Caso extremo: re-intentar lectura simple
+                await cur.execute("SELECT user_id, balance_usdt FROM wallets WHERE user_id = %s LIMIT 1;", (user_id,))
+                row = await cur.fetchone()
+                if not row:
+                    raise RuntimeError(f"No se pudo obtener ni crear wallet para user_id={user_id}")
+
+            return Wallet(int(row[0]), Decimal(str(row[1])))
 
 
 async def get_balance(user_id: int) -> Decimal:
