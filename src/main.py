@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import os
@@ -37,11 +37,14 @@ rates_scheduler = RatesScheduler(bot_app)
 async def lifespan(app: FastAPI):
     # Sequential Setup
     try:
-        # 1. DB (Fail-fast)
-        await wait_db_ready()
+        # 1. DB (Non-blocking con timeout)
+        logger.info("Waiting for database connection...")
+        await asyncio.wait_for(wait_db_ready(), timeout=30.0)
+        logger.info("Database connected successfully")
+    except asyncio.TimeoutError:
+        logger.warning("Database connection timeout - bot will start anyway")
     except Exception as e:
-        logger.error(f"FATAL: Database initialization failed: {e}")
-        raise
+        logger.warning(f"Database initialization failed: {e} - bot will start anyway")
 
     # 2. PTB Initialize
     logger.info("Starting PTB Application...")
@@ -118,7 +121,7 @@ async def telegram_webhook(request: Request):
     # Encolar para que PTB lo procese en su loop normal
     await bot_app.update_queue.put(update)
 
-    # Responder rápido a Telegram
+    # Responder rapido a Telegram
     return Response(status_code=200)
 
 @app.get("/health")
