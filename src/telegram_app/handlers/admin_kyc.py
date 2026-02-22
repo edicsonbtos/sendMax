@@ -83,6 +83,13 @@ async def handle_kyc_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         ok = await set_kyc_status(user_id=user_id, new_status="APPROVED", reason=None)
 
         if ok:
+            # Asegurar wallet al aprobar KYC
+            try:
+                from src.db.repositories.wallet_repo import get_or_create_wallet
+                await get_or_create_wallet(user_id)
+            except Exception:
+                logger.exception("No pude asegurar wallet para usuario %s tras aprobar KYC", user_id)
+
             tg_id = await get_telegram_id_by_user_id(user_id)
             if tg_id:
                 try:

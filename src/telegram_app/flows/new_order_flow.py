@@ -553,23 +553,23 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 payout_dest=payout_dest,
                 beneficiary_text=beneficiary_text,
                 origin_payment_proof_file_id=file_id,
+                initial_status="ORIGEN_VERIFICANDO",
             ),
             timeout=5.0
         )
     except asyncio.TimeoutError:
+        logger.error(f"Timeout al crear orden para user {user.id}")
         await update.message.reply_text("⏳ Timeout al registrar orden. Por favor revisa tu historial antes de reintentar.")
         return ConversationHandler.END
-
-    # Nuevo flujo: ORIGEN primero (grupo ORIGIN_REVIEW)
-    try:
-        await update_order_status(int(order.public_id), "ORIGEN_VERIFICANDO")
     except Exception as e:
-        _flow_dbg(f"update_order_status ORIGEN_VERIFICANDO failed: {e}")
+        logger.exception(f"Error critico al crear orden para user {user.id}")
+        await update.message.reply_text("❌ Error al registrar la orden. Por favor intenta de nuevo.")
+        return ConversationHandler.END
 
     try:
         await _notify_admin_new_order(context, order)
     except Exception as e:
-        _flow_dbg(f"notify_admin failed: {e}")
+        logger.exception(f"Error al notificar admin de nueva orden #{order.public_id}")
 
     await update.message.reply_text(
         f"✅ ¡Listo! Orden #{_fmt_public_id(order.public_id)} registrada.\n"

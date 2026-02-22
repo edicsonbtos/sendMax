@@ -257,21 +257,43 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
 
             try:
                 from datetime import datetime, timedelta, timezone
+                from src.db.repositories.origin_wallet_repo import add_origin_receipt_ledger_tx, add_origin_receipt_daily_tx
                 VET = timezone(timedelta(hours=-4))
                 day_vet = datetime.now(tz=timezone.utc).astimezone(VET).date()
 
                 fiat_currency = ORIGIN_FIAT_CURRENCY.get(str(order.origin_country), str(order.origin_country))
-                await add_origin_receipt_daily(
-                    day=day_vet,
-                    origin_country=str(order.origin_country),
-                    fiat_currency=str(fiat_currency),
-                    amount_fiat=Decimal(str(order.amount_origin)),
-                    approved_by_telegram_id=getattr(update.effective_user, "id", None),
-                    approved_note=f"ORIGEN OK por {(getattr(update.effective_user, 'full_name', None) or getattr(update.effective_user, 'username', None) or 'operador')}",
-                    ref_order_public_id=int(public_id),
-                )
+
+                async with get_async_conn() as conn:
+                    async with conn.transaction():
+                        # 1. Intentar insertar en el ledger por orden (idempotencia)
+                        inserted = await add_origin_receipt_ledger_tx(
+                            conn,
+                            ref_order_public_id=int(public_id),
+                            day=day_vet,
+                            origin_country=str(order.origin_country),
+                            fiat_currency=str(fiat_currency),
+                            amount_fiat=Decimal(str(order.amount_origin)),
+                            approved_by_telegram_id=getattr(update.effective_user, "id", None),
+                            approved_note=f"ORIGEN OK por {(getattr(update.effective_user, 'full_name', None) or getattr(update.effective_user, 'username', None) or 'operador')}",
+                        )
+
+                        # 2. Solo si se insertó el ledger, actualizar el agregado diario
+                        if inserted:
+                            await add_origin_receipt_daily_tx(
+                                conn,
+                                day=day_vet,
+                                origin_country=str(order.origin_country),
+                                fiat_currency=str(fiat_currency),
+                                amount_fiat=Decimal(str(order.amount_origin)),
+                                approved_by_telegram_id=getattr(update.effective_user, "id", None),
+                                approved_note=f"Agregado desde orden #{public_id}",
+                                ref_order_public_id=int(public_id),
+                            )
+                        else:
+                            logger.info(f"Origin receipt for order #{public_id} already exists, skipping aggregate update.")
+
             except Exception:
-                logger.exception("orig_ok: no pude insertar origin_receipts_daily para orden %s", public_id)
+                logger.exception("orig_ok: no pude registrar contabilidad de origen para orden %s", public_id)
 
             try:
                 target_chat_id = int(settings.PAYMENTS_TELEGRAM_CHAT_ID)
