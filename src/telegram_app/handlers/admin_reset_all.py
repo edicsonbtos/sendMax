@@ -46,16 +46,31 @@ async def reset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     admin_ids = settings.admin_user_ids
     admin_tg_id = next(iter(admin_ids)) if admin_ids else None
 
+    from src.db.repositories.users_repo import ensure_treasury_user
+    treasury_id = await ensure_treasury_user()
+
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("DELETE FROM withdrawals;")
             await cur.execute("DELETE FROM wallet_ledger;")
-            await cur.execute("DELETE FROM wallets;")
+            await cur.execute("DELETE FROM order_trades;")
             await cur.execute("DELETE FROM orders;")
+            await cur.execute("DELETE FROM withdrawals;")
+            await cur.execute("DELETE FROM user_contacts;")
+
+            # Origen
+            for table in ["origin_sweeps", "origin_wallet_closures", "origin_receipts_daily"]:
+                try: await cur.execute(f"DELETE FROM {table};")
+                except: pass
+
             await cur.execute("ALTER SEQUENCE orders_public_id_seq RESTART WITH 1;")
 
             if admin_tg_id:
-                await cur.execute("DELETE FROM users WHERE telegram_user_id <> %s;", (admin_tg_id,))
+                # Borrar usuarios excepto admin y treasury
+                await cur.execute("DELETE FROM users WHERE telegram_user_id <> %s AND alias <> 'TREASURY' AND id <> %s;", (admin_tg_id, treasury_id))
+
+                # Reset balances
+                await cur.execute("UPDATE wallets SET balance_usdt = 0, updated_at = now();")
+
                 await cur.execute(
                     """
                     UPDATE users

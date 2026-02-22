@@ -36,6 +36,7 @@ from src.telegram_app.handlers.admin_orders import (
 from src.telegram_app.handlers.admin_rates import rates_now
 from src.telegram_app.handlers.admin_reset_all import build_reset_all_handler
 from src.telegram_app.handlers.admin_set_sponsor import build_set_sponsor_handler
+from src.telegram_app.handlers.admin_treasury import adj_treasury
 from src.telegram_app.handlers.admin_withdrawals import (
     admin_withdrawals_callbacks,
     build_admin_withdrawals_conversation_handler,
@@ -113,6 +114,7 @@ def build_bot() -> Application:
     app.add_handler(CommandHandler("chat_id", chat_id), group=2)
     app.add_handler(CommandHandler("alert_test", alert_test), group=2)
     app.add_handler(CommandHandler("admin_orders", admin_orders), group=2)
+    app.add_handler(CommandHandler("adj_treasury", adj_treasury), group=2)
     app.add_handler(CommandHandler("awaiting_paid", admin_awaiting_paid), group=2)
     app.add_handler(build_admin_withdrawals_conversation_handler(), group=2)
     app.add_handler(build_broadcast_handler(), group=2)

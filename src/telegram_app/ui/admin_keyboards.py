@@ -4,13 +4,13 @@ from src.telegram_app.ui.labels import (
     BTN_ADMIN_WITHDRAWALS,
     BTN_ADMIN_RATES_NOW,
     BTN_ADMIN_ALERT_TEST,
+    BTN_ADMIN_BROADCAST,
+    BTN_ADMIN_TREASURY,
     BTN_ADMIN_RESET,
     BTN_ADMIN_RESET_YES,
     BTN_ADMIN_RESET_CANCEL,
     BTN_ADMIN_MENU,
 )
-
-BTN_ADMIN_BROADCAST = "📢 Difusión"
 
 
 def admin_panel_keyboard() -> ReplyKeyboardMarkup:
@@ -20,9 +20,9 @@ def admin_panel_keyboard() -> ReplyKeyboardMarkup:
     """
     keyboard = [
         [KeyboardButton(BTN_ADMIN_ORDERS), KeyboardButton(BTN_ADMIN_WITHDRAWALS)],
-        [KeyboardButton(BTN_ADMIN_RATES_NOW), KeyboardButton(BTN_ADMIN_ALERT_TEST)],
-        [KeyboardButton(BTN_ADMIN_BROADCAST), KeyboardButton(BTN_ADMIN_RESET)],
-        [KeyboardButton(BTN_ADMIN_MENU)],
+        [KeyboardButton(BTN_ADMIN_RATES_NOW), KeyboardButton(BTN_ADMIN_TREASURY)],
+        [KeyboardButton(BTN_ADMIN_BROADCAST), KeyboardButton(BTN_ADMIN_ALERT_TEST)],
+        [KeyboardButton(BTN_ADMIN_RESET), KeyboardButton(BTN_ADMIN_MENU)],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 

@@ -33,6 +33,9 @@ async def add_origin_receipt_daily(
     approved_note: str | None = None,
     ref_order_public_id: int | None = None,
 ) -> int:
+    """
+    Registra ingreso de origen. Si ya existe registro para ese dia/pais/moneda, acumula el monto.
+    """
     sql = """
         INSERT INTO origin_receipts_daily
           (day, origin_country, fiat_currency, amount_fiat,
@@ -42,6 +45,12 @@ async def add_origin_receipt_daily(
           (%s, %s, %s, %s,
            now(), %s, %s,
            %s)
+        ON CONFLICT (day, origin_country, fiat_currency) DO UPDATE SET
+          amount_fiat = origin_receipts_daily.amount_fiat + EXCLUDED.amount_fiat,
+          approved_at = EXCLUDED.approved_at,
+          approved_by_telegram_id = EXCLUDED.approved_by_telegram_id,
+          approved_note = EXCLUDED.approved_note,
+          ref_order_public_id = EXCLUDED.ref_order_public_id
         RETURNING id;
     """
     async with get_async_conn() as conn:
