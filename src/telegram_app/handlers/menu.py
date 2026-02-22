@@ -16,6 +16,10 @@ from telegram.ext import ContextTypes
 from src.config.settings import settings
 from src.db.repositories.users_repo import get_user_kyc_by_telegram_id
 from src.telegram_app.handlers.admin_panel import admin_panel_router, open_admin_panel
+from src.telegram_app.handlers.ephemeral_cleanup import (
+    cleanup_ephemeral,
+    track_message,
+)
 from src.telegram_app.handlers.payment_methods import (
     enter_payment_methods,
     handle_payment_methods_country,
@@ -85,15 +89,19 @@ async def show_home(update: Update, context: ContextTypes.DEFAULT_TYPE, alias: s
         "Remesas rápidas y seguras con tasa competitiva.\n\n"
         "Elige una opción del menú 👇"
     )
-    await update.message.reply_text(
+    sent = await update.message.reply_text(
         msg,
         reply_markup=main_menu_keyboard(is_admin=_is_admin(update)),
         parse_mode="Markdown",
     )
+    await track_message(sent, context)
 
 
 async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (update.message.text or "").strip()
+
+    # MEJORA 5: Limpieza de mensajes efímeros
+    await cleanup_ephemeral(update, context)
 
     # No mostrar/operar menú en grupos (solo DM)
     if update.effective_chat and update.effective_chat.type != "private":

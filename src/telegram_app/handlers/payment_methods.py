@@ -7,6 +7,7 @@ from __future__ import annotations
 from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from src.telegram_app.handlers.ephemeral_cleanup import track_message
 from src.config.settings import settings
 from src.db.settings_store import get_payment_methods_for_country
 from src.telegram_app.ui.keyboards import main_menu_keyboard
@@ -45,10 +46,11 @@ async def enter_payment_methods(update: Update, context: ContextTypes.DEFAULT_TY
     context.user_data.pop("rates_mode", None)
     context.user_data.pop("ref_mode", None)
 
-    await update.message.reply_text(
+    msg = await update.message.reply_text(
         "🏦 Métodos de pago\n\nSelecciona el país para ver los datos 👇",
         reply_markup=_country_select_keyboard(),
     )
+    await track_message(msg, context)
 
 
 async def handle_payment_methods_country(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -93,5 +95,6 @@ async def handle_payment_methods_country(update: Update, context: ContextTypes.D
         msg,
         reply_markup=_country_select_keyboard(),
     )
+    await track_message(sent, context)
 
     context.user_data["pm_last_message_id"] = sent.message_id

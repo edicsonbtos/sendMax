@@ -19,6 +19,7 @@ from src.telegram_app.flows.kyc_flow import build_kyc_conversation
 from src.telegram_app.flows.new_order_flow import build_new_order_conversation
 from src.telegram_app.flows.withdrawal_flow import build_withdrawal_conversation_handler
 from src.telegram_app.handlers.admin_alert_test import alert_test
+from src.telegram_app.handlers.admin_broadcast import build_broadcast_handler
 from src.telegram_app.handlers.admin_awaiting_paid import admin_awaiting_paid
 from src.telegram_app.handlers.admin_chatid import chat_id
 from src.telegram_app.handlers.admin_kyc import (
@@ -39,6 +40,7 @@ from src.telegram_app.handlers.admin_withdrawals import (
     admin_withdrawals_callbacks,
     build_admin_withdrawals_conversation_handler,
 )
+from src.telegram_app.handlers.ephemeral_cleanup import cleanup_ephemeral
 from src.telegram_app.handlers.menu import menu_router
 from src.telegram_app.handlers.panic import panic_handler
 from src.telegram_app.handlers.rates_more import handle_rates_more
@@ -112,6 +114,7 @@ def build_bot() -> Application:
     app.add_handler(CommandHandler("admin_orders", admin_orders), group=2)
     app.add_handler(CommandHandler("awaiting_paid", admin_awaiting_paid), group=2)
     app.add_handler(build_admin_withdrawals_conversation_handler(), group=2)
+    app.add_handler(build_broadcast_handler(), group=2)
     app.add_handler(build_reset_all_handler(), group=2)
     app.add_handler(build_kyc_resend_handler(), group=2)
     app.add_handler(build_set_sponsor_handler(), group=2)

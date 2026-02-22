@@ -186,7 +186,7 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
         return
 
     # ORIGIN REVIEW callbacks
-    if action in ("orig_ok", "orig_rej"):
+    if action in ("orig_ok", "orig_rej", "orig_rej_confirm", "orig_rej_cancel"):
         chat_id = getattr(update.effective_chat, "id", None)
         if str(chat_id) != str(settings.ORIGIN_REVIEW_TELEGRAM_CHAT_ID):
             try:
@@ -204,15 +204,55 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
             return
 
         if action == "orig_ok":
+            # MEJORA 1: Prevenir doble confirmación
+            if order.status == "ORIGEN_CONFIRMADO":
+                try:
+                    await q.answer("⚠️ Este origen ya fue confirmado anteriormente", show_alert=True)
+                    # Actualizar mensaje por si acaso
+                    await q.edit_message_text(
+                        q.message.text + "\n\n✅ Origen ya confirmado (anteriormente)",
+                        reply_markup=None,
+                        parse_mode="HTML"
+                    )
+                except Exception:
+                    pass
+                return
+
             ok = await mark_origin_verified(
                 public_id,
                 by_telegram_user_id=getattr(update.effective_user, "id", None),
                 by_name=(getattr(update.effective_user, "full_name", None) or getattr(update.effective_user, "username", None)),
             )
+
+            if ok:
+                # MEJORA 1: DESHABILITAR botón y actualizar mensaje
+                try:
+                    await q.edit_message_text(
+                        q.message.text + "\n\n✅ Origen ya confirmado",
+                        reply_markup=None,
+                        parse_mode="HTML"
+                    )
+                except Exception:
+                    pass
+
+                # MEJORA 1: Notificación al operador
+                op_tid = await get_telegram_id_by_user_id(int(order.operator_user_id))
+                if op_tid:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=int(op_tid),
+                            text=f"✅ Origen confirmado para orden #{public_id}",
+                        )
+                    except Exception:
+                        pass
+
             try:
                 await q.answer("✅ Origen confirmado" if ok else "⚠️ No pude actualizar estado", show_alert=not ok)
             except Exception:
                 pass
+
+            if not ok:
+                return
 
             try:
                 from datetime import datetime, timedelta, timezone
@@ -266,13 +306,59 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
             return
 
         if action == "orig_rej":
+            # MEJORA 2: Confirmación antes de rechazar
+            kb = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("✅ Sí, rechazar origen", callback_data=f"ord:orig_rej_confirm:{public_id}"),
+                    InlineKeyboardButton("❌ No, cancelar", callback_data=f"ord:orig_rej_cancel:{public_id}"),
+                ]
+            ])
+            try:
+                await q.edit_message_text(
+                    q.message.text + f"\n\n⚠️ ¿Estás seguro de rechazar el origen de la orden #{public_id}?",
+                    reply_markup=kb,
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+            return
+
+        if action == "orig_rej_confirm":
             ok = await cancel_order(public_id, "ORIGEN RECHAZADO")
             try:
                 await q.answer("❌ Origen rechazado" if ok else "⚠️ No pude cancelar", show_alert=not ok)
+                if ok:
+                    await q.edit_message_text(
+                        q.message.text + "\n\n❌ Origen RECHAZADO y orden cancelada",
+                        reply_markup=None,
+                        parse_mode="HTML"
+                    )
+                    # Notificar operador
+                    op_tid = await get_telegram_id_by_user_id(int(order.operator_user_id))
+                    if op_tid:
+                        try:
+                            await context.bot.send_message(
+                                chat_id=int(op_tid),
+                                text=f"❌ Tu orden #{public_id} fue cancelada por ORIGEN RECHAZADO.",
+                            )
+                        except Exception:
+                            pass
             except Exception:
                 pass
+            return
+
+        if action == "orig_rej_cancel":
+            # Volver al estado anterior
+            kb = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("✅ ORIGEN RECIBIDO", callback_data=f"ord:orig_ok:{public_id}"),
+                    InlineKeyboardButton("❌ ORIGEN RECHAZADO", callback_data=f"ord:orig_rej:{public_id}"),
+                ]
+            ])
             try:
-                await q.message.reply_text(f"Orden #{public_id} cancelada por ORIGEN RECHAZADO.")
+                # Limpiar la pregunta de confirmación
+                clean_text = q.message.text.split("\n\n⚠️ ¿Estás seguro")[0]
+                await q.edit_message_text(clean_text, reply_markup=kb, parse_mode="HTML")
             except Exception:
                 pass
             return
@@ -439,7 +525,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
             async with conn.transaction():
                 ok_paid = await mark_order_paid_tx(conn, int(public_id), proof_file_id)
                 if not ok_paid:
-                    raise RuntimeError("No pude marcar la orden como PAGADA (tx)")
+                    raise RuntimeError("No pude marcar la orden como COMPLETADA (tx)")
 
                 # Guardar datos de ejecucion real
                 async with conn.cursor() as cur:
@@ -460,7 +546,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
                         """
                         INSERT INTO order_trades
                             (order_public_id, side, fiat_currency, fiat_amount, price, usdt_amount, fee_usdt, source, note)
-                        VALUES (%s, 'BUY', %s, %s, %s, %s, 0, 'binance_p2p_auto', 'Auto-generado al marcar PAGADA')
+                        VALUES (%s, 'BUY', %s, %s, %s, %s, 0, 'binance_p2p_auto', 'Auto-generado al completar orden')
                         """,
                         (int(public_id), origin_fiat, amount_origin, exec_buy, usdt_buy)
                     )
@@ -469,7 +555,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
                         """
                         INSERT INTO order_trades
                             (order_public_id, side, fiat_currency, fiat_amount, price, usdt_amount, fee_usdt, source, note)
-                        VALUES (%s, 'SELL', %s, %s, %s, %s, 0, 'binance_p2p_auto', 'Auto-generado al marcar PAGADA')
+                        VALUES (%s, 'SELL', %s, %s, %s, %s, 0, 'binance_p2p_auto', 'Auto-generado al completar orden')
                         """,
                         (int(public_id), dest_fiat, payout_dest, exec_sell, usdt_sell)
                     )
@@ -524,13 +610,13 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text("❌ Error interno cerrando la orden. Reintenta subiendo la foto nuevamente.")
         return
 
-    # Notificacion operador
+    # Notificacion operador (MEJORA 3)
     op_tid = await get_telegram_id_by_user_id(int(order.operator_user_id))
     if op_tid:
         try:
             await context.bot.send_message(
                 chat_id=int(op_tid),
-                text=f"✅ Orden #{public_id} PAGADA.\n¡Gracias! 🎉",
+                text=f"💰 Pago confirmado para orden #{public_id}\n¡Gracias! 🎉",
             )
             await context.bot.send_photo(
                 chat_id=int(op_tid),

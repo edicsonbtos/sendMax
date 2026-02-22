@@ -9,10 +9,21 @@ from src.telegram_app.handlers.admin_alert_test import alert_test
 from src.telegram_app.handlers.admin_orders import admin_orders
 from src.telegram_app.handlers.admin_rates import rates_now
 from src.telegram_app.ui.admin_keyboards import (
+    BTN_ADMIN_BROADCAST,
     admin_panel_keyboard,
     admin_reset_confirm_keyboard,
 )
 from src.telegram_app.ui.keyboards import main_menu_keyboard
+from src.telegram_app.ui.labels import (
+    BTN_ADMIN_ALERT_TEST,
+    BTN_ADMIN_MENU,
+    BTN_ADMIN_ORDERS,
+    BTN_ADMIN_RATES_NOW,
+    BTN_ADMIN_RESET,
+    BTN_ADMIN_RESET_CANCEL,
+    BTN_ADMIN_RESET_YES,
+    BTN_ADMIN_WITHDRAWALS,
+)
 
 
 def _is_admin(update: Update) -> bool:
@@ -41,26 +52,35 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     text = (update.message.text or "").strip()
 
-    if text == "🏠 Menú":
+    if text == BTN_ADMIN_MENU:
         await update.message.reply_text(
             "Listo ✅",
             reply_markup=main_menu_keyboard(is_admin=True),
         )
         return
 
-    if text == "📦 Órdenes (CREADA)":
+    if text == BTN_ADMIN_ORDERS:
         await admin_orders(update, context)
         return
 
-    if text in ("⚡ Tasas ahora", "📈 Tasas", "📈 Tasas ahora"):
+    if text == BTN_ADMIN_WITHDRAWALS:
+        from src.telegram_app.handlers.admin_withdrawals import admin_withdrawals_list
+        await admin_withdrawals_list(update, context)
+        return
+
+    if text == BTN_ADMIN_RATES_NOW:
         await rates_now(update, context)
         return
 
-    if text == "🧪 Alerta test":
+    if text == BTN_ADMIN_ALERT_TEST:
         await alert_test(update, context)
         return
 
-    if text == "🧹 Reset (modo prueba)":
+    if text == BTN_ADMIN_BROADCAST:
+        from src.telegram_app.handlers.admin_broadcast import start_broadcast
+        return await start_broadcast(update, context)
+
+    if text == BTN_ADMIN_RESET:
         context.user_data["awaiting_reset_confirm"] = True
         await update.message.reply_text(
             "⚠️ Reset de datos (modo prueba)\n\n"
@@ -73,9 +93,9 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return
 
-    if text == "✅ Sí, resetear TODO":
+    if text == BTN_ADMIN_RESET_YES:
         if not context.user_data.get("awaiting_reset_confirm"):
-            await update.message.reply_text("Primero pulsa 🧹 Reset (modo prueba).")
+            await update.message.reply_text(f"Primero pulsa {BTN_ADMIN_RESET}.")
             return
 
         context.user_data.pop("awaiting_reset_confirm", None)
@@ -99,7 +119,7 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         return
 
-    if text == "❌ Cancelar reset":
+    if text == BTN_ADMIN_RESET_CANCEL:
         context.user_data.pop("awaiting_reset_confirm", None)
         await update.message.reply_text("Reset cancelado ✅", reply_markup=admin_panel_keyboard())
         return
