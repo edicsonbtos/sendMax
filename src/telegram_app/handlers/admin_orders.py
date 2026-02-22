@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from decimal import ROUND_HALF_UP, Decimal
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -388,15 +389,19 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
         return
 
     if action == "paid":
-        already = await list_orders_awaiting_paid_proof_by(getattr(update.effective_user, "id", 0) or 0, limit=2)
-        if already and int(already[0].public_id) != int(public_id):
+        max_pending = int(os.environ.get("ADMIN_MAX_PENDING_PROOFS", 10))
+        already = await list_orders_awaiting_paid_proof_by(getattr(update.effective_user, "id", 0) or 0, limit=max_pending + 1)
+
+        is_already_pending = any(int(o.public_id) == int(public_id) for o in already)
+
+        if not is_already_pending and len(already) >= max_pending:
             try:
-                await q.answer("⚠️ Ya tienes una orden en espera. Sube ese comprobante primero.", show_alert=True)
+                await q.answer(f"⚠️ Límite de {max_pending} órdenes en espera alcanzado.", show_alert=True)
             except Exception:
                 pass
             await q.message.reply_text(
-                f"⚠️ Ya tienes una orden en espera de comprobante: #{int(already[0].public_id)}.\n"
-                f"Cierra esa primero antes de marcar otra como PAGADA."
+                f"⚠️ Tienes demasiadas órdenes en espera ({len(already)}). "
+                "Sube los comprobantes de las anteriores antes de marcar más."
             )
             return
 
@@ -404,6 +409,9 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
             public_id,
             by_telegram_user_id=getattr(update.effective_user, "id", None),
         )
+        if ok:
+            context.user_data["active_paid_order_id"] = public_id
+
         try:
             await q.answer("📸 Sube la foto" if ok else "❌ No pude dejar la orden en espera")
         except Exception:
@@ -412,7 +420,7 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
         await q.message.reply_text(
             f"📸 <b>PAGO ORDEN #{public_id}</b>\n"
             f"Envia la captura del pago aqui para cerrar la orden.\n\n"
-            f"(Si el bot se reinicia, la orden seguira en espera en la DB.)",
+            f"<i>(Se asociará a esta orden por ser la última en la que tocaste PAGADA)</i>",
             parse_mode="HTML"
         )
         return
@@ -445,9 +453,23 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         return
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    public_id = await _pick_pending_order_id_from_db(update.effective_user.id)
+
+    # Intentar obtener de context (lo más reciente que tocó el admin)
+    public_id = context.user_data.get("active_paid_order_id")
+
+    # Verificar que esa orden realmente esté esperando comprobante
+    if public_id:
+        order_check = await get_order_by_public_id(public_id)
+        if not order_check or not getattr(order_check, "awaiting_paid_proof", False):
+            public_id = None # No es válida o ya se cerró
+            context.user_data.pop("active_paid_order_id", None)
+
+    # Si no hay en context o no era válida, buscar la más antigua en DB
     if not public_id:
-        await update.message.reply_text("⚠️ No hay ordenes en espera de comprobante.")
+        public_id = await _pick_pending_order_id_from_db(update.effective_user.id)
+
+    if not public_id:
+        await update.message.reply_text("⚠️ No hay ordenes en espera de comprobante para ti.")
         return
 
     proof_file_id = update.message.photo[-1].file_id
@@ -583,6 +605,10 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
                     )
 
                 await clear_awaiting_paid_proof_tx(conn, int(public_id))
+
+        # Limpiar context
+        if context.user_data.get("active_paid_order_id") == public_id:
+            context.user_data.pop("active_paid_order_id", None)
 
         # 5. Confirmacion
         diff = profit_real - profit_usdt

@@ -19,6 +19,7 @@ from src.telegram_app.ui.labels import (
     BTN_ADMIN_MENU,
     BTN_ADMIN_ORDERS,
     BTN_ADMIN_RATES_NOW,
+    BTN_ADMIN_TREASURY,
     BTN_ADMIN_RESET,
     BTN_ADMIN_RESET_CANCEL,
     BTN_ADMIN_RESET_YES,
@@ -76,6 +77,20 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await alert_test(update, context)
         return
 
+    if text == BTN_ADMIN_TREASURY:
+        from src.db.repositories.users_repo import ensure_treasury_user
+        from src.db.repositories.wallet_repo import get_balance
+        tid = await ensure_treasury_user()
+        bal = await get_balance(tid)
+        await update.message.reply_text(
+            f"💰 **Treasury Wallet**\n\n"
+            f"Saldo actual: `{bal:.2f} USDT`\n\n"
+            f"Para ajustar use:\n`/adj_treasury <monto> <memo>`\n"
+            f"(Ej: `/adj_treasury 1500 Inversion inicial`)",
+            parse_mode="Markdown"
+        )
+        return
+
     if text == BTN_ADMIN_BROADCAST:
         from src.telegram_app.handlers.admin_broadcast import start_broadcast
         return await start_broadcast(update, context)
@@ -101,20 +116,45 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data.pop("awaiting_reset_confirm", None)
 
         admin_telegram = int(settings.ADMIN_TELEGRAM_USER_ID)
+        from src.db.repositories.users_repo import ensure_treasury_user
+        treasury_id = await ensure_treasury_user()
 
         try:
             async with get_async_conn() as conn:
                 async with conn.cursor() as cur:
+                    await cur.execute("DELETE FROM wallet_ledger;")
+                    await cur.execute("DELETE FROM order_trades;")
                     await cur.execute("DELETE FROM orders;")
+                    await cur.execute("DELETE FROM withdrawals;")
+                    await cur.execute("DELETE FROM user_contacts;")
+
+                    # Limpiar tablas de origen (con try/except para robustez ante cambios de esquema)
+                    for table in ["origin_sweeps", "origin_wallet_closures", "origin_receipts_daily"]:
+                        try:
+                            await cur.execute(f"DELETE FROM {table};")
+                        except Exception:
+                            pass
+
                     await cur.execute("DELETE FROM route_rates;")
                     await cur.execute("DELETE FROM p2p_country_prices;")
                     await cur.execute("DELETE FROM rate_versions;")
-                    await cur.execute("DELETE FROM users WHERE telegram_user_id <> %s;", (admin_telegram,))
+
+                    # Borrar usuarios (CASCADE borra wallets/ledger si no los borramos antes)
+                    # Protegemos admin y treasury
+                    await cur.execute(
+                        "DELETE FROM users WHERE telegram_user_id <> %s AND alias <> 'TREASURY' AND id <> %s;",
+                        (admin_telegram, treasury_id)
+                    )
+
+                    # Reset balances de los que quedaron (admin y treasury)
+                    await cur.execute("UPDATE wallets SET balance_usdt = 0, updated_at = now();")
+
                 await conn.commit()
 
-            await update.message.reply_text("✅ Reset completo. Base lista para producción.", reply_markup=main_menu_keyboard(is_admin=True))
+            await update.message.reply_text("✅ Reset completo (Hard Reset operativo).", reply_markup=main_menu_keyboard(is_admin=True))
 
         except Exception as e:
+            logger.exception("Reset All failed")
             await update.message.reply_text(f"⚠️ Falló el reset: {e}")
 
         return

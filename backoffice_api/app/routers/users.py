@@ -133,7 +133,7 @@ def list_users(
             FROM orders
             GROUP BY operator_user_id
         ) oc ON oc.operator_user_id = u.id
-        WHERE u.role IN ('admin', 'operator')
+        WHERE u.role IN ('admin', 'operator', 'system')
     """
     if search and search.strip():
         term = "%" + search.strip() + "%"

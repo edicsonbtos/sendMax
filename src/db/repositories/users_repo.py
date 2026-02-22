@@ -166,6 +166,24 @@ async def get_user_kyc_by_id(user_id: int) -> UserKYC | None:
 # Creacion
 # --------------------------------------------
 
+async def ensure_treasury_user() -> int:
+    """Asegura que existe el usuario TREASURY y retorna su ID."""
+    sql_check = "SELECT id FROM users WHERE alias = 'TREASURY' LIMIT 1;"
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql_check)
+            row = await cur.fetchone()
+            if row:
+                return int(row[0])
+
+            # Crear si no existe
+            sql_ins = "INSERT INTO users (alias, role, is_active) VALUES ('TREASURY', 'system', true) RETURNING id;"
+            await cur.execute(sql_ins)
+            row = await cur.fetchone()
+            await conn.commit()
+            return int(row[0])
+
+
 async def create_user(
     telegram_user_id: int | None,
     alias: str,
