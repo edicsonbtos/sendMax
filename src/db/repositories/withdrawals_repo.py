@@ -74,8 +74,8 @@ class WithdrawalsRepo:
                     """,
                     (amount_usdt, user_id, amount_usdt),
                 )
-                res_bal = await cur.fetchone()
-                if not res_bal:
+                rows_bal = await cur.fetchall()
+                if not rows_bal:
                     raise ValueError("Saldo insuficiente")
 
                 # Create withdrawal
