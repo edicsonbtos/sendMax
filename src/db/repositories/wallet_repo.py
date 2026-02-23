@@ -92,7 +92,8 @@ async def create_withdrawal_request(*, user_id: int, amount_usdt: Decimal, dest_
                     """,
                     (amount_usdt, user_id, amount_usdt),
                 )
-                if not await cur.fetchone():
+                rows_bal = await cur.fetchall()
+                if not rows_bal:
                     raise ValueError("Saldo insuficiente")
 
                 # 3. Ledger
@@ -152,8 +153,8 @@ async def add_ledger_entry_tx(
                 """,
                 (user_id, entry_type, ref_order_public_id, amount_usdt),
             )
-            res_idemp = await cur.fetchone()
-            if res_idemp:
+            rows = await cur.fetchall()
+            if rows:
                 return
 
         # Ledger (audit) con idempotencia fuerte
@@ -166,8 +167,8 @@ async def add_ledger_entry_tx(
             """,
             (user_id, amount_usdt, entry_type, ref_order_public_id, memo),
         )
-        res_ledger = await cur.fetchone()
-        inserted_ledger = bool(res_ledger)
+        rows_ledger = await cur.fetchall()
+        inserted_ledger = bool(rows_ledger)
 
         # Wallet (saldo materializado) solo si se insertó el ledger
         if inserted_ledger:
