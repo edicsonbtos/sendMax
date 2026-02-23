@@ -64,7 +64,8 @@ async def next_public_id(cur: psycopg.AsyncCursor) -> int:
     return int(res[0]) if res else 0
 
 
-async def create_order(
+async def create_order_tx(
+    conn: psycopg.AsyncConnection,
     *,
     operator_user_id: int,
     origin_country: str,
@@ -104,24 +105,55 @@ async def create_order(
             paid_at,
             cancel_reason;
     """
+    async with conn.cursor() as cur:
+        public_id = await next_public_id(cur)
+        await cur.execute(
+            sql_insert,
+            (
+                public_id, operator_user_id,
+                origin_country, dest_country,
+                amount_origin,
+                rate_version_id, commission_pct, rate_client, payout_dest,
+                beneficiary_text,
+                origin_payment_proof_file_id,
+                initial_status,
+            ),
+        )
+        row = await cur.fetchone()
+        return Order(*row) if row else None
+
+
+async def create_order(
+    *,
+    operator_user_id: int,
+    origin_country: str,
+    dest_country: str,
+    amount_origin: Decimal,
+    rate_version_id: int,
+    commission_pct: Decimal,
+    rate_client: Decimal,
+    payout_dest: Decimal,
+    beneficiary_text: str,
+    origin_payment_proof_file_id: str,
+    initial_status: str = "CREADA",
+) -> Order:
     async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            public_id = await next_public_id(cur)
-            await cur.execute(
-                sql_insert,
-                (
-                    public_id, operator_user_id,
-                    origin_country, dest_country,
-                    amount_origin,
-                    rate_version_id, commission_pct, rate_client, payout_dest,
-                    beneficiary_text,
-                    origin_payment_proof_file_id,
-                    initial_status,
-                ),
+        async with conn.transaction():
+            order = await create_order_tx(
+                conn,
+                operator_user_id=operator_user_id,
+                origin_country=origin_country,
+                dest_country=dest_country,
+                amount_origin=amount_origin,
+                rate_version_id=rate_version_id,
+                commission_pct=commission_pct,
+                rate_client=rate_client,
+                payout_dest=payout_dest,
+                beneficiary_text=beneficiary_text,
+                origin_payment_proof_file_id=origin_payment_proof_file_id,
+                initial_status=initial_status,
             )
-            row = await cur.fetchone()
-            await conn.commit()
-            return Order(*row) if row else None # Should not happen
+            return order
 
 
 async def get_order_by_public_id(public_id: int) -> Optional[Order]:
@@ -175,7 +207,11 @@ async def list_orders_by_status(status: str, limit: int = 10) -> list[Order]:
             return [Order(*r) for r in rows]
 
 
-async def update_order_status(public_id: int, new_status: str) -> bool:
+async def update_order_status_tx(
+    conn: psycopg.AsyncConnection,
+    public_id: int,
+    new_status: str
+) -> bool:
     if new_status not in VALID_STATUSES:
         raise ValueError(f"Estado invalido: {new_status}")
 
@@ -190,15 +226,24 @@ async def update_order_status(public_id: int, new_status: str) -> bool:
         WHERE public_id = %s
           AND status IN ({placeholders});
     """
+    async with conn.cursor() as cur:
+        await cur.execute(sql, (new_status, public_id) + tuple(allowed_from))
+        return cur.rowcount > 0
+
+
+async def update_order_status(public_id: int, new_status: str) -> bool:
     async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(sql, (new_status, public_id) + tuple(allowed_from))
-            updated = cur.rowcount > 0
-            await conn.commit()
-            return updated
+        async with conn.transaction():
+            return await update_order_status_tx(conn, public_id, new_status)
 
 
-async def mark_origin_verified(public_id: int, *, by_telegram_user_id: int | None = None, by_name: str | None = None) -> bool:
+async def mark_origin_verified_tx(
+    conn: psycopg.AsyncConnection,
+    public_id: int,
+    *,
+    by_telegram_user_id: int | None = None,
+    by_name: str | None = None
+) -> bool:
     sql = """
         UPDATE orders
         SET
@@ -210,34 +255,24 @@ async def mark_origin_verified(public_id: int, *, by_telegram_user_id: int | Non
         WHERE public_id = %s
           AND status IN ('CREADA', 'ORIGEN_VERIFICANDO');
     """
+    async with conn.cursor() as cur:
+        await cur.execute(sql, (by_telegram_user_id, by_name, public_id))
+        return cur.rowcount > 0
+
+
+async def mark_origin_verified(public_id: int, *, by_telegram_user_id: int | None = None, by_name: str | None = None) -> bool:
     async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(sql, (by_telegram_user_id, by_name, public_id))
-            ok = cur.rowcount > 0
-            await conn.commit()
-            return ok
+        async with conn.transaction():
+            return await mark_origin_verified_tx(conn, public_id, by_telegram_user_id=by_telegram_user_id, by_name=by_name)
 
 
 async def mark_order_paid(public_id: int, dest_payment_proof_file_id: str) -> bool:
-    sql = """
-        UPDATE orders
-        SET
-            status = 'COMPLETADA',
-            dest_payment_proof_file_id = %s,
-            paid_at = now(),
-            updated_at = now()
-        WHERE public_id = %s
-          AND status IN ('EN_PROCESO', 'PAGADA');
-    """
     async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(sql, (dest_payment_proof_file_id, public_id))
-            ok = cur.rowcount > 0
-            await conn.commit()
-            return ok
+        async with conn.transaction():
+            return await mark_order_paid_tx(conn, public_id, dest_payment_proof_file_id)
 
 
-async def cancel_order(public_id: int, reason: str) -> bool:
+async def cancel_order_tx(conn: psycopg.AsyncConnection, public_id: int, reason: str) -> bool:
     sql = """
         UPDATE orders
         SET
@@ -247,29 +282,24 @@ async def cancel_order(public_id: int, reason: str) -> bool:
         WHERE public_id = %s
           AND status NOT IN ('PAGADA', 'CANCELADA');
     """
+    async with conn.cursor() as cur:
+        await cur.execute(sql, (reason, public_id))
+        return cur.rowcount > 0
+
+
+async def cancel_order(public_id: int, reason: str) -> bool:
     async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(sql, (reason, public_id))
-            ok = cur.rowcount > 0
-            await conn.commit()
-            return ok
+        async with conn.transaction():
+            return await cancel_order_tx(conn, public_id, reason)
 
 
 async def set_profit_usdt(public_id: int, profit_usdt: Decimal) -> bool:
-    sql = """
-        UPDATE orders
-        SET profit_usdt = %s, updated_at = now()
-        WHERE public_id = %s;
-    """
     async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(sql, (profit_usdt, public_id))
-            ok = cur.rowcount > 0
-            await conn.commit()
-            return ok
+        async with conn.transaction():
+            return await set_profit_usdt_tx(conn, public_id, profit_usdt)
 
 
-async def set_awaiting_paid_proof(public_id: int, *, by_telegram_user_id: int | None = None) -> bool:
+async def set_awaiting_paid_proof_tx(conn: psycopg.AsyncConnection, public_id: int, *, by_telegram_user_id: int | None = None) -> bool:
     sql = """
         UPDATE orders
         SET awaiting_paid_proof = true,
@@ -279,29 +309,21 @@ async def set_awaiting_paid_proof(public_id: int, *, by_telegram_user_id: int | 
         WHERE public_id = %s
           AND status IN ('EN_PROCESO', 'ORIGEN_CONFIRMADO');
     """
+    async with conn.cursor() as cur:
+        await cur.execute(sql, (by_telegram_user_id, public_id))
+        return cur.rowcount > 0
+
+
+async def set_awaiting_paid_proof(public_id: int, *, by_telegram_user_id: int | None = None) -> bool:
     async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(sql, (by_telegram_user_id, public_id))
-            ok = cur.rowcount > 0
-            await conn.commit()
-            return ok
+        async with conn.transaction():
+            return await set_awaiting_paid_proof_tx(conn, public_id, by_telegram_user_id=by_telegram_user_id)
 
 
 async def clear_awaiting_paid_proof(public_id: int) -> bool:
-    sql = """
-        UPDATE orders
-        SET awaiting_paid_proof = false,
-            awaiting_paid_proof_at = NULL,
-            awaiting_paid_proof_by = NULL,
-            updated_at = now()
-        WHERE public_id = %s;
-    """
     async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(sql, (public_id,))
-            ok = cur.rowcount > 0
-            await conn.commit()
-            return ok
+        async with conn.transaction():
+            return await clear_awaiting_paid_proof_tx(conn, public_id)
 
 
 async def list_orders_awaiting_paid_proof(limit: int = 10) -> list[Order]:

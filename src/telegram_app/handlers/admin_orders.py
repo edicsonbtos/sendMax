@@ -18,7 +18,7 @@ from src.db.repositories.orders_repo import (
     list_orders_awaiting_paid_proof_by,
     list_orders_by_status,
     mark_order_paid_tx,
-    mark_origin_verified,
+    mark_origin_verified_tx,
     set_awaiting_paid_proof,
     update_order_status,
 )
@@ -205,11 +205,10 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
             return
 
         if action == "orig_ok":
-            # MEJORA 1: Prevenir doble confirmación
+            # MEJORA 1: Prevenir doble confirmación (Pre-check)
             if order.status == "ORIGEN_CONFIRMADO":
                 try:
                     await q.answer("⚠️ Este origen ya fue confirmado anteriormente", show_alert=True)
-                    # Actualizar mensaje por si acaso
                     await q.edit_message_text(
                         q.message.text + "\n\n✅ Origen ya confirmado (anteriormente)",
                         reply_markup=None,
@@ -219,53 +218,28 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
                     pass
                 return
 
-            ok = await mark_origin_verified(
-                public_id,
-                by_telegram_user_id=getattr(update.effective_user, "id", None),
-                by_name=(getattr(update.effective_user, "full_name", None) or getattr(update.effective_user, "username", None)),
-            )
-
-            if ok:
-                # MEJORA 1: DESHABILITAR botón y actualizar mensaje
-                try:
-                    await q.edit_message_text(
-                        q.message.text + "\n\n✅ Origen ya confirmado",
-                        reply_markup=None,
-                        parse_mode="HTML"
-                    )
-                except Exception:
-                    pass
-
-                # MEJORA 1: Notificación al operador
-                op_tid = await get_telegram_id_by_user_id(int(order.operator_user_id))
-                if op_tid:
-                    try:
-                        await context.bot.send_message(
-                            chat_id=int(op_tid),
-                            text=f"✅ Origen confirmado para orden #{public_id}",
-                        )
-                    except Exception:
-                        pass
-
-            try:
-                await q.answer("✅ Origen confirmado" if ok else "⚠️ No pude actualizar estado", show_alert=not ok)
-            except Exception:
-                pass
-
-            if not ok:
-                return
-
             try:
                 from datetime import datetime, timedelta, timezone
                 from src.db.repositories.origin_wallet_repo import add_origin_receipt_ledger_tx, add_origin_receipt_daily_tx
                 VET = timezone(timedelta(hours=-4))
                 day_vet = datetime.now(tz=timezone.utc).astimezone(VET).date()
-
                 fiat_currency = ORIGIN_FIAT_CURRENCY.get(str(order.origin_country), str(order.origin_country))
 
                 async with get_async_conn() as conn:
                     async with conn.transaction():
-                        # 1. Intentar insertar en el ledger por orden (idempotencia)
+                        # 1. Confirmar orden (Atómico)
+                        ok = await mark_origin_verified_tx(
+                            conn,
+                            public_id,
+                            by_telegram_user_id=getattr(update.effective_user, "id", None),
+                            by_name=(getattr(update.effective_user, "full_name", None) or getattr(update.effective_user, "username", None)),
+                        )
+
+                        if not ok:
+                            # Si no se actualizó, pudo ser por cambio de estado concurrente
+                            raise RuntimeError("No se pudo actualizar el estado de la orden (ya confirmada o cancelada)")
+
+                        # 2. Registrar ingreso contable (Atómico)
                         inserted = await add_origin_receipt_ledger_tx(
                             conn,
                             ref_order_public_id=int(public_id),
@@ -277,7 +251,6 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
                             approved_note=f"ORIGEN OK por {(getattr(update.effective_user, 'full_name', None) or getattr(update.effective_user, 'username', None) or 'operador')}",
                         )
 
-                        # 2. Solo si se insertó el ledger, actualizar el agregado diario
                         if inserted:
                             await add_origin_receipt_daily_tx(
                                 conn,
@@ -289,11 +262,36 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
                                 approved_note=f"Agregado desde orden #{public_id}",
                                 ref_order_public_id=int(public_id),
                             )
-                        else:
-                            logger.info(f"Origin receipt for order #{public_id} already exists, skipping aggregate update.")
 
-            except Exception:
-                logger.exception("orig_ok: no pude registrar contabilidad de origen para orden %s", public_id)
+                # Si llegamos aquí, la transacción fue exitosa
+                try:
+                    await q.edit_message_text(
+                        q.message.text + "\n\n✅ Origen confirmado",
+                        reply_markup=None,
+                        parse_mode="HTML"
+                    )
+                    await q.answer("✅ Origen confirmado")
+                except Exception:
+                    pass
+
+                # Notificación al operador
+                op_tid = await get_telegram_id_by_user_id(int(order.operator_user_id))
+                if op_tid:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=int(op_tid),
+                            text=f"✅ Origen confirmado para orden #{public_id}",
+                        )
+                    except Exception:
+                        pass
+
+            except Exception as e:
+                logger.exception("orig_ok: fallo atómico en orden %s: %s", public_id, e)
+                try:
+                    await q.answer("❌ Error al confirmar origen. Reintenta.", show_alert=True)
+                except Exception:
+                    pass
+                return
 
             try:
                 target_chat_id = int(settings.PAYMENTS_TELEGRAM_CHAT_ID)

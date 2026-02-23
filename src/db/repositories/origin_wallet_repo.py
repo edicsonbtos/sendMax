@@ -74,7 +74,7 @@ async def add_origin_receipt_daily_tx(
     approved_by_telegram_id: int | None = None,
     approved_note: str | None = None,
     ref_order_public_id: int | None = None,
-) -> bool:
+) -> int:
     """
     Versión transaccional de add_origin_receipt_daily.
     """
@@ -109,7 +109,7 @@ async def add_origin_receipt_daily_tx(
             ),
         )
         row = await cur.fetchone()
-        return bool(row)
+        return int(row[0]) if row else 0
 
 
 async def add_origin_receipt_daily(
@@ -125,37 +125,15 @@ async def add_origin_receipt_daily(
     """
     Registra ingreso de origen. Si ya existe registro para ese dia/pais/moneda, acumula el monto.
     """
-    sql = """
-        INSERT INTO origin_receipts_daily
-          (day, origin_country, fiat_currency, amount_fiat,
-           approved_at, approved_by_telegram_id, approved_note,
-           ref_order_public_id)
-        VALUES
-          (%s, %s, %s, %s,
-           now(), %s, %s,
-           %s)
-        ON CONFLICT (day, origin_country, fiat_currency) DO UPDATE SET
-          amount_fiat = origin_receipts_daily.amount_fiat + EXCLUDED.amount_fiat,
-          approved_at = EXCLUDED.approved_at,
-          approved_by_telegram_id = EXCLUDED.approved_by_telegram_id,
-          approved_note = EXCLUDED.approved_note,
-          ref_order_public_id = EXCLUDED.ref_order_public_id
-        RETURNING id;
-    """
     async with get_async_conn() as conn:
-        async with conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute(
-                sql,
-                (
-                    day,
-                    origin_country,
-                    fiat_currency,
-                    amount_fiat,
-                    approved_by_telegram_id,
-                    approved_note,
-                    ref_order_public_id,
-                ),
+        async with conn.transaction():
+            return await add_origin_receipt_daily_tx(
+                conn,
+                day=day,
+                origin_country=origin_country,
+                fiat_currency=fiat_currency,
+                amount_fiat=amount_fiat,
+                approved_by_telegram_id=approved_by_telegram_id,
+                approved_note=approved_note,
+                ref_order_public_id=ref_order_public_id,
             )
-            row = await cur.fetchone()
-            await conn.commit()
-            return int(row["id"]) if row else 0
