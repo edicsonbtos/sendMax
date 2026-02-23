@@ -47,9 +47,11 @@ class Settings(BaseSettings):
     PAYMENT_METHODS_MEXICO: str | None = None
     PAYMENT_METHODS_ARGENTINA: str | None = None
 
-    COMMISSION_VENEZUELA: float = 6.0
-    COMMISSION_DEFAULT: float = 10.0
-    COMMISSION_USA_TO_VENEZUELA: float = 10.0
+    # Fallbacks en formato DECIMAL (0.06 = 6%)
+    # Estos valores SOLO se usan si DB y .env fallan
+    COMMISSION_VENEZUELA: float = 0.06        # 6%
+    COMMISSION_DEFAULT: float = 0.10          # 10%
+    COMMISSION_USA_TO_VENEZUELA: float = 0.10 # 10%
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -99,15 +101,17 @@ class Settings(BaseSettings):
         override_usa_venez: float | None = None
     ) -> float:
         """
-        Calcula el % de comisión para una ruta.
-        Permite overrides manuales (ej. desde DB) para evitar I/O síncrono.
+        LEGACY: Solo para compatibilidad con rates_generator.
+        NUEVO código debe usar: from src.config.dynamic_settings import dynamic_config
+                               pct = await dynamic_config.get_commission_pct(origin, dest)
         """
         origin_u = (origin or "").upper()
         dest_u = (dest or "").upper()
 
-        m_default = override_default if override_default is not None else float(self.COMMISSION_DEFAULT)
-        m_venez = override_venez if override_venez is not None else float(self.COMMISSION_VENEZUELA)
-        m_usa_venez = override_usa_venez if override_usa_venez is not None else float(self.COMMISSION_USA_TO_VENEZUELA)
+        # Usa overrides (para rates_generator) o fallbacks DECIMALES
+        m_default = override_default if override_default is not None else self.COMMISSION_DEFAULT
+        m_venez = override_venez if override_venez is not None else self.COMMISSION_VENEZUELA
+        m_usa_venez = override_usa_venez if override_usa_venez is not None else self.COMMISSION_USA_TO_VENEZUELA
 
         if dest_u == "VENEZUELA" and origin_u == "USA":
             return _clamp_commission(m_usa_venez, "usa->venez")

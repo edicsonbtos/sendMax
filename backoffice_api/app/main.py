@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from .routers import (
     diagnostics, metrics, orders, origin_wallets,
     settings, alerts, corrections, auth, users,
+    config,
 )
 from .db import close_pools
 
@@ -121,6 +122,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(config.router, prefix="/api/v1")
 app.include_router(diagnostics.router)
 app.include_router(metrics.router)
 app.include_router(orders.router)
