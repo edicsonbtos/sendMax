@@ -27,7 +27,8 @@ async def get_setting_json(key: str) -> dict[str, Any] | None:
         async with get_async_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SELECT value_json FROM settings WHERE key=%s", (key,))
-                row = await cur.fetchone()
+                rows = await cur.fetchall()
+                row = rows[0] if rows else None
     except Exception:
         # Si falla la DB, intentamos usar cache expirada como fallback
         if key in _cache:

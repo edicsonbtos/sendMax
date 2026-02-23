@@ -50,7 +50,8 @@ async def get_wallet_metrics(user_id: int) -> WalletMetrics:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (user_id, user_id, user_id))
-            row = await cur.fetchone()
+            rows = await cur.fetchall()
+            row = rows[0]
             return WalletMetrics(
                 profit_today_usdt=Decimal(str(row[0])),
                 profit_month_usdt=Decimal(str(row[1])),

@@ -33,17 +33,19 @@ async def set_sponsor_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SELECT id, alias FROM users WHERE alias=%s LIMIT 1;", (child_alias,))
-            child = await cur.fetchone()
-            if not child:
+            rows_child = await cur.fetchall()
+            if not rows_child:
                 await update.message.reply_text(f"No encontré al hijo con alias: {child_alias}")
                 return
+            child = rows_child[0]
             child_id, child_alias_db = int(child[0]), child[1]
 
             await cur.execute("SELECT id, alias FROM users WHERE alias=%s LIMIT 1;", (sponsor_alias,))
-            sp = await cur.fetchone()
-            if not sp:
+            rows_sp = await cur.fetchall()
+            if not rows_sp:
                 await update.message.reply_text(f"No encontré al padrino con alias: {sponsor_alias}")
                 return
+            sp = rows_sp[0]
             sponsor_id, sponsor_alias_db = int(sp[0]), sp[1]
 
             await cur.execute(

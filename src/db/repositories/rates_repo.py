@@ -177,10 +177,10 @@ async def get_latest_active_rate_version() -> RateVersion | None:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql)
-            row = await cur.fetchone()
-            if not row:
+            rows = await cur.fetchall()
+            if not rows:
                 return None
-            return RateVersion(*row)
+            return RateVersion(*rows[0])
 
 
 async def get_route_rate(
@@ -201,10 +201,10 @@ async def get_route_rate(
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (rate_version_id, origin_country, dest_country))
-            row = await cur.fetchone()
-            if not row:
+            rows = await cur.fetchall()
+            if not rows:
                 return None
-            return RouteRate(*row)
+            return RouteRate(*rows[0])
 
 
 async def list_route_rates_for_version(
@@ -269,10 +269,10 @@ async def get_country_price_for_version(*, rate_version_id: int, country: str) -
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (rate_version_id, country))
-            row = await cur.fetchone()
-            if not row:
+            rows = await cur.fetchall()
+            if not rows:
                 return None
-            return CountryPrice(*row)
+            return CountryPrice(*rows[0])
 
 
 async def get_latest_active_country_sell(*, country: str) -> tuple[str, Decimal] | None:

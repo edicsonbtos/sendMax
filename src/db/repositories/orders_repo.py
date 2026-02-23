@@ -60,8 +60,8 @@ VALID_TRANSITIONS = {
 
 async def next_public_id(cur: psycopg.AsyncCursor) -> int:
     await cur.execute("SELECT nextval('orders_public_id_seq');")
-    res = await cur.fetchone()
-    return int(res[0]) if res else 0
+    rows = await cur.fetchall()
+    return int(rows[0][0]) if rows else 0
 
 
 async def create_order_tx(
@@ -119,8 +119,8 @@ async def create_order_tx(
                 initial_status,
             ),
         )
-        row = await cur.fetchone()
-        return Order(*row) if row else None
+        rows = await cur.fetchall()
+        return Order(*rows[0]) if rows else None
 
 
 async def create_order(
@@ -176,8 +176,8 @@ async def get_order_by_public_id(public_id: int) -> Optional[Order]:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (public_id,))
-            row = await cur.fetchone()
-            return Order(*row) if row else None
+            rows = await cur.fetchall()
+            return Order(*rows[0]) if rows else None
 
 
 async def list_orders_by_status(status: str, limit: int = 10) -> list[Order]:

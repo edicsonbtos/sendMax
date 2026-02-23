@@ -26,10 +26,11 @@ async def get_or_create_wallet(user_id: int) -> Wallet:
                 (user_id,),
             )
             await cur.execute("SELECT user_id, balance_usdt FROM wallets WHERE user_id = %s LIMIT 1;", (user_id,))
-            row = await cur.fetchone()
+            rows = await cur.fetchall()
             await conn.commit()
-            if not row:
+            if not rows:
                 raise RuntimeError(f"No se pudo obtener/crear wallet para user_id={user_id}")
+            row = rows[0]
             return Wallet(int(row[0]), Decimal(str(row[1])))
 
 

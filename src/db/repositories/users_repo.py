@@ -74,8 +74,8 @@ async def get_user_by_telegram_id(telegram_user_id: int) -> User | None:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (telegram_user_id,))
-            row = await cur.fetchone()
-            return User(*row) if row else None
+            rows = await cur.fetchall()
+            return User(*rows[0]) if rows else None
 
 
 async def get_user_by_alias(alias: str) -> User | None:
@@ -88,8 +88,8 @@ async def get_user_by_alias(alias: str) -> User | None:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (alias,))
-            row = await cur.fetchone()
-            return User(*row) if row else None
+            rows = await cur.fetchall()
+            return User(*rows[0]) if rows else None
 
 
 async def get_user_by_id(user_id: int) -> User | None:
@@ -103,8 +103,8 @@ async def get_user_by_id(user_id: int) -> User | None:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (user_id,))
-            row = await cur.fetchone()
-            return User(*row) if row else None
+            rows = await cur.fetchall()
+            return User(*rows[0]) if rows else None
 
 
 async def get_telegram_id_by_user_id(user_id: int) -> int | None:
@@ -113,9 +113,10 @@ async def get_telegram_id_by_user_id(user_id: int) -> int | None:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (user_id,))
-            row = await cur.fetchone()
-            if row is None:
+            rows = await cur.fetchall()
+            if not rows:
                 return None
+            row = rows[0]
             return int(row[0]) if row[0] is not None else None
 
 
@@ -137,8 +138,8 @@ async def get_user_kyc_by_telegram_id(telegram_user_id: int) -> UserKYC | None:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (telegram_user_id,))
-            row = await cur.fetchone()
-            return UserKYC(*row) if row else None
+            rows = await cur.fetchall()
+            return UserKYC(*rows[0]) if rows else None
 
 
 async def get_user_kyc_by_id(user_id: int) -> UserKYC | None:
@@ -158,8 +159,8 @@ async def get_user_kyc_by_id(user_id: int) -> UserKYC | None:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (user_id,))
-            row = await cur.fetchone()
-            return UserKYC(*row) if row else None
+            rows = await cur.fetchall()
+            return UserKYC(*rows[0]) if rows else None
 
 
 # --------------------------------------------
@@ -172,16 +173,16 @@ async def ensure_treasury_user() -> int:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql_check)
-            row = await cur.fetchone()
-            if row:
-                return int(row[0])
+            rows = await cur.fetchall()
+            if rows:
+                return int(rows[0][0])
 
             # Crear si no existe
             sql_ins = "INSERT INTO users (alias, role, is_active) VALUES ('TREASURY', 'system', true) RETURNING id;"
             await cur.execute(sql_ins)
-            row = await cur.fetchone()
+            rows_ins = await cur.fetchall()
             await conn.commit()
-            return int(row[0])
+            return int(rows_ins[0][0]) if rows_ins else 0
 
 
 async def create_user(
@@ -199,9 +200,9 @@ async def create_user(
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (telegram_user_id, alias, sponsor_id, role))
-            row = await cur.fetchone()
+            rows = await cur.fetchall()
             await conn.commit()
-            return User(*row)
+            return User(*rows[0])
 
 
 # --------------------------------------------
@@ -214,8 +215,8 @@ async def check_email_exists(email: str) -> bool:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (email,))
-            row = await cur.fetchone()
-            return bool(row[0]) if row else False
+            rows = await cur.fetchall()
+            return bool(rows[0][0]) if rows else False
 
 
 # --------------------------------------------
@@ -329,9 +330,10 @@ async def get_payout_method(user_id: int) -> tuple[str | None, str | None]:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (user_id,))
-            row = await cur.fetchone()
-            if not row:
+            rows = await cur.fetchall()
+            if not rows:
                 return (None, None)
+            row = rows[0]
             return (row[0], row[1])
 
 
