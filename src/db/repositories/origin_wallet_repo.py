@@ -126,8 +126,8 @@ async def add_origin_receipt_daily(
     Registra ingreso de origen. Si ya existe registro para ese dia/pais/moneda, acumula el monto.
     """
     async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            res = await add_origin_receipt_daily_tx(
+        async with conn.transaction():
+            return await add_origin_receipt_daily_tx(
                 conn,
                 day=day,
                 origin_country=origin_country,
@@ -137,5 +137,3 @@ async def add_origin_receipt_daily(
                 approved_note=approved_note,
                 ref_order_public_id=ref_order_public_id,
             )
-            await conn.commit()
-            return res
