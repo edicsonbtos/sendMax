@@ -1,0 +1,32 @@
+e3d5663dda88 -> e88a6fe79416 (head), create origin_receipts_ledger table
+fb8906ff267a -> e3d5663dda88, add partial unique index to wallet_ledger for idempotency
+fix_settings_updated_by_type, tg_nullable_001 -> fb8906ff267a (mergepoint), merge heads
+a1b2c3_add_login_fields -> fix_settings_updated_by_type, fix settings.updated_by type from bigint to text
+add_execution_prices_20260211 -> a1b2c3_add_login_fields, add email and hashed_password to users for backoffice login
+30bb5fcf3040 -> add_execution_prices_20260211, add execution prices and profit real
+1c2d3e_origin_wallet_closures, create_settings_table_20260210 -> 30bb5fcf3040 (mergepoint), merge settings and origin_wallet_closures
+97fa8cee3e0c -> 1c2d3e_origin_wallet_closures, create origin_wallet_closures table
+322998ee4a41, 9f1b8c_origin_sweeps -> 97fa8cee3e0c (mergepoint), merge heads: origin verification + origin sweeps
+4da93e6227ac -> 322998ee4a41, add origin verification audit fields to orders
+4da93e6227ac -> 9f1b8c_origin_sweeps, create origin_sweeps table (origin wallet outflows)
+hotfix_20260129160557_withdrawals_fiat_cols -> create_settings_table_20260210, create settings table
+5db50f9733b4 -> 4da93e6227ac (branchpoint), add origin receipts table
+8c8c8c8c8c8c, hotfix_20260129160557_withdrawals_fiat_cols -> 5db50f9733b4 (mergepoint), merge heads
+6aa111bb22cc -> 8c8c8c8c8c8c, create user_contacts table for broadcast/post-reset
+0f0f0f0f0f0f -> 6aa111bb22cc, add kyc fields and payout method to users
+1f2_withdrawals_fiat_cols, 9a1b2c3d4e5f -> 0f0f0f0f0f0f (mergepoint), merge heads: withdrawals_fiat_cols + awaiting_paid_proof
+1f_hotfix_withdrawals_fiat -> 1f2_withdrawals_fiat_cols, hotfix withdrawals fiat columns v2
+e62522510952 -> 1f_hotfix_withdrawals_fiat, hotfix withdrawals fiat columns
+e62522510952 -> hotfix_20260129160557_withdrawals_fiat_cols (branchpoint), hotfix withdrawals fiat columns
+<base> -> tg_nullable_001, telegram_user_id nullable
+e62522510952 -> 9a1b2c3d4e5f, persist awaiting paid proof state in orders
+3c3f537e3f23 -> e62522510952 (branchpoint), extend withdrawals for fiat payouts
+47c816e9a216 -> 3c3f537e3f23, add profit_usdt to orders
+c525e594bdd5 -> 47c816e9a216, create wallets ledger withdrawals
+4876012249fd -> c525e594bdd5, add cancel reason to orders
+2c20eda69bd2 -> 4876012249fd, add dest payment proof to orders
+8249dc838371 -> 2c20eda69bd2, create orders public_id sequence
+1b0d81fcbce5 -> 8249dc838371, create orders
+7fd3eec5ddbb -> 1b0d81fcbce5, add is_verified to p2p_country_prices
+b71a73ee4d14 -> 7fd3eec5ddbb, create rates tables
+<base> -> b71a73ee4d14, create users
