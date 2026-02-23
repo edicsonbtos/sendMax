@@ -21,7 +21,11 @@ from telegram.ext import (
 )
 
 from src.config.settings import settings
-from src.db.repositories.orders_repo import create_order, update_order_status
+from src.db.connection import get_async_conn
+from src.db.repositories.orders_repo import (
+    create_order_tx,
+    update_order_status_tx,
+)
 from src.db.repositories.rates_repo import (
     get_latest_active_rate_version,
     get_route_rate,
@@ -540,27 +544,29 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     payout_dest = (amount_origin * rate_client)
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
+    order = None
     try:
-        order = await asyncio.wait_for(
-            create_order(
-                operator_user_id=user.id,
-                origin_country=origin,
-                dest_country=dest,
-                amount_origin=amount_origin,
-                rate_version_id=rate_version_id,
-                commission_pct=commission_pct,
-                rate_client=rate_client,
-                payout_dest=payout_dest,
-                beneficiary_text=beneficiary_text,
-                origin_payment_proof_file_id=file_id,
-                initial_status="ORIGEN_VERIFICANDO",
-            ),
-            timeout=5.0
-        )
-    except asyncio.TimeoutError:
-        logger.error(f"Timeout al crear orden para user {user.id}")
-        await update.message.reply_text("⏳ Timeout al registrar orden. Por favor revisa tu historial antes de reintentar.")
-        return ConversationHandler.END
+        async with get_async_conn() as conn:
+            async with conn.transaction():
+                # 1. Crear orden (nace como CREADA en DB por defecto)
+                order = await create_order_tx(
+                    conn,
+                    operator_user_id=user.id,
+                    origin_country=origin,
+                    dest_country=dest,
+                    amount_origin=amount_origin,
+                    rate_version_id=rate_version_id,
+                    commission_pct=commission_pct,
+                    rate_client=rate_client,
+                    payout_dest=payout_dest,
+                    beneficiary_text=beneficiary_text,
+                    origin_payment_proof_file_id=file_id,
+                    initial_status="CREADA",
+                )
+
+                # 2. Cambiar estado inmediatamente (Atómico)
+                await update_order_status_tx(conn, int(order.public_id), "ORIGEN_VERIFICANDO")
+
     except Exception as e:
         logger.exception(f"Error critico al crear orden para user {user.id}")
         await update.message.reply_text("❌ Error al registrar la orden. Por favor intenta de nuevo.")
