@@ -41,7 +41,8 @@ async def kyc_resend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 WHERE id=%s
                 LIMIT 1;
             """, (user_id,))
-            row = await cur.fetchone()
+            rows = await cur.fetchall()
+            row = rows[0] if rows else None
 
     if not row:
         await update.message.reply_text("Usuario no encontrado.")

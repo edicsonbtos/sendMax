@@ -49,5 +49,5 @@ async def latest_9am_version_id_today() -> int | None:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql)
-            row = await cur.fetchone()
-            return int(row[0]) if row else None
+            rows = await cur.fetchall()
+            return int(rows[0][0]) if rows else None

@@ -58,8 +58,8 @@ class WithdrawalsRepo:
             async with self.conn.cursor() as cur:
                 # Ensure wallet exists
                 await cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
-                res = await cur.fetchone()
-                if not res:
+                rows = await cur.fetchall()
+                if not rows:
                     await cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
 
                 # Atomic hold (prevents double-spend / races)
@@ -127,11 +127,11 @@ class WithdrawalsRepo:
                     """,
                     (withdrawal_id,),
                 )
-                row = await cur.fetchone()
-                if not row:
+                rows = await cur.fetchall()
+                if not rows:
                     raise ValueError("withdrawal not found")
 
-                user_id, amount_usdt, status = row
+                user_id, amount_usdt, status = rows[0]
                 if status != "SOLICITADA":
                     raise ValueError("only SOLICITADA can be rejected")
 
@@ -176,10 +176,10 @@ class WithdrawalsRepo:
                 """,
                 (withdrawal_id,),
             )
-            row = await cur.fetchone()
-            if not row:
+            rows = await cur.fetchall()
+            if not rows:
                 return None
-            return WithdrawalRow(*row)
+            return WithdrawalRow(*rows[0])
 
     async def list_withdrawals_by_status(self, status: str, limit: int = 50) -> list[WithdrawalRow]:
         async with self.conn.cursor() as cur:

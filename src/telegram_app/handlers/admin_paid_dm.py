@@ -159,7 +159,8 @@ async def on_paid_dm_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         async with get_async_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SELECT sponsor_id FROM users WHERE id=%s LIMIT 1;", (int(order.operator_user_id),))
-                row = await cur.fetchone()
+                rows = await cur.fetchall()
+                row = rows[0] if rows else None
                 sponsor_id = int(row[0]) if row and row[0] is not None else None
     except Exception:
         sponsor_id = None
