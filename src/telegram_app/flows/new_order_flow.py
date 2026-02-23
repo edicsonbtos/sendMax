@@ -21,6 +21,7 @@ from telegram.ext import (
 )
 
 from src.config.settings import settings
+from src.config.dynamic_settings import dynamic_config
 from src.db.connection import get_async_conn
 from src.db.repositories.orders_repo import (
     create_order_tx,
@@ -89,6 +90,17 @@ def _fmt_money(x: Decimal) -> str:
 
 def _fmt_rate(x: Decimal) -> str:
     return format_rate_no_noise(Decimal(str(x)))
+
+
+def _fmt_percent(x: Decimal) -> str:
+    """
+    Formatea decimal como porcentaje visible.
+    0.06 → "6.00"
+    0.025 → "2.50"
+    """
+    percent = Decimal(str(x)) * 100
+    q = percent.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return format(q, "f")
 
 
 def _fmt_public_id(public_id: int) -> str:
@@ -215,14 +227,15 @@ def _build_summary_text(order: dict, rr) -> str:
     if len(benef_short) > 260:
         benef_short = benef_short[:260].rstrip() + "..."
 
-    comm = Decimal(str(settings.commission_pct(origin, dest)))
+    # Leer comisión de DB (async compatible)
+    comm_decimal = order.get("commission_pct_decimal", Decimal("0.06"))  # Desde context
 
     return (
         "Listo ✅ Revisa tu envío:\n\n"
         f"Ruta: {COUNTRY_FLAGS[origin]} {COUNTRY_LABELS[origin]} -> {COUNTRY_FLAGS[dest]} {COUNTRY_LABELS[dest]}\n"
         f"Monto (origen): {_fmt_money(amount_fiat)} {origin}\n"
         f"Tasa: {_fmt_rate(rr.rate_client)}\n"
-        f"Comisión: {_fmt_money(comm)}%\n"
+        f"Comisión: {_fmt_percent(comm_decimal)}%\n"
         f"Recibe aprox (destino): {_fmt_money(payout_dest)} {dest}\n\n"
         "Beneficiario:\n"
         f"{benef_short}\n\n"
@@ -481,9 +494,13 @@ async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         _reset_flow_memory(context)
         return ConversationHandler.END
 
+    # Leer comisión de DB (ASYNC - fuera del flow sync)
+    comm_pct = await dynamic_config.get_commission_pct(origin, dest)
+
     context.user_data["order"]["rate_version_id"] = rv.id
     context.user_data["order"]["rate_client"] = rr.rate_client
-    context.user_data["order"]["commission_pct"] = Decimal(str(settings.commission_pct(origin, dest)))
+    context.user_data["order"]["commission_pct"] = comm_pct * 100  # Almacenar como entero para DB legacy
+    context.user_data["order"]["commission_pct_decimal"] = comm_pct  # Para display correcto
 
     summary = _build_summary_text(context.user_data["order"], rr)
     await _screen_send_or_edit(update, context, summary, reply_markup=_confirm_keyboard())
@@ -539,7 +556,13 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     file_id = order_data["proof_file_id"]
     rate_version_id = order_data["rate_version_id"]
     rate_client = order_data["rate_client"]
-    commission_pct = Decimal(str(settings.commission_pct(origin, dest)))
+
+    # Usar valor ya calculado en receive_proof (evita segunda consulta DB)
+    commission_pct = order_data.get("commission_pct", Decimal("6.00"))  # Legacy format
+    commission_pct_decimal = order_data.get("commission_pct_decimal", Decimal("0.06"))
+
+    # LOG para auditoría
+    logger.info(f"Order creation - Route: {origin}→{dest}, Commission: {commission_pct_decimal} ({_fmt_percent(commission_pct_decimal)}%)")
 
     payout_dest = (amount_origin * rate_client)
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")

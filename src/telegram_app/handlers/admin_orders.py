@@ -9,6 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from src.config.settings import settings
+from src.config.dynamic_settings import dynamic_config
 from src.db.connection import get_async_conn
 from src.db.repositories import rates_repo
 from src.db.repositories.orders_repo import (
@@ -552,16 +553,30 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
 
         profit_para_distribuir = profit_real
 
+        # Leer split desde DB (configurable en tiempo real)
+        from src.telegram_app.flows.new_order_flow import _fmt_percent
+        split = await dynamic_config.get_profit_split()
+
         if sponsor_id:
-            op_share = _q8(profit_para_distribuir * Decimal("0.45"))
-            sp_share = _q8(profit_para_distribuir * Decimal("0.10"))
-            memo_op = "Profit orden (45%)"
-            memo_sp = "Comision sponsor (10%)"
+            op_pct = split["operator_with_sponsor"]
+            sp_pct = split["sponsor"]
+            op_share = _q8(profit_para_distribuir * op_pct)
+            sp_share = _q8(profit_para_distribuir * sp_pct)
+            memo_op = f"Profit orden ({_fmt_percent(op_pct)}%)"
+            memo_sp = f"Comision sponsor ({_fmt_percent(sp_pct)}%)"
         else:
-            op_share = _q8(profit_para_distribuir * Decimal("0.50"))
+            op_pct = split["operator_solo"]
+            op_share = _q8(profit_para_distribuir * op_pct)
             sp_share = Decimal("0")
-            memo_op = "Profit orden (50%)"
+            memo_op = f"Profit orden ({_fmt_percent(op_pct)}%)"
             memo_sp = None
+
+        # LOG auditoría
+        logger.info(
+            f"Order #{public_id} profit split - "
+            f"Operator: {op_share} USDT ({op_pct}), "
+            f"Sponsor: {sp_share} USDT ({sp_pct if sponsor_id else 0})"
+        )
 
         # 4. ATOMICO
         async with get_async_conn() as conn:
