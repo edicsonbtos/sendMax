@@ -554,7 +554,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         profit_para_distribuir = profit_real
 
         # Leer split desde DB (configurable en tiempo real)
-        from src.telegram_app.flows.new_order_flow import _fmt_percent
+        from src.utils.formatting import fmt_percent
         split = await dynamic_config.get_profit_split()
 
         if sponsor_id:
@@ -562,13 +562,13 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
             sp_pct = split["sponsor"]
             op_share = _q8(profit_para_distribuir * op_pct)
             sp_share = _q8(profit_para_distribuir * sp_pct)
-            memo_op = f"Profit orden ({_fmt_percent(op_pct)}%)"
-            memo_sp = f"Comision sponsor ({_fmt_percent(sp_pct)}%)"
+            memo_op = f"Profit orden ({fmt_percent(op_pct)}%)"
+            memo_sp = f"Comision sponsor ({fmt_percent(sp_pct)}%)"
         else:
             op_pct = split["operator_solo"]
             op_share = _q8(profit_para_distribuir * op_pct)
             sp_share = Decimal("0")
-            memo_op = f"Profit orden ({_fmt_percent(op_pct)}%)"
+            memo_op = f"Profit orden ({fmt_percent(op_pct)}%)"
             memo_sp = None
 
         # LOG auditoría

@@ -20,14 +20,15 @@ def upgrade() -> None:
         ON CONFLICT (key) DO NOTHING;
     """)
 
-    # Actualizar configs existentes a formato decimal
+    # Normalizar configs existentes a formato decimal si detecta enteros (ej: 6 -> 0.06)
     op.execute("""
         UPDATE settings
-        SET value_json = '{"percent": 0.03}'::json,
+        SET value_json = jsonb_set(value_json, '{percent}', ((value_json->>'percent')::float / 100)::text::jsonb),
             updated_at = NOW(),
-            updated_by = 'migration:decimal_format'
+            updated_by = 'migration:decimal_normalization'
         WHERE key IN ('margin_default', 'margin_dest_venez', 'margin_route_usa_venez')
-          AND value_json::text NOT LIKE '%0.0%';
+          AND (value_json->>'percent') IS NOT NULL
+          AND (value_json->>'percent')::float >= 1.0;
     """)
 
 def downgrade() -> None:
