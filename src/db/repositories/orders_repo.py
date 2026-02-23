@@ -76,7 +76,11 @@ async def create_order(
     payout_dest: Decimal,
     beneficiary_text: str,
     origin_payment_proof_file_id: str,
+    initial_status: str = "CREADA",
 ) -> Order:
+    if initial_status not in VALID_STATUSES:
+        raise ValueError(f"Estado inicial invalido: {initial_status}")
+
     sql_insert = """
         INSERT INTO orders (
             public_id, operator_user_id,
@@ -87,7 +91,7 @@ async def create_order(
             origin_payment_proof_file_id,
             status
         )
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'CREADA')
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING
             id, public_id, operator_user_id,
             origin_country, dest_country,
@@ -112,6 +116,7 @@ async def create_order(
                     rate_version_id, commission_pct, rate_client, payout_dest,
                     beneficiary_text,
                     origin_payment_proof_file_id,
+                    initial_status,
                 ),
             )
             row = await cur.fetchone()
@@ -271,7 +276,8 @@ async def set_awaiting_paid_proof(public_id: int, *, by_telegram_user_id: int | 
             awaiting_paid_proof_at = now(),
             awaiting_paid_proof_by = %s,
             updated_at = now()
-        WHERE public_id = %s;
+        WHERE public_id = %s
+          AND status IN ('EN_PROCESO', 'ORIGEN_CONFIRMADO');
     """
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:

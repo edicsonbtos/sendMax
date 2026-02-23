@@ -17,18 +17,20 @@ class Wallet:
 async def get_or_create_wallet(user_id: int) -> Wallet:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT user_id, balance_usdt FROM wallets WHERE user_id = %s LIMIT 1;", (user_id,))
-            row = await cur.fetchone()
-            if row:
-                return Wallet(int(row[0]), Decimal(str(row[1])))
-
             await cur.execute(
-                "INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0) RETURNING user_id, balance_usdt;",
+                """
+                INSERT INTO wallets (user_id, balance_usdt)
+                VALUES (%s, 0)
+                ON CONFLICT (user_id) DO NOTHING;
+                """,
                 (user_id,),
             )
+            await cur.execute("SELECT user_id, balance_usdt FROM wallets WHERE user_id = %s LIMIT 1;", (user_id,))
             row = await cur.fetchone()
             await conn.commit()
-            return Wallet(int(row[0]), Decimal(str(row[1]))) if row else None
+            if not row:
+                raise RuntimeError(f"No se pudo obtener/crear wallet para user_id={user_id}")
+            return Wallet(int(row[0]), Decimal(str(row[1])))
 
 
 async def get_balance(user_id: int) -> Decimal:
@@ -56,11 +58,11 @@ async def add_ledger_entry(
     """
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
-            # Asegura wallet
-            await cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
-            res = await cur.fetchone()
-            if not res:
-                await cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
+            # Asegura wallet de forma atómica
+            await cur.execute(
+                "INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0) ON CONFLICT (user_id) DO NOTHING;",
+                (user_id,),
+            )
 
             if idempotency and ref_order_public_id is not None:
                 # Chequeo idempotente (MVP seguro) sin migraciones:
@@ -83,25 +85,30 @@ async def add_ledger_entry(
                     await conn.commit()
                     return
 
-            # Ledger (audit)
+            # Ledger (audit) con idempotencia fuerte
             await cur.execute(
                 """
                 INSERT INTO wallet_ledger (user_id, amount_usdt, type, ref_order_public_id, memo)
-                VALUES (%s, %s, %s, %s, %s);
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT DO NOTHING
+                RETURNING id;
                 """,
                 (user_id, amount_usdt, entry_type, ref_order_public_id, memo),
             )
+            res_ledger = await cur.fetchone()
+            inserted = bool(res_ledger)
 
-            # Wallet (saldo materializado)
-            await cur.execute(
-                """
-                UPDATE wallets
-                SET balance_usdt = balance_usdt + %s,
-                    updated_at = now()
-                WHERE user_id = %s;
-                """,
-                (amount_usdt, user_id),
-            )
+            # Wallet (saldo materializado) solo si se insertó el ledger
+            if inserted:
+                await cur.execute(
+                    """
+                    UPDATE wallets
+                    SET balance_usdt = balance_usdt + %s,
+                        updated_at = now()
+                    WHERE user_id = %s;
+                    """,
+                    (amount_usdt, user_id),
+                )
         await conn.commit()
 
 
@@ -113,11 +120,11 @@ async def create_withdrawal_request(*, user_id: int, amount_usdt: Decimal, dest_
     """
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
-            # asegura wallet
-            await cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
-            res = await cur.fetchone()
-            if not res:
-                await cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
+            # asegura wallet de forma atómica
+            await cur.execute(
+                "INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0) ON CONFLICT (user_id) DO NOTHING;",
+                (user_id,),
+            )
 
             await cur.execute(
                 """
@@ -148,11 +155,11 @@ async def add_ledger_entry_tx(
     NO hace commit. Ideal para cierres atómicos.
     """
     async with conn.cursor() as cur:
-        # Asegura wallet
-        await cur.execute("SELECT 1 FROM wallets WHERE user_id=%s;", (user_id,))
-        res = await cur.fetchone()
-        if not res:
-            await cur.execute("INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0);", (user_id,))
+        # Asegura wallet de forma atómica
+        await cur.execute(
+            "INSERT INTO wallets (user_id, balance_usdt) VALUES (%s, 0) ON CONFLICT (user_id) DO NOTHING;",
+            (user_id,),
+        )
 
         if idempotency and ref_order_public_id is not None:
             await cur.execute(
@@ -171,22 +178,27 @@ async def add_ledger_entry_tx(
             if res_idemp:
                 return
 
-        # Ledger (audit)
+        # Ledger (audit) con idempotencia fuerte
         await cur.execute(
             """
             INSERT INTO wallet_ledger (user_id, amount_usdt, type, ref_order_public_id, memo)
-            VALUES (%s, %s, %s, %s, %s);
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+            RETURNING id;
             """,
             (user_id, amount_usdt, entry_type, ref_order_public_id, memo),
         )
+        res_ledger = await cur.fetchone()
+        inserted_ledger = bool(res_ledger)
 
-        # Wallet (saldo materializado)
-        await cur.execute(
-            """
-            UPDATE wallets
-            SET balance_usdt = balance_usdt + %s,
-                updated_at = now()
-            WHERE user_id = %s;
-            """,
-            (amount_usdt, user_id),
-        )
+        # Wallet (saldo materializado) solo si se insertó el ledger
+        if inserted_ledger:
+            await cur.execute(
+                """
+                UPDATE wallets
+                SET balance_usdt = balance_usdt + %s,
+                    updated_at = now()
+                WHERE user_id = %s;
+                """,
+                (amount_usdt, user_id),
+            )
