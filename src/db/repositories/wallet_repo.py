@@ -90,7 +90,7 @@ async def add_ledger_entry(
                 """
                 INSERT INTO wallet_ledger (user_id, amount_usdt, type, ref_order_public_id, memo)
                 VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (user_id, type, ref_order_public_id) WHERE ref_order_public_id IS NOT NULL DO NOTHING
+                ON CONFLICT DO NOTHING
                 RETURNING id;
                 """,
                 (user_id, amount_usdt, entry_type, ref_order_public_id, memo),
@@ -183,7 +183,7 @@ async def add_ledger_entry_tx(
             """
             INSERT INTO wallet_ledger (user_id, amount_usdt, type, ref_order_public_id, memo)
             VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (user_id, type, ref_order_public_id) WHERE ref_order_public_id IS NOT NULL DO NOTHING
+            ON CONFLICT DO NOTHING
             RETURNING id;
             """,
             (user_id, amount_usdt, entry_type, ref_order_public_id, memo),
