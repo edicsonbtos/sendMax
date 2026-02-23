@@ -17,8 +17,8 @@ async def count_referrals(sponsor_user_id: int) -> int:
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(sql, (sponsor_user_id,))
-            res = await cur.fetchone()
-            return int(res[0]) if res else 0
+            rows = await cur.fetchall()
+            return int(rows[0][0]) if rows else 0
 
 
 async def list_recent_referrals(sponsor_user_id: int, limit: int = 10) -> list[ReferralRow]:
