@@ -217,8 +217,8 @@ def _build_summary_text(order: dict, rr) -> str:
     if len(benef_short) > 260:
         benef_short = benef_short[:260].rstrip() + "..."
 
-    # Leer comisión de DB (async compatible)
-    comm_decimal = order.get("commission_pct", Decimal("0.06"))  # Ahora siempre decimal
+    # Usar comisión del snapshot de tasas
+    comm_decimal = getattr(rr, "commission_pct", order.get("commission_pct", Decimal("0.06")))
 
     return (
         "Listo ✅ Revisa tu envío:\n\n"

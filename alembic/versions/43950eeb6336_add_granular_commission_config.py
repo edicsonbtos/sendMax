@@ -21,9 +21,16 @@ def upgrade() -> None:
     """)
 
     # Normalizar configs existentes a formato decimal si detecta enteros (ej: 6 -> 0.06)
+    # value_json es tipo JSON, casteamos a JSONB para operar y volvemos a JSON.
     op.execute("""
         UPDATE settings
-        SET value_json = jsonb_set(value_json, '{percent}', ((value_json->>'percent')::float / 100)::text::jsonb),
+        SET value_json = (
+            jsonb_set(
+                value_json::jsonb,
+                '{percent}',
+                to_jsonb(((value_json->>'percent')::float / 100))
+            )
+        )::json,
             updated_at = NOW(),
             updated_by = 'migration:decimal_normalization'
         WHERE key IN ('margin_default', 'margin_dest_venez', 'margin_route_usa_venez')
