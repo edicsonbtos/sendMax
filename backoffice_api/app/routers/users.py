@@ -16,7 +16,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 
-from ..auth import verify_api_key
+from ..auth import require_admin
 from ..auth_jwt import get_password_hash
 from ..db import fetch_one, fetch_all
 
@@ -28,14 +28,6 @@ EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
 # Campos que no deben salir en respuestas del backoffice API
 SENSITIVE_FIELDS = {"hashed_password", "kyc_doc_file_id", "kyc_selfie_file_id"}
-
-
-def require_admin(auth=Depends(verify_api_key)):
-    if not isinstance(auth, dict):
-        raise HTTPException(status_code=403, detail="No autorizado")
-    if auth.get("role") not in ("admin", "ADMIN"):
-        raise HTTPException(status_code=403, detail="Solo administradores")
-    return auth
 
 
 def _ser(row: dict | None) -> dict | None:

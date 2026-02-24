@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, Field
 from ..db import fetch_one, fetch_all
-from ..auth import verify_api_key
+from ..auth import require_operator_or_admin
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["orders"])
@@ -35,7 +35,7 @@ def _verify_order_access(public_id: int, auth: dict):
 
 
 @router.get("/orders")
-def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depends(verify_api_key)):
+def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depends(require_operator_or_admin)):
     where_extra, params_extra = _operator_filter(auth)
     rows = fetch_all(
         f"""
@@ -71,7 +71,7 @@ def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depends(ver
 
 
 @router.get("/orders/{public_id}")
-def order_detail(public_id: int, auth: dict = Depends(verify_api_key)):
+def order_detail(public_id: int, auth: dict = Depends(require_operator_or_admin)):
     _verify_order_access(public_id, auth)
     where_extra, params_extra = _operator_filter(auth)
     order = fetch_one(
@@ -165,7 +165,7 @@ class OrderTradeIn(BaseModel):
 
 
 @router.get("/orders/{public_id}/trades")
-def get_order_trades(public_id: int, auth: dict = Depends(verify_api_key)):
+def get_order_trades(public_id: int, auth: dict = Depends(require_operator_or_admin)):
     _verify_order_access(public_id, auth)
     rows = fetch_all(
         """
@@ -199,7 +199,7 @@ def get_order_trades(public_id: int, auth: dict = Depends(verify_api_key)):
 
 
 @router.post("/orders/{public_id}/trades")
-def create_order_trade(public_id: int, payload: OrderTradeIn, auth: dict = Depends(verify_api_key)):
+def create_order_trade(public_id: int, payload: OrderTradeIn, auth: dict = Depends(require_operator_or_admin)):
     _verify_order_access(public_id, auth)
 
     side = (payload.side or "").upper().strip()

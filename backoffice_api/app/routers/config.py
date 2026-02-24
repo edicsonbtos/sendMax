@@ -1,13 +1,14 @@
 """Router: Configuración dinámica (comisiones, splits)"""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from decimal import Decimal
 from ..db import run_in_transaction, fetch_one
-from ..auth import verify_api_key
+from ..auth import require_admin
+from src.rates_generator import generate_rates_full
 import json
 
-router = APIRouter(tags=["config"])
+router = APIRouter(prefix="/api/v1/config", tags=["config"])
 
 class CommissionRouteUpdate(BaseModel):
     route: str  # "CHILE_VENEZUELA"
@@ -18,8 +19,23 @@ class ProfitSplitUpdate(BaseModel):
     sponsor: Decimal = Field(ge=0, le=1)
     operator_solo: Decimal = Field(ge=0, le=1)
 
-@router.get("/config/commissions")
-def get_all_commissions(auth: dict = Depends(verify_api_key)):
+class MarginUpdateRequest(BaseModel):
+    margin_default: float | None = Field(default=None, ge=0, le=0.5)
+    margin_dest_venez: float | None = Field(default=None, ge=0, le=0.5)
+    margin_route_usa_venez: float | None = Field(default=None, ge=0, le=0.5)
+    regenerate: bool = False
+
+def _get_updated_by(auth: dict, request: Request) -> str:
+    uid = auth.get("user_id")
+    if uid:
+        return f"admin:{uid}"
+    email = auth.get("email")
+    if email:
+        return f"admin:{email}"
+    return f"admin:{request.client.host if request.client else 'unknown'}"
+
+@router.get("/commissions")
+def get_all_commissions(auth: dict = Depends(require_admin)):
     """Lista todas las configuraciones de comisión."""
     configs = {}
 
@@ -36,20 +52,21 @@ def get_all_commissions(auth: dict = Depends(verify_api_key)):
 
     return configs
 
-@router.put("/config/commission/route")
-def update_commission_route(body: CommissionRouteUpdate, auth: dict = Depends(verify_api_key)):
+@router.put("/commission/route")
+def update_commission_route(body: CommissionRouteUpdate, request: Request, auth: dict = Depends(require_admin)):
     """Actualiza comisión para ruta específica."""
-    if auth.get("role") not in ("admin", "ADMIN"):
-        raise HTTPException(status_code=403, detail="Solo admins")
-
+    updated_by = _get_updated_by(auth, request)
+    user_id = auth.get("user_id")
     def _update(cur):
         # Leer actual
         cur.execute("SELECT value_json FROM settings WHERE key='commission_routes' FOR UPDATE")
         row = cur.fetchone()
         routes = json.loads(row["value_json"]) if row and row["value_json"] else {}
 
+        before_json = json.dumps(routes)
         # Actualizar
         routes[body.route.upper()] = float(body.percent)
+        after_json = json.dumps(routes)
 
         # Guardar
         cur.execute(
@@ -61,23 +78,35 @@ def update_commission_route(body: CommissionRouteUpdate, auth: dict = Depends(ve
                 updated_at = NOW(),
                 updated_by = EXCLUDED.updated_by
             """,
-            (json.dumps(routes), f"admin:{auth.get('user_id', 'api')}")
+            (after_json, updated_by)
+        )
+
+        cur.execute(
+            """
+            INSERT INTO audit_log(actor_user_id, action, entity_type, entity_id, before_json, after_json, user_agent, ip)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (user_id, "ROUTE_COMMISSION_UPDATED", "settings", "commission_routes", before_json, after_json, request.headers.get("user-agent"), request.client.host if request.client else None)
         )
 
     run_in_transaction(_update)
     return {"ok": True, "route": body.route, "percent": body.percent}
 
-@router.put("/config/profit-split")
-def update_profit_split(body: ProfitSplitUpdate, auth: dict = Depends(verify_api_key)):
+@router.put("/profit-split")
+def update_profit_split(body: ProfitSplitUpdate, request: Request, auth: dict = Depends(require_admin)):
     """Actualiza distribución de profit."""
-    if auth.get("role") not in ("admin", "ADMIN"):
-        raise HTTPException(status_code=403, detail="Solo admins")
-
     # Validar que sume sentido (op + sp ≤ 1)
     if body.operator_with_sponsor + body.sponsor > 1:
         raise HTTPException(status_code=400, detail="operator_with_sponsor + sponsor no puede superar 1.0")
 
+    updated_by = _get_updated_by(auth, request)
+    user_id = auth.get("user_id")
     def _update(cur):
+        cur.execute("SELECT value_json FROM settings WHERE key='profit_split'")
+        before = cur.fetchone()
+
+        after_json = json.dumps(body.model_dump(mode='json'))
+
         cur.execute(
             """
             INSERT INTO settings (key, value_json, updated_at, updated_by)
@@ -87,8 +116,77 @@ def update_profit_split(body: ProfitSplitUpdate, auth: dict = Depends(verify_api
                 updated_at = NOW(),
                 updated_by = EXCLUDED.updated_by
             """,
-            (json.dumps(body.model_dump(mode='json')), f"admin:{auth.get('user_id', 'api')}")
+            (after_json, updated_by)
+        )
+
+        cur.execute(
+            """
+            INSERT INTO audit_log(actor_user_id, action, entity_type, entity_id, before_json, after_json, user_agent, ip)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (user_id, "PROFIT_SPLIT_UPDATED", "settings", "profit_split", json.dumps(before["value_json"]) if before else None, after_json, request.headers.get("user-agent"), request.client.host if request.client else None)
         )
 
     run_in_transaction(_update)
     return {"ok": True, "split": body.model_dump(mode='json')}
+
+@router.post("/margins")
+async def update_margins(
+    body: MarginUpdateRequest,
+    request: Request,
+    auth: dict = Depends(require_admin)
+):
+    """Actualiza márgenes y opcionalmente regenera tasas."""
+    updated_by = _get_updated_by(auth, request)
+    user_id = auth.get("user_id")
+
+    def _update_db(cur):
+        changes = {}
+        for key in ["margin_default", "margin_dest_venez", "margin_route_usa_venez"]:
+            val = getattr(body, key)
+            if val is not None:
+                # Leer valor actual para auditoría
+                cur.execute("SELECT value_json FROM settings WHERE key=%s", (key,))
+                before = cur.fetchone()
+
+                cur.execute(
+                    """
+                    INSERT INTO settings (key, value_json, updated_at, updated_by)
+                    VALUES (%s, %s::json, NOW(), %s)
+                    ON CONFLICT (key) DO UPDATE SET
+                        value_json = EXCLUDED.value_json,
+                        updated_at = NOW(),
+                        updated_by = EXCLUDED.updated_by
+                    """,
+                    (key, json.dumps({"percent": val}), updated_by)
+                )
+                changes[key] = {"before": before["value_json"] if before else None, "after": {"percent": val}}
+
+        if changes:
+            cur.execute(
+                """
+                INSERT INTO audit_log(actor_user_id, action, entity_type, entity_id, before_json, after_json, user_agent, ip)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    user_id, "MARGINS_UPDATED", "settings", "multiple",
+                    json.dumps({k: v["before"] for k, v in changes.items()}),
+                    json.dumps({k: v["after"] for k, v in changes.items()}),
+                    request.headers.get("user-agent"),
+                    request.client.host if request.client else None
+                )
+            )
+        return changes
+
+    run_in_transaction(_update_db)
+
+    regen_result = None
+    if body.regenerate:
+        regen_result = await generate_rates_full(kind="manual", reason="Auto-regen tras cambio de márgenes")
+
+    return {
+        "ok": True,
+        "margins_updated": True,
+        "regenerated": body.regenerate,
+        "regen_result": regen_result
+    }

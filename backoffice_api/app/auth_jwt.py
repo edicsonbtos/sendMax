@@ -1,9 +1,7 @@
-﻿"""
+"""
 JWT Authentication para Backoffice Login.
-Archivo separado de auth.py (que maneja API KEY).
 """
 
-import os
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -12,20 +10,14 @@ from jwt import InvalidTokenError
 import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from dotenv import load_dotenv
+from .config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
-load_dotenv()
-
-SECRET_KEY = os.getenv("SECRET_KEY")
-if not SECRET_KEY:
-    raise RuntimeError("FALTA SECRET_KEY en variables de entorno")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not hashed_password:
+        return False
     return bcrypt.checkpw(
         plain_password.encode("utf-8"),
         hashed_password.encode("utf-8"),
@@ -40,6 +32,8 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    if not SECRET_KEY:
+        raise RuntimeError("Imposible crear token sin SECRET_KEY")
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
@@ -52,12 +46,16 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
         detail="Token invalido o expirado",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if not token or not SECRET_KEY:
+        raise credentials_exception
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         role: str = payload.get("role")
+        user_id: int = payload.get("user_id")
         if email is None:
             raise credentials_exception
-        return {"email": email, "role": role}
+        return {"email": email, "role": role, "user_id": user_id}
     except InvalidTokenError:
         raise credentials_exception

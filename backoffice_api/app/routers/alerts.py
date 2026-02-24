@@ -7,14 +7,14 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
 
-from ..auth import verify_api_key
+from ..auth import require_operator_or_admin
 from ..db import fetch_all, fetch_one
 
 router = APIRouter(tags=["alerts"])
 
 
 @router.get("/alerts/stuck")
-def alerts_stuck(auth: dict = Depends(verify_api_key)):
+def alerts_stuck(auth: dict = Depends(require_operator_or_admin)):
     from ..audit import get_stuck_orders
     return get_stuck_orders()
 
@@ -23,7 +23,7 @@ def alerts_stuck(auth: dict = Depends(verify_api_key)):
 def alerts_stuck_30m(
     minutes: int = Query(default=30, ge=5, le=1440),
     limit: int = Query(default=200, ge=10, le=1000),
-    auth: dict = Depends(verify_api_key),
+    auth: dict = Depends(require_operator_or_admin),
 ):
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(minutes=minutes)

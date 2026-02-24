@@ -1,12 +1,5 @@
 """
 Sendmax Backoffice API - Production Ready (M10)
-
-Defensas:
-- Graceful Shutdown: cierra pools DB al apagar (Railway redeploy)
-- Global Exception Handler: oculta tracebacks, loguea internamente
-- Security Headers: X-Frame-Options, HSTS (prod), XSS, nosniff, Referrer-Policy
-- Swagger: oculto en produccion
-- /health: existe en diagnostics.py (no se duplica aqui)
 """
 
 import os
@@ -20,13 +13,13 @@ from fastapi.responses import JSONResponse
 from .routers import (
     diagnostics, metrics, orders, origin_wallets,
     settings, alerts, corrections, auth, users,
-    config,
+    config, rates_admin,
 )
 from .db import close_pools
+from .config import validate_config, IS_PRODUCTION, ALLOWED_ORIGINS
+from .middleware_limiter import rate_limit_middleware
 
 logger = logging.getLogger(__name__)
-
-IS_PRODUCTION = os.getenv("ENV", "").lower() == "production"
 
 
 # ==========================================
@@ -36,7 +29,14 @@ IS_PRODUCTION = os.getenv("ENV", "").lower() == "production"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Sendmax Backoffice API iniciando...")
+
+    # Validación de configuración en startup
+    ok = validate_config()
+    if not ok:
+        logger.warning("Servicio iniciando en modo DEGRADADO (revisar variables de entorno)")
+
     yield
+
     logger.info("Apagando API, cerrando pools de base de datos...")
     try:
         close_pools()
@@ -59,18 +59,15 @@ app = FastAPI(
 
 
 # ==========================================
-# 3. CORS (con limpieza de espacios)
+# 3. MIDDLEWARES
 # ==========================================
 
-raw_origins = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000,https://sendmax-web-production.up.railway.app"
-).split(",")
-ALLOWED_ORIGINS = [o.strip() for o in raw_origins if o.strip()]
+# Rate Limiting
+@app.middleware("http")
+async def apply_rate_limit(request: Request, call_next):
+    return await rate_limit_middleware(request, call_next)
 
-if not ALLOWED_ORIGINS:
-    logger.warning("ALLOWED_ORIGINS esta vacio. CORS rechazara todas las peticiones con credenciales.")
-
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -79,11 +76,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# ==========================================
-# 4. SECURITY HEADERS MIDDLEWARE
-# ==========================================
-
+# Security Headers
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     response = await call_next(request)
@@ -97,13 +90,17 @@ async def security_headers_middleware(request: Request, call_next):
 
 
 # ==========================================
-# 5. GLOBAL EXCEPTION HANDLER
+# 4. GLOBAL EXCEPTION HANDLER
 # ==========================================
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     if isinstance(exc, HTTPException):
-        raise exc
+        # Propagar HTTPException tal cual
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"ok": False, "detail": exc.detail},
+        )
 
     logger.error(
         "Error no manejado: %s %s -> %s",
@@ -117,12 +114,13 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ==========================================
-# 6. ROUTERS
+# 5. ROUTERS
 # ==========================================
 
 app.include_router(auth.router)
 app.include_router(users.router)
-app.include_router(config.router, prefix="/api/v1")
+app.include_router(config.router)
+app.include_router(rates_admin.router)
 app.include_router(diagnostics.router)
 app.include_router(metrics.router)
 app.include_router(orders.router)
