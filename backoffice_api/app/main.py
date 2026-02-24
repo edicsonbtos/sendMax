@@ -119,8 +119,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(auth.router)
 app.include_router(users.router)
-app.include_router(config.router, prefix="/api/v1")
-app.include_router(rates_admin.router, prefix="/api/v1/rates")
+app.include_router(config.router)
+app.include_router(rates_admin.router)
 app.include_router(diagnostics.router)
 app.include_router(metrics.router)
 app.include_router(orders.router)
