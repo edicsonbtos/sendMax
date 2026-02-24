@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from ..db import fetch_one, fetch_all
-from ..auth import verify_api_key
+from ..auth import require_operator_or_admin
 
 router = APIRouter(tags=["metrics"])
 
@@ -58,7 +58,7 @@ def _op_filter(auth: dict):
 # ============================================================
 
 @router.get("/metrics/overview")
-def metrics_overview(auth: dict = Depends(verify_api_key)):
+def metrics_overview(auth: dict = Depends(require_operator_or_admin)):
     wh, prm = _op_filter(auth)
 
     row = fetch_one(
@@ -129,7 +129,7 @@ def metrics_overview(auth: dict = Depends(verify_api_key)):
 # ============================================================
 
 @router.get("/metrics/profit_daily")
-def profit_daily(days: int = Query(default=30, le=90), auth: dict = Depends(verify_api_key)):
+def profit_daily(days: int = Query(default=30, le=90), auth: dict = Depends(require_operator_or_admin)):
     from ..audit import get_profit_daily
     return {"days": days, "profit_by_day": get_profit_daily(days)}
 
@@ -139,7 +139,7 @@ def profit_daily(days: int = Query(default=30, le=90), auth: dict = Depends(veri
 # ============================================================
 
 @router.get("/operators/ranking")
-def operators_ranking(days: int = Query(default=7, le=90), auth: dict = Depends(verify_api_key)):
+def operators_ranking(days: int = Query(default=7, le=90), auth: dict = Depends(require_operator_or_admin)):
     from ..audit import get_operators_ranking
     return {"ok": True, "days": days, "operators": get_operators_ranking(days)}
 
@@ -149,7 +149,7 @@ def operators_ranking(days: int = Query(default=7, le=90), auth: dict = Depends(
 # ============================================================
 
 @router.get("/metrics/corridors")
-def metrics_corridors(days: int = Query(default=30, le=90), auth: dict = Depends(verify_api_key)):
+def metrics_corridors(days: int = Query(default=30, le=90), auth: dict = Depends(require_operator_or_admin)):
     from ..audit import get_corridors
     return {"ok": True, "days": days, "corridors": get_corridors(days)}
 
@@ -162,7 +162,7 @@ def metrics_corridors(days: int = Query(default=30, le=90), auth: dict = Depends
 def metrics_p2p_prices(
     country: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
-    auth: dict = Depends(verify_api_key),
+    auth: dict = Depends(require_operator_or_admin),
 ):
     if country:
         rows = fetch_all(
@@ -225,7 +225,7 @@ def metrics_p2p_prices(
 # ============================================================
 
 @router.get("/metrics/company-overview")
-def metrics_company_overview(auth: dict = Depends(verify_api_key)):
+def metrics_company_overview(auth: dict = Depends(require_operator_or_admin)):
     wh, prm = _op_filter(auth)
     admin = _is_admin(auth)
 

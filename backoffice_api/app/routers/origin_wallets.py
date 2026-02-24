@@ -6,7 +6,7 @@ from datetime import date as _date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query, Header, HTTPException
 from pydantic import BaseModel
 from ..db import fetch_one, fetch_all, run_in_transaction
-from ..auth import verify_api_key
+from ..auth import require_admin
 
 router = APIRouter(tags=["origin_wallets"])
 
@@ -145,7 +145,7 @@ def _check_not_closed(cur, d: _date, origin_country: str, fiat_currency: str):
 # ============================================================
 
 @router.get("/daily-close")
-def daily_close(day: str = Query(...), api_key: str = Depends(verify_api_key)):
+def daily_close(day: str = Query(...), auth: dict = Depends(require_admin)):
     d = _parse_day(day)
     start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=VET)
     end_local = start_local + timedelta(days=1)
@@ -206,7 +206,7 @@ def daily_close(day: str = Query(...), api_key: str = Depends(verify_api_key)):
 # ============================================================
 
 @router.get("/origin-wallets/daily")
-def origin_wallets_daily(day: str = Query(...), api_key: str = Depends(verify_api_key)):
+def origin_wallets_daily(day: str = Query(...), auth: dict = Depends(require_admin)):
     d = _parse_day(day)
 
     totals = fetch_all(
@@ -260,7 +260,7 @@ def origin_wallets_daily(day: str = Query(...), api_key: str = Depends(verify_ap
 # ============================================================
 
 @router.get("/origin-wallets/balance")
-def origin_wallets_balance(day: str = Query(...), api_key: str = Depends(verify_api_key)):
+def origin_wallets_balance(day: str = Query(...), auth: dict = Depends(require_admin)):
     d = _parse_day(day)
     rows = fetch_all(
         """
@@ -295,7 +295,7 @@ def origin_wallets_balance(day: str = Query(...), api_key: str = Depends(verify_
 # ============================================================
 
 @router.post("/origin-wallets/sweeps")
-def create_origin_sweep(payload: OriginSweepIn, api_key: str = Depends(verify_api_key)):
+def create_origin_sweep(payload: OriginSweepIn, auth: dict = Depends(require_admin)):
     d = _parse_day(payload.day)
 
     def _atomic(cur):
@@ -330,7 +330,7 @@ def create_origin_sweep(payload: OriginSweepIn, api_key: str = Depends(verify_ap
 # ============================================================
 
 @router.get("/origin-wallets/sweeps")
-def list_origin_sweeps(day: str = Query(...), origin_country: str | None = Query(None), api_key: str = Depends(verify_api_key)):
+def list_origin_sweeps(day: str = Query(...), origin_country: str | None = Query(None), auth: dict = Depends(require_admin)):
     sql = """
         SELECT id, day, origin_country, fiat_currency, amount_fiat, created_at,
                created_by_telegram_id, note, external_ref
@@ -350,7 +350,7 @@ def list_origin_sweeps(day: str = Query(...), origin_country: str | None = Query
 # ============================================================
 
 @router.get("/origin-wallets/close-report")
-def origin_wallets_close_report(day: str = Query(...), api_key: str = Depends(verify_api_key)):
+def origin_wallets_close_report(day: str = Query(...), auth: dict = Depends(require_admin)):
     d = _parse_day(day)
     balances = fetch_all(
         """
@@ -414,7 +414,7 @@ def origin_wallets_close_report(day: str = Query(...), api_key: str = Depends(ve
 # ============================================================
 
 @router.post("/origin-wallets/close")
-def origin_wallets_close(payload: OriginCloseIn, api_key: str = Depends(verify_api_key)):
+def origin_wallets_close(payload: OriginCloseIn, auth: dict = Depends(require_admin)):
     d = _parse_day(payload.day)
 
     def _atomic(cur):
@@ -496,7 +496,7 @@ def origin_wallets_close(payload: OriginCloseIn, api_key: str = Depends(verify_a
 # ============================================================
 
 @router.post("/origin-wallets/withdraw")
-def origin_wallets_withdraw(payload: OriginWithdrawIn, api_key: str = Depends(verify_api_key)):
+def origin_wallets_withdraw(payload: OriginWithdrawIn, auth: dict = Depends(require_admin)):
     d = _parse_day(payload.day)
     if payload.amount_fiat <= 0:
         raise HTTPException(status_code=400, detail="amount_fiat must be > 0")
@@ -538,7 +538,7 @@ def origin_wallets_withdraw(payload: OriginWithdrawIn, api_key: str = Depends(ve
 # ============================================================
 
 @router.post("/origin-wallets/empty")
-def origin_wallets_empty(payload: OriginEmptyIn, api_key: str = Depends(verify_api_key)):
+def origin_wallets_empty(payload: OriginEmptyIn, auth: dict = Depends(require_admin)):
     d = _parse_day(payload.day)
 
     def _atomic(cur):
@@ -572,7 +572,7 @@ def origin_wallets_empty(payload: OriginEmptyIn, api_key: str = Depends(verify_a
 # ============================================================
 
 @router.post("/origin-wallets/deposit")
-def create_origin_deposit(payload: OriginDepositIn, api_key: str = Depends(verify_api_key)):
+def create_origin_deposit(payload: OriginDepositIn, auth: dict = Depends(require_admin)):
     """Registra un DEPOSITO manual de fondos en la billetera de origen."""
     d = _parse_day(payload.day)
     if payload.amount_fiat <= 0:
@@ -603,7 +603,7 @@ def create_origin_deposit(payload: OriginDepositIn, api_key: str = Depends(verif
 # ============================================================
 
 @router.get("/origin-wallets/current-balances")
-def origin_wallets_current_balances(api_key: str = Depends(verify_api_key)):
+def origin_wallets_current_balances(auth: dict = Depends(require_admin)):
     rows = fetch_all(
         """
         WITH ins AS (
@@ -636,7 +636,7 @@ def origin_wallets_current_balances(api_key: str = Depends(verify_api_key)):
 # ============================================================
 
 @router.get("/origin-wallets/balances2")
-def origin_wallets_balances2(day: str = Query(...), api_key: str = Depends(verify_api_key)):
+def origin_wallets_balances2(day: str = Query(...), auth: dict = Depends(require_admin)):
     d = _parse_day(day)
     prev = d - timedelta(days=1)
     rows = fetch_all(

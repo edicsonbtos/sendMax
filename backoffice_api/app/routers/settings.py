@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from ..auth import verify_api_key
+from ..auth import require_admin
 from ..db import fetch_all, fetch_one
 
 router = APIRouter(tags=["settings"])
@@ -141,7 +141,7 @@ class SettingsUpdate(BaseModel):
 # --------------- SETTINGS GENERICOS ---------------
 
 @router.get("/admin/settings")
-def get_admin_settings(auth: dict = Depends(verify_api_key)):
+def get_admin_settings(auth: dict = Depends(require_admin)):
     rows = fetch_all("SELECT key, value_json, updated_at, updated_by FROM settings ORDER BY key")
     return {"items": rows}
 
@@ -151,7 +151,7 @@ def put_admin_settings(
     key: str,
     payload: SettingsUpdate,
     request: Request,
-    auth: dict = Depends(verify_api_key),
+    auth: dict = Depends(require_admin),
 ):
     k = _validate_key(key)
 
@@ -216,7 +216,7 @@ def put_admin_settings(
 # --------------- PAYMENT METHODS ---------------
 
 @router.get("/admin/payment-methods")
-def get_payment_methods(auth: dict = Depends(verify_api_key)):
+def get_payment_methods(auth: dict = Depends(require_admin)):
     row = fetch_one("SELECT value_json FROM settings WHERE key=%s", ("payment_methods",))
     data = _normalize_json(row["value_json"]) if row and row["value_json"] else {}
     if not isinstance(data, dict):
@@ -238,7 +238,7 @@ def get_payment_methods(auth: dict = Depends(verify_api_key)):
 def put_payment_methods(
     payload: SettingsUpdate,
     request: Request,
-    auth: dict = Depends(verify_api_key),
+    auth: dict = Depends(require_admin),
 ):
     _validate_payload_size(payload.value_json)
     raw_data = payload.value_json

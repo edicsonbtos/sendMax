@@ -309,3 +309,16 @@ async def list_route_rates_by_origin(
             await cur.execute(sql, (rate_version_id, origin_country))
             rows = await cur.fetchall()
             return [RouteRate(*r) for r in rows]
+
+async def list_rate_versions(limit: int = 20) -> list[RateVersion]:
+    sql = """
+        SELECT id, kind, reason, created_at, effective_from, effective_to, is_active
+        FROM rate_versions
+        ORDER BY created_at DESC
+        LIMIT %s;
+    """
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (limit,))
+            rows = await cur.fetchall()
+            return [RateVersion(*r) for r in rows]
