@@ -30,7 +30,7 @@ import {
   Edit as EditIcon,
 } from "@mui/icons-material";
 import { useAuth } from "@/components/AuthProvider";
-import { apiGet, apiPut } from "@/lib/api";
+import { apiGet, apiPut, apiRequest } from "@/lib/api";
 
 const COUNTRIES = [
   "USA", "CHILE", "PERU", "COLOMBIA", "VENEZUELA", "MEXICO", "ARGENTINA"
@@ -97,19 +97,13 @@ export default function RoutesPage() {
     if (!confirm(`¿Eliminar el margen específico para ${routeKey}? Se usará el margen por defecto.`)) return;
     setSaving(true);
     try {
-      // Usamos el mismo endpoint enviando percent 0 o null si el backend lo soporta,
-      // pero el requerimiento dice "set a null o reescribe el json sin la key".
-      // La API PUT /api/v1/config/commission/route requiere un percent.
-      // Por ahora, enviaremos el valor default o un valor que indique eliminación.
-      // Si la API no soporta DELETE, el usuario sugirió reescribir.
-      // Implementamos una "eliminación" seteando un valor especial o simplemente no proveyendo opción si no hay endpoint.
-      // Re-leyendo: "si no hay endpoint delete, se hace set a null o se reescribe el json sin la key"
-      // Mi API de la Fase 2 hace: routes[body.route.upper()] = float(body.percent)
-      // Así que poner 0 es una opción, pero no es "eliminar".
-      // Sin embargo, voy a cumplir con lo que el usuario pide si es posible.
-
-      // Como no tengo endpoint DELETE, informo que por ahora solo se puede editar.
-      alert("Por ahora use la edición para ajustar el margen. La eliminación completa se habilitará en una sub-fase.");
+      await apiRequest(`/api/v1/config/commission/route/${routeKey}`, {
+        method: "DELETE",
+      });
+      setSuccess(`Ruta ${routeKey} eliminada`);
+      load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error eliminando ruta");
     } finally {
       setSaving(false);
     }
@@ -156,6 +150,9 @@ export default function RoutesPage() {
                     <TableCell sx={{ fontWeight: 600, fontFamily: "monospace" }}>{key}</TableCell>
                     <TableCell>{(val * 100).toFixed(2)}%</TableCell>
                     <TableCell align="right">
+                      <IconButton size="small" color="error" onClick={() => handleDelete(key)} disabled={saving}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
                       <IconButton size="small" onClick={() => {
                         const [o, d] = key.split("_");
                         setEditOrigin(o);
