@@ -1,5 +1,4 @@
-﻿const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://apii-maxx-production.up.railway.app';
-// Fallback temporal para evitar crashes en desarrollo
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -38,19 +37,38 @@ export async function apiRequest<T = unknown>(
 
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && !endpoint.includes('/auth/login')) {
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_role');
         localStorage.removeItem('auth_name');
         window.location.href = '/login';
       }
-      throw new Error('SESSION_EXPIRED');
+      const errorText = await response.text().catch(() => '');
+      throw new Error(errorText || 'UNAUTHORIZED');
     }
     const errorText = await response.text().catch(() => '');
     throw new Error(errorText || 'HTTP ' + response.status);
   }
 
   return response.json();
+}
+
+export async function apiGet<T>(endpoint: string): Promise<T> {
+  return apiRequest<T>(endpoint, { method: 'GET' });
+}
+
+export async function apiPost<T>(endpoint: string, body: unknown): Promise<T> {
+  return apiRequest<T>(endpoint, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function apiPut<T>(endpoint: string, body: unknown): Promise<T> {
+  return apiRequest<T>(endpoint, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
 }
 
 export { API_BASE };

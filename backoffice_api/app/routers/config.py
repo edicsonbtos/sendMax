@@ -45,7 +45,7 @@ def get_all_commissions(auth: dict = Depends(require_admin)):
         configs["routes"] = json.loads(routes["value_json"]) if isinstance(routes["value_json"], str) else routes["value_json"]
 
     # Defaults
-    for key in ["margin_default", "margin_dest_venez", "margin_route_usa_venez"]:
+    for key in ["margin_default", "margin_dest_venez", "margin_route_usa_venez", "profit_split"]:
         row = fetch_one("SELECT value_json FROM settings WHERE key=%s", (key,))
         if row:
             configs[key] = json.loads(row["value_json"]) if isinstance(row["value_json"], str) else row["value_json"]
@@ -91,6 +91,52 @@ def update_commission_route(body: CommissionRouteUpdate, request: Request, auth:
 
     run_in_transaction(_update)
     return {"ok": True, "route": body.route, "percent": body.percent}
+
+@router.delete("/commission/route/{route}")
+def delete_commission_route(route: str, request: Request, auth: dict = Depends(require_admin)):
+    """Elimina la comisión específica para una ruta."""
+    updated_by = _get_updated_by(auth, request)
+    user_id = auth.get("user_id")
+    route_upper = route.upper()
+
+    def _delete(cur):
+        cur.execute("SELECT value_json FROM settings WHERE key='commission_routes' FOR UPDATE")
+        row = cur.fetchone()
+        routes = json.loads(row["value_json"]) if row and row["value_json"] else {}
+
+        if route_upper not in routes:
+            return False
+
+        before_json = json.dumps(routes)
+        del routes[route_upper]
+        after_json = json.dumps(routes)
+
+        cur.execute(
+            """
+            INSERT INTO settings (key, value_json, updated_at, updated_by)
+            VALUES ('commission_routes', %s::json, NOW(), %s)
+            ON CONFLICT (key) DO UPDATE SET
+                value_json = EXCLUDED.value_json,
+                updated_at = NOW(),
+                updated_by = EXCLUDED.updated_by
+            """,
+            (after_json, updated_by)
+        )
+
+        cur.execute(
+            """
+            INSERT INTO audit_log(actor_user_id, action, entity_type, entity_id, before_json, after_json, user_agent, ip)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (user_id, "ROUTE_COMMISSION_DELETED", "settings", "commission_routes", before_json, after_json, request.headers.get("user-agent"), request.client.host if request.client else None)
+        )
+        return True
+
+    deleted = run_in_transaction(_delete)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Ruta {route_upper} no encontrada")
+
+    return {"ok": True, "deleted": route_upper}
 
 @router.put("/profit-split")
 def update_profit_split(body: ProfitSplitUpdate, request: Request, auth: dict = Depends(require_admin)):

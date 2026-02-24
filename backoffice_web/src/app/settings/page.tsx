@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as React from "react";
 import {
@@ -10,7 +10,7 @@ import {
   Alert,
   CircularProgress,
   Stack,
-  Switch,
+  Checkbox,
   FormControlLabel,
   Divider,
   Chip,
@@ -20,74 +20,60 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Slider,
-  InputAdornment,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TableContainer,
 } from "@mui/material";
 import {
   Save as SaveIcon,
   Refresh as RefreshIcon,
   TrendingUp as MarginIcon,
-  CurrencyExchange as P2PIcon,
   Speed as EngineIcon,
   History as HistoryIcon,
-  Warning as WarningIcon,
   CheckCircle as CheckIcon,
-  Info as InfoIcon,
+  Sync as SyncIcon,
 } from "@mui/icons-material";
 import { useAuth } from "@/components/AuthProvider";
-import { apiRequest } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 
 /* ============ Types ============ */
-type SettingsItem = {
-  key: string;
-  value_json: Record<string, unknown>;
-  updated_at?: string | null;
-  updated_by?: string | null;
-};
+interface RateVersion {
+  id: number;
+  kind: string;
+  reason: string | null;
+  created_at: string;
+  effective_from: string;
+  is_active: boolean;
+}
+
+interface CommissionsConfig {
+  margin_default?: { percent: number };
+  margin_dest_venez?: { percent: number };
+  margin_route_usa_venez?: { percent: number };
+  profit_split?: {
+    operator_with_sponsor: number;
+    sponsor: number;
+    operator_solo: number;
+  };
+}
 
 /* ============ Helpers ============ */
-function findSetting(items: SettingsItem[], key: string) {
-  return items.find((x) => x.key === key)?.value_json ?? null;
-}
-
-function findUpdatedAt(items: SettingsItem[], key: string): string | null {
-  return items.find((x) => x.key === key)?.updated_at ?? null;
-}
-
-async function putSetting(key: string, value_json: Record<string, unknown>) {
-  return apiRequest(`/admin/settings/${encodeURIComponent(key)}`, {
-    method: "PUT",
-    body: JSON.stringify({ value_json }),
-  });
-}
-
 function toNum(label: string, v: string): number {
   const n = Number(String(v).replace(",", "."));
   if (!Number.isFinite(n)) throw new Error(`${label}: debe ser numerico`);
   return n;
 }
 
-function marginStatus(val: string): { color: string; label: string; severity: "success" | "warning" | "error" } {
-  const n = Number(val);
-  if (isNaN(n)) return { color: "#DC2626", label: "Invalido", severity: "error" };
-  if (n < 0) return { color: "#DC2626", label: "Negativo", severity: "error" };
-  if (n === 0) return { color: "#F59E0B", label: "Sin margen", severity: "warning" };
-  if (n > 20) return { color: "#F59E0B", label: "Muy alto", severity: "warning" };
-  return { color: "#16A34A", label: "OK", severity: "success" };
-}
-
 function formatDate(iso: string | null): string {
-  if (!iso) return "Nunca";
+  if (!iso) return "-";
   return new Date(iso).toLocaleString("es-VE", {
     day: "numeric", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
 }
-
-const CURRENCY_LABELS: Record<string, string> = {
-  VES: "Venezuela (Bs)", COP: "Colombia (COP)", CLP: "Chile (CLP)",
-  PEN: "Peru (PEN)", ARS: "Argentina (ARS)", MXN: "Mexico (MXN)", USD: "USA (USD)",
-};
 
 /* ============ Component ============ */
 export default function SettingsPage() {
@@ -97,77 +83,49 @@ export default function SettingsPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const [lastUpdates, setLastUpdates] = React.useState<Record<string, string | null>>({});
 
   // Margins
   const [marginDefault, setMarginDefault] = React.useState("10");
   const [marginDestVenez, setMarginDestVenez] = React.useState("6");
   const [marginRouteUsaVenez, setMarginRouteUsaVenez] = React.useState("10");
+  const [regenerateNow, setRegenerateNow] = React.useState(false);
 
-  // Pricing engine
-  const [fluctuationThreshold, setFluctuationThreshold] = React.useState("3");
+  // Profit Split
+  const [opWithSponsor, setOpWithSponsor] = React.useState("45");
+  const [sponsorPct, setSponsorPct] = React.useState("10");
+  const [opSolo, setOpSolo] = React.useState("50");
 
-  // Binance P2P
-  const [p2pRows, setP2pRows] = React.useState("10");
-  const [p2pRequireMerchant, setP2pRequireMerchant] = React.useState(true);
-  const [p2pRef, setP2pRef] = React.useState<Record<string, number>>({
-    VES: 39000, COP: 150000, CLP: 95000, PEN: 150, ARS: 180000, MXN: 1500, USD: 130,
-  });
-
-  // Dirty tracking
-  const [originalValues, setOriginalValues] = React.useState<string>("");
-  const currentValues = React.useMemo(() =>
-    JSON.stringify({ marginDefault, marginDestVenez, marginRouteUsaVenez, fluctuationThreshold, p2pRows, p2pRequireMerchant, p2pRef }),
-    [marginDefault, marginDestVenez, marginRouteUsaVenez, fluctuationThreshold, p2pRows, p2pRequireMerchant, p2pRef]
-  );
-  const isDirty = originalValues !== "" && originalValues !== currentValues;
+  // Rates info
+  const [activeVersion, setActiveVersion] = React.useState<RateVersion | null>(null);
+  const [history, setHistory] = React.useState<RateVersion[]>([]);
 
   async function load() {
     setLoading(true);
     setError(null);
-    setSuccess(null);
     try {
-      const res = await apiRequest<{ items: SettingsItem[] }>("/admin/settings");
-      const items = res.items ?? [];
+      const [commRes, activeRes, historyRes] = await Promise.all([
+        apiGet<CommissionsConfig>("/api/v1/config/commissions"),
+        apiGet<{ ok: boolean; version?: RateVersion }>("/api/v1/rates/active"),
+        apiGet<{ versions: RateVersion[] }>("/api/v1/rates/versions?limit=10"),
+      ]);
 
-      const md = findSetting(items, "margin_default");
-      const mv = findSetting(items, "margin_dest_venez");
-      const musv = findSetting(items, "margin_route_usa_venez");
-      const ft = findSetting(items, "pricing_fluctuation_threshold");
-      const rows = findSetting(items, "p2p_rows");
-      const rm = findSetting(items, "p2p_require_merchant");
-      const ref = findSetting(items, "p2p_reference_amounts");
+      if (commRes) {
+        setMarginDefault(String((commRes.margin_default?.percent ?? 0.1) * 100));
+        setMarginDestVenez(String((commRes.margin_dest_venez?.percent ?? 0.06) * 100));
+        setMarginRouteUsaVenez(String((commRes.margin_route_usa_venez?.percent ?? 0.1) * 100));
 
-      const mdVal = md?.percent != null ? String(Number(md.percent) * 100) : "10";
-      const mvVal = mv?.percent != null ? String(Number(mv.percent) * 100) : "6";
-      const musvVal = musv?.percent != null ? String(Number(musv.percent) * 100) : "10";
-      const ftVal = ft?.percent != null ? String(Number(ft.percent) * 100) : "3";
-      const rowsVal = rows?.rows != null ? String(rows.rows) : "10";
-      const rmVal = rm?.enabled != null ? Boolean(rm.enabled) : true;
-      const refVal = ref && typeof ref === "object" && !Array.isArray(ref) ? (ref as Record<string, number>) : p2pRef;
+        if (commRes.profit_split) {
+          setOpWithSponsor(String(commRes.profit_split.operator_with_sponsor * 100));
+          setSponsorPct(String(commRes.profit_split.sponsor * 100));
+          setOpSolo(String(commRes.profit_split.operator_solo * 100));
+        }
+      }
 
-      setMarginDefault(mdVal);
-      setMarginDestVenez(mvVal);
-      setMarginRouteUsaVenez(musvVal);
-      setFluctuationThreshold(ftVal);
-      setP2pRows(rowsVal);
-      setP2pRequireMerchant(rmVal);
-      setP2pRef(refVal);
+      if (activeRes?.ok) {
+        setActiveVersion(activeRes.version || null);
+      }
+      setHistory(historyRes?.versions || []);
 
-      setOriginalValues(JSON.stringify({
-        marginDefault: mdVal, marginDestVenez: mvVal, marginRouteUsaVenez: musvVal,
-        fluctuationThreshold: ftVal, p2pRows: rowsVal, p2pRequireMerchant: rmVal, p2pRef: refVal,
-      }));
-
-      setLastUpdates({
-        margin_default: findUpdatedAt(items, "margin_default"),
-        margin_dest_venez: findUpdatedAt(items, "margin_dest_venez"),
-        margin_route_usa_venez: findUpdatedAt(items, "margin_route_usa_venez"),
-        pricing_fluctuation_threshold: findUpdatedAt(items, "pricing_fluctuation_threshold"),
-        p2p_rows: findUpdatedAt(items, "p2p_rows"),
-        p2p_require_merchant: findUpdatedAt(items, "p2p_require_merchant"),
-        p2p_reference_amounts: findUpdatedAt(items, "p2p_reference_amounts"),
-      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error cargando ajustes");
     } finally {
@@ -175,36 +133,68 @@ export default function SettingsPage() {
     }
   }
 
-  async function saveAll() {
+  async function saveMargins() {
     setSaving(true);
     setError(null);
     setSuccess(null);
     try {
-      const mdNum = toNum("Margen general", marginDefault);
-      const mvNum = toNum("Margen destino Venezuela", marginDestVenez);
-      const musvNum = toNum("Margen USA-Venezuela", marginRouteUsaVenez);
-      const ftNum = toNum("Umbral volatilidad", fluctuationThreshold);
-      const rowsNum = Math.trunc(toNum("Ordenes a revisar", p2pRows));
+      const md = toNum("Margen general", marginDefault) / 100;
+      const mv = toNum("Margen Venezuela", marginDestVenez) / 100;
+      const musv = toNum("Margen USA-VE", marginRouteUsaVenez) / 100;
 
-      if (mdNum < 0 || mdNum > 50) throw new Error("Margen general debe estar entre 0% y 50%");
-      if (mvNum < 0 || mvNum > 50) throw new Error("Margen Venezuela debe estar entre 0% y 50%");
-      if (musvNum < 0 || musvNum > 50) throw new Error("Margen USA-VE debe estar entre 0% y 50%");
-      if (ftNum < 0 || ftNum > 20) throw new Error("Umbral volatilidad debe estar entre 0% y 20%");
-      if (rowsNum < 1 || rowsNum > 50) throw new Error("Ordenes P2P debe estar entre 1 y 50");
+      await apiPost("/api/v1/config/margins", {
+        margin_default: md,
+        margin_dest_venez: mv,
+        margin_route_usa_venez: musv,
+        regenerate: regenerateNow,
+      });
 
-      await putSetting("margin_default", { percent: mdNum / 100 });
-      await putSetting("margin_dest_venez", { percent: mvNum / 100 });
-      await putSetting("margin_route_usa_venez", { percent: musvNum / 100 });
-      await putSetting("pricing_fluctuation_threshold", { percent: ftNum / 100 });
-      await putSetting("p2p_rows", { rows: rowsNum });
-      await putSetting("p2p_require_merchant", { enabled: Boolean(p2pRequireMerchant) });
-      await putSetting("p2p_reference_amounts", p2pRef);
-
-      setSuccess("Todos los ajustes guardados correctamente");
+      setSuccess("Márgenes guardados correctamente" + (regenerateNow ? " y tasas regeneradas" : ""));
       setConfirmOpen(false);
-      await load();
+      load();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error guardando ajustes");
+      setError(e instanceof Error ? e.message : "Error guardando márgenes");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function manualRegen() {
+    if (!confirm("¿Seguro que quieres regenerar todas las tasas ahora?")) return;
+    setSaving(true);
+    try {
+      await apiPost("/api/v1/rates/regenerate", {
+        kind: "manual",
+        reason: "Desde Settings UI",
+        activate: true,
+      });
+      setSuccess("Tasas regeneradas exitosamente");
+      load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error regenerando tasas");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveProfitSplit() {
+    setSaving(true);
+    setError(null);
+    try {
+      const opws = toNum("Op con sponsor", opWithSponsor) / 100;
+      const sp = toNum("Sponsor", sponsorPct) / 100;
+      const ops = toNum("Op solo", opSolo) / 100;
+
+      if (opws + sp > 1) throw new Error("La suma de Operador + Sponsor no puede superar el 100%");
+
+      await apiPost("/api/v1/config/profit-split", {
+        operator_with_sponsor: opws,
+        sponsor: sp,
+        operator_solo: ops,
+      });
+      setSuccess("Distribución de profit actualizada");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error guardando profit split");
     } finally {
       setSaving(false);
     }
@@ -212,285 +202,193 @@ export default function SettingsPage() {
 
   React.useEffect(() => { if (token) load(); }, [token]);
 
-  const marginFields = [
-    { key: "margin_default", label: "Margen general", value: marginDefault, setter: setMarginDefault, helper: "Aplicado a todas las rutas por defecto" },
-    { key: "margin_dest_venez", label: "Margen destino Venezuela", value: marginDestVenez, setter: setMarginDestVenez, helper: "Override para envios hacia Venezuela" },
-    { key: "margin_route_usa_venez", label: "Margen USA a Venezuela", value: marginRouteUsaVenez, setter: setMarginRouteUsaVenez, helper: "Override especifico USA -> Venezuela" },
-  ];
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", py: 10 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
-    <Box className="fade-in">
-      {/* Header */}
+    <Box className="fade-in" sx={{ pb: 6 }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>Configuracion</Typography>
-          <Typography variant="body2" sx={{ color: "#64748B", mt: 0.5 }}>
-            Margenes, motor de tasas y parametros Binance P2P
-          </Typography>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>Configuración Avanzada</Typography>
+          <Typography variant="body2" color="text.secondary">Gestión de márgenes, tasas y distribución de ganancias</Typography>
         </Box>
-        <Stack direction="row" spacing={1} alignItems="center">
-          {isDirty && (
-            <Chip icon={<WarningIcon sx={{ fontSize: 16 }} />} label="Cambios sin guardar" size="small" sx={{ backgroundColor: "#FEF3C7", color: "#92400E", fontWeight: 700 }} />
-          )}
-          <Button variant="outlined" startIcon={<RefreshIcon />} onClick={load} disabled={loading || saving} size="small">
-            Recargar
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<SaveIcon />}
-            onClick={() => setConfirmOpen(true)}
-            disabled={loading || saving || !isDirty}
-            size="small"
-          >
-            Guardar cambios
-          </Button>
-        </Stack>
+        <Button variant="outlined" startIcon={<RefreshIcon />} onClick={load} disabled={saving}>
+          Actualizar datos
+        </Button>
       </Stack>
 
-      {(loading || saving) && (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-          <CircularProgress sx={{ color: "#4B2E83" }} />
-        </Box>
-      )}
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+      {success && <Alert severity="success" sx={{ mb: 3 }}>{success}</Alert>}
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+      <Stack spacing={4}>
+        {/* Tasas Activas */}
+        <Paper sx={{ p: 3, borderLeft: "4px solid #4B2E83" }}>
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+            <EngineIcon color="primary" />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Estado de Tasas</Typography>
+          </Stack>
 
-      {!loading && (
-        <Stack spacing={3}>
-          {/* Margenes */}
-          <Paper sx={{ p: 3, borderLeft: "4px solid #4B2E83" }}>
-            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-              <Box sx={{ backgroundColor: "#4B2E8312", borderRadius: "12px", p: 1, display: "flex" }}>
-                <MarginIcon sx={{ color: "#4B2E83", fontSize: 24 }} />
-              </Box>
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>Margenes (Ganancia)</Typography>
-                <Typography variant="caption" sx={{ color: "#64748B" }}>Porcentajes aplicados a la tasa final del cliente</Typography>
-              </Box>
-            </Stack>
-
-            <Stack spacing={2.5}>
-              {marginFields.map((f) => {
-                const status = marginStatus(f.value);
-                return (
-                  <Box key={f.key}>
-                    <Stack direction="row" spacing={2} alignItems="flex-start">
-                      <TextField
-                        label={f.label}
-                        value={f.value}
-                        onChange={(e) => f.setter(e.target.value)}
-                        disabled={loading || saving}
-                        sx={{ flex: 1, maxWidth: 300 }}
-                        size="small"
-                        InputProps={{
-                          endAdornment: <InputAdornment position="end">%</InputAdornment>,
-                        }}
-                        helperText={f.helper}
-                      />
-                      <Chip
-                        label={status.label}
-                        size="small"
-                        sx={{ mt: 1, fontWeight: 700, height: 24, backgroundColor: `${status.color}15`, color: status.color }}
-                      />
-                      <Tooltip title={`Ultima actualizacion: ${formatDate(lastUpdates[f.key] ?? null)}`}>
-                        <IconButton size="small" sx={{ mt: 0.5 }}>
-                          <HistoryIcon sx={{ fontSize: 18, color: "#94A3B8" }} />
-                        </IconButton>
-                      </Tooltip>
-                    </Stack>
-                    {Number(f.value) > 0 && Number(f.value) <= 50 && (
-                      <Slider
-                        value={Number(f.value) || 0}
-                        onChange={(_, v) => f.setter(String(v))}
-                        min={0}
-                        max={30}
-                        step={0.5}
-                        disabled={loading || saving}
-                        sx={{ maxWidth: 300, ml: 0, mt: 0.5, color: "#4B2E83", "& .MuiSlider-thumb": { width: 16, height: 16 } }}
-                        valueLabelDisplay="auto"
-                        valueLabelFormat={(v) => `${v}%`}
-                      />
-                    )}
-                  </Box>
-                );
-              })}
-            </Stack>
-
-            {/* Preview */}
-            <Divider sx={{ my: 2 }} />
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-              <InfoIcon sx={{ fontSize: 16, color: "#64748B" }} />
-              <Typography variant="caption" sx={{ color: "#64748B", fontWeight: 600 }}>
-                Preview: Si tasa base es $1.00, el cliente ve:
+          <Stack direction="row" spacing={4} sx={{ mb: 3 }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Versión Activa</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                {activeVersion ? `#${activeVersion.id}` : "Ninguna"}
               </Typography>
-            </Stack>
-            <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", gap: 1 }}>
-              {marginFields.map((f) => {
-                const pct = Number(f.value) || 0;
-                const clientRate = (1 * (1 - pct / 100)).toFixed(4);
-                return (
-                  <Chip
-                    key={f.key}
-                    label={`${f.label.replace("Margen ", "")}: $${clientRate}`}
-                    size="small"
-                    variant="outlined"
-                    sx={{ fontWeight: 600, fontFamily: "monospace" }}
-                  />
-                );
-              })}
-            </Stack>
-          </Paper>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Generada el</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                {activeVersion ? formatDate(activeVersion.created_at) : "-"}
+              </Typography>
+            </Box>
+            <Box sx={{ flex: 1, textAlign: "right" }}>
+              <Button
+                variant="contained"
+                color="secondary"
+                startIcon={<SyncIcon />}
+                onClick={manualRegen}
+                disabled={saving}
+              >
+                Regenerar Tasas Ahora
+              </Button>
+            </Box>
+          </Stack>
 
-          {/* Motor de tasas */}
-          <Paper sx={{ p: 3, borderLeft: "4px solid #2563EB" }}>
-            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-              <Box sx={{ backgroundColor: "#2563EB12", borderRadius: "12px", p: 1, display: "flex" }}>
-                <EngineIcon sx={{ color: "#2563EB", fontSize: 24 }} />
-              </Box>
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>Motor de tasas</Typography>
-                <Typography variant="caption" sx={{ color: "#64748B" }}>Controla cuando se recalculan tasas por cambios del mercado</Typography>
-              </Box>
-            </Stack>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>Historial Reciente</Typography>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>ID</TableCell>
+                  <TableCell>Tipo</TableCell>
+                  <TableCell>Razón</TableCell>
+                  <TableCell>Fecha</TableCell>
+                  <TableCell>Estado</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {history.map((v) => (
+                  <TableRow key={v.id}>
+                    <TableCell>#{v.id}</TableCell>
+                    <TableCell><Chip label={v.kind} size="small" variant="outlined" /></TableCell>
+                    <TableCell sx={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {v.reason || "-"}
+                    </TableCell>
+                    <TableCell>{formatDate(v.created_at)}</TableCell>
+                    <TableCell>
+                      {v.is_active ? <Chip label="Activa" size="small" color="success" /> : <Typography variant="caption" color="text.secondary">Inactiva</Typography>}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
 
-            <Stack direction="row" spacing={2} alignItems="flex-start">
-              <TextField
-                label="Umbral de volatilidad"
-                value={fluctuationThreshold}
-                onChange={(e) => setFluctuationThreshold(e.target.value)}
-                disabled={loading || saving}
-                sx={{ maxWidth: 300 }}
-                size="small"
-                InputProps={{
-                  endAdornment: <InputAdornment position="end">%</InputAdornment>,
-                }}
-                helperText="Si el precio P2P cambia mas de este %, se recalcula la tasa"
-              />
-              <Chip
-                label={marginStatus(fluctuationThreshold).label}
-                size="small"
-                sx={{ mt: 1, fontWeight: 700, height: 24, backgroundColor: `${marginStatus(fluctuationThreshold).color}15`, color: marginStatus(fluctuationThreshold).color }}
-              />
-              <Tooltip title={`Ultima actualizacion: ${formatDate(lastUpdates.pricing_fluctuation_threshold ?? null)}`}>
-                <IconButton size="small" sx={{ mt: 0.5 }}>
-                  <HistoryIcon sx={{ fontSize: 18, color: "#94A3B8" }} />
-                </IconButton>
-              </Tooltip>
-            </Stack>
+        {/* Márgenes Generales */}
+        <Paper sx={{ p: 3, borderLeft: "4px solid #16A34A" }}>
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+            <MarginIcon sx={{ color: "#16A34A" }} />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Márgenes Globales</Typography>
+          </Stack>
 
-            <Slider
-              value={Number(fluctuationThreshold) || 0}
-              onChange={(_, v) => setFluctuationThreshold(String(v))}
-              min={0}
-              max={10}
-              step={0.5}
-              disabled={loading || saving}
-              sx={{ maxWidth: 300, mt: 0.5, color: "#2563EB", "& .MuiSlider-thumb": { width: 16, height: 16 } }}
-              valueLabelDisplay="auto"
-              valueLabelFormat={(v) => `${v}%`}
+          <Stack direction="row" spacing={3} sx={{ mb: 3 }}>
+            <TextField
+              label="Margen General (%)"
+              value={marginDefault}
+              onChange={(e) => setMarginDefault(e.target.value)}
+              InputProps={{ endAdornment: "%" }}
+              size="small"
+              fullWidth
             />
-          </Paper>
+            <TextField
+              label="Destino VENEZUELA (%)"
+              value={marginDestVenez}
+              onChange={(e) => setMarginDestVenez(e.target.value)}
+              InputProps={{ endAdornment: "%" }}
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Ruta USA -> VE (%)"
+              value={marginRouteUsaVenez}
+              onChange={(e) => setMarginRouteUsaVenez(e.target.value)}
+              InputProps={{ endAdornment: "%" }}
+              size="small"
+              fullWidth
+            />
+          </Stack>
 
-          {/* Binance P2P */}
-          <Paper sx={{ p: 3, borderLeft: "4px solid #F59E0B" }}>
-            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-              <Box sx={{ backgroundColor: "#F59E0B12", borderRadius: "12px", p: 1, display: "flex" }}>
-                <P2PIcon sx={{ color: "#F59E0B", fontSize: 24 }} />
-              </Box>
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>Binance P2P</Typography>
-                <Typography variant="caption" sx={{ color: "#64748B" }}>Parametros para seleccionar el mejor precio de referencia</Typography>
-              </Box>
-            </Stack>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <FormControlLabel
+              control={<Checkbox checked={regenerateNow} onChange={(e) => setRegenerateNow(e.target.checked)} />}
+              label="Regenerar tasas inmediatamente al guardar"
+            />
+            <Button variant="contained" startIcon={<SaveIcon />} onClick={() => setConfirmOpen(true)} disabled={saving}>
+              Guardar Márgenes
+            </Button>
+          </Stack>
+        </Paper>
 
-            <Stack direction="row" spacing={3} alignItems="flex-start" sx={{ mb: 3 }}>
-              <TextField
-                label="Ordenes a revisar"
-                value={p2pRows}
-                onChange={(e) => setP2pRows(e.target.value)}
-                disabled={loading || saving}
-                sx={{ maxWidth: 200 }}
-                size="small"
-                helperText="Cuantas ofertas P2P analizar (1-50)"
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={p2pRequireMerchant}
-                    onChange={(e) => setP2pRequireMerchant(e.target.checked)}
-                    disabled={loading || saving}
-                    sx={{ "& .MuiSwitch-switchBase.Mui-checked": { color: "#F59E0B" }, "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": { backgroundColor: "#F59E0B" } }}
-                  />
-                }
-                label={
-                  <Stack>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Solo comerciantes verificados</Typography>
-                    <Typography variant="caption" sx={{ color: "#64748B" }}>Filtra ofertas de merchants Binance</Typography>
-                  </Stack>
-                }
-              />
-            </Stack>
+        {/* Profit Split */}
+        <Paper sx={{ p: 3, borderLeft: "4px solid #2563EB" }}>
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+            <HistoryIcon sx={{ color: "#2563EB" }} />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Distribución de Profit (Splits)</Typography>
+          </Stack>
 
-            <Divider sx={{ mb: 2 }} />
-
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Montos de referencia por moneda</Typography>
-              <Tooltip title="Se usa para filtrar ofertas por un monto tipico y evitar precios irreales">
-                <InfoIcon sx={{ fontSize: 16, color: "#94A3B8" }} />
-              </Tooltip>
-              <Tooltip title={`Ultima actualizacion: ${formatDate(lastUpdates.p2p_reference_amounts ?? null)}`}>
-                <IconButton size="small">
-                  <HistoryIcon sx={{ fontSize: 16, color: "#94A3B8" }} />
-                </IconButton>
-              </Tooltip>
-            </Stack>
-
-            <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", gap: 2 }}>
-              {Object.entries(p2pRef).sort(([a], [b]) => a.localeCompare(b)).map(([fiat, amt]) => (
-                <TextField
-                  key={fiat}
-                  label={CURRENCY_LABELS[fiat] || fiat}
-                  value={String(amt)}
-                  onChange={(e) => {
-                    const n = Number(String(e.target.value).replace(",", "."));
-                    setP2pRef((prev) => ({ ...prev, [fiat]: Number.isFinite(n) ? n : prev[fiat] }));
-                  }}
-                  disabled={loading || saving}
-                  size="small"
-                  sx={{ width: 160 }}
-                  InputProps={{
-                    endAdornment: <InputAdornment position="end">{fiat}</InputAdornment>,
-                  }}
-                />
-              ))}
-            </Stack>
-          </Paper>
-        </Stack>
-      )}
+          <Stack direction="row" spacing={3} sx={{ mb: 3 }}>
+            <TextField
+              label="Operador (con Sponsor) (%)"
+              value={opWithSponsor}
+              onChange={(e) => setOpWithSponsor(e.target.value)}
+              helperText="Lo que recibe el op si tiene sponsor"
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Sponsor (%)"
+              value={sponsorPct}
+              onChange={(e) => setSponsorPct(e.target.value)}
+              helperText="Comisión para el sponsor"
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Operador Solo (%)"
+              value={opSolo}
+              onChange={(e) => setOpSolo(e.target.value)}
+              helperText="Lo que recibe el op si NO tiene sponsor"
+              size="small"
+              fullWidth
+            />
+          </Stack>
+          <Box sx={{ textAlign: "right" }}>
+            <Button variant="contained" onClick={saveProfitSplit} disabled={saving}>
+              Guardar Splits
+            </Button>
+          </Box>
+        </Paper>
+      </Stack>
 
       {/* Confirm Dialog */}
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Confirmar cambios</DialogTitle>
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>¿Confirmar cambios?</DialogTitle>
         <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            Los cambios en margenes afectan INMEDIATAMENTE las tasas que ven los clientes.
-          </Alert>
-          <Typography variant="body2" sx={{ color: "#64748B" }}>
-            Se guardaran los nuevos valores de margenes, motor de tasas y parametros P2P.
-            Esta accion queda registrada en el audit log.
+          <Typography>
+            Se actualizarán los márgenes globales en la base de datos.
+            {regenerateNow && " Además, se iniciará el proceso de regeneración de tasas."}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmOpen(false)} disabled={saving}>Cancelar</Button>
-          <Button
-            variant="contained"
-            onClick={saveAll}
-            disabled={saving}
-            startIcon={saving ? <CircularProgress size={16} /> : <CheckIcon />}
-            sx={{ backgroundColor: "#4B2E83" }}
-          >
-            {saving ? "Guardando..." : "Confirmar y guardar"}
-          </Button>
+          <Button onClick={() => setConfirmOpen(false)}>Cancelar</Button>
+          <Button onClick={saveMargins} variant="contained" color="primary">Confirmar</Button>
         </DialogActions>
       </Dialog>
     </Box>
