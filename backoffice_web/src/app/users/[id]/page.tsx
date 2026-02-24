@@ -6,10 +6,14 @@ import {
   Box, Typography, Card, CardContent, Stack, Button,
   Alert, CircularProgress, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, Divider,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  IconButton,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
   AccountBalanceWallet as WalletIcon,
+  LockReset as PasswordIcon,
+  ContentCopy as CopyIcon,
   TrendingUp as ProfitIcon,
   CalendarMonth as MonthIcon,
   People as ReferralsIcon,
@@ -215,6 +219,11 @@ export default function UserDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Password reset
+  const [resetOpen, setResetOpen] = useState(false);
+  const [tempPass, setTempPass] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
   const fetchDetail = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
@@ -228,6 +237,29 @@ export default function UserDetailPage() {
       setLoading(false);
     }
   }, [userId]);
+
+  const handleResetPassword = async () => {
+    if (!confirm('¿Seguro que quieres resetear el password de este usuario?')) return;
+    setResetLoading(true);
+    try {
+      const res = await apiRequest<{ ok: boolean; temp_password?: string }>(`/users/${userId}/password`, {
+        method: 'PUT',
+      });
+      if (res.ok && res.temp_password) {
+        setTempPass(res.temp_password);
+        setResetOpen(true);
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error reseteando password');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(tempPass);
+    alert('Password copiado al portapapeles');
+  };
 
   useEffect(() => {
     if (token) fetchDetail();
@@ -288,6 +320,18 @@ export default function UserDetailPage() {
           color={user.is_active ? 'success' : 'default'}
         />
         <Chip label={kycCfg.label} color={kycCfg.color} />
+        {user.role !== 'admin' && (
+          <Button
+            variant="contained"
+            color="warning"
+            startIcon={<PasswordIcon />}
+            size="small"
+            onClick={handleResetPassword}
+            disabled={resetLoading}
+          >
+            Reset Password
+          </Button>
+        )}
       </Stack>
 
       {/* ── METRICAS ── */}
@@ -487,6 +531,33 @@ export default function UserDetailPage() {
           </Table>
         </TableContainer>
       </Card>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Nuevo Password Temporal</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Este password solo se mostrará <b>UNA VEZ</b>. Cópialo y envíaselo al usuario.
+          </Alert>
+          <Box sx={{
+            p: 2, bgcolor: '#F1F5F9', borderRadius: 2,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            border: '1px solid #E2E8F0'
+          }}>
+            <Typography sx={{ fontWeight: 800, fontFamily: 'monospace', fontSize: '1.2rem', color: '#1E293B' }}>
+              {tempPass}
+            </Typography>
+            <IconButton onClick={handleCopy} color="primary" size="small">
+              <CopyIcon />
+            </IconButton>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5 }}>
+          <Button onClick={() => setResetOpen(false)} variant="contained" fullWidth>
+            Entendido, ya lo copié
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

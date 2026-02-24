@@ -45,7 +45,7 @@ def get_all_commissions(auth: dict = Depends(require_admin)):
         configs["routes"] = json.loads(routes["value_json"]) if isinstance(routes["value_json"], str) else routes["value_json"]
 
     # Defaults
-    for key in ["margin_default", "margin_dest_venez", "margin_route_usa_venez"]:
+    for key in ["margin_default", "margin_dest_venez", "margin_route_usa_venez", "profit_split"]:
         row = fetch_one("SELECT value_json FROM settings WHERE key=%s", (key,))
         if row:
             configs[key] = json.loads(row["value_json"]) if isinstance(row["value_json"], str) else row["value_json"]
