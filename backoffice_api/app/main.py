@@ -3,15 +3,7 @@ Sendmax Backoffice API - Production Ready (M10)
 """
 
 import os
-import sys
 import logging
-
-# Asegurar que el directorio raíz del proyecto esté en el path para permitir importaciones desde 'src'
-# independientemente de si Railway inicia desde la raíz o desde backoffice_api/
-root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-if root_path not in sys.path:
-    sys.path.append(root_path)
-
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException
