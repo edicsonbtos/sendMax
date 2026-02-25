@@ -11,5 +11,5 @@ COPY . .
 
 EXPOSE 8080
 
-# Run the application using shell format to support environment variables
+# Run the application
 CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}
