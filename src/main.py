@@ -18,6 +18,7 @@ from src.config.settings import settings
 from src.db.connection import close_pool, wait_db_ready, is_pool_open
 from src.rates_scheduler import RatesScheduler
 from src.telegram_app.bot import build_bot
+from src.api import internal_rates
 
 # === SETUP LOGGING AL IMPORTAR (NO dentro de main()) ===
 setup_logging()
@@ -99,6 +100,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(internal_rates.router)
 
 
 @app.get("/")

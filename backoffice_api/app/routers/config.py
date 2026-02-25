@@ -5,10 +5,13 @@ from pydantic import BaseModel, Field
 from decimal import Decimal
 from ..db import run_in_transaction, fetch_one
 from ..auth import require_admin
-from src.rates_generator import generate_rates_full
 import json
+import os
+import httpx
+import logging
 
 router = APIRouter(prefix="/api/v1/config", tags=["config"])
+logger = logging.getLogger(__name__)
 
 class CommissionRouteUpdate(BaseModel):
     route: str  # "CHILE_VENEZUELA"
@@ -228,7 +231,28 @@ async def update_margins(
 
     regen_result = None
     if body.regenerate:
-        regen_result = await generate_rates_full(kind="manual", reason="Auto-regen tras cambio de márgenes")
+        bot_url = os.getenv("BOT_INTERNAL_URL")
+        internal_key = os.getenv("INTERNAL_API_KEY")
+        if bot_url and internal_key:
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.post(
+                        f"{bot_url.rstrip('/')}/internal/rates/regenerate",
+                        headers={"X-INTERNAL-KEY": internal_key},
+                        json={
+                            "kind": "manual",
+                            "reason": f"Auto-regen tras cambio de márgenes (por {updated_by})"
+                        }
+                    )
+                if resp.status_code == 200:
+                    regen_result = resp.json()
+                else:
+                    regen_result = {"error": f"Bot API error: {resp.status_code}", "detail": resp.text}
+            except Exception as e:
+                logger.error(f"Error llamando al bot para autoregen: {e}")
+                regen_result = {"error": "connection_error", "detail": str(e)}
+        else:
+            regen_result = {"error": "missing_internal_config"}
 
     return {
         "ok": True,
