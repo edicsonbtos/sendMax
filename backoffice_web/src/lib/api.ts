@@ -1,5 +1,15 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKOFFICE_API_BASE || '';
 
+if (typeof window !== 'undefined') {
+  console.log("NEXT_PUBLIC_API_URL detectada:", process.env.NEXT_PUBLIC_API_URL);
+  console.log("NEXT_PUBLIC_BACKOFFICE_API_BASE detectada:", process.env.NEXT_PUBLIC_BACKOFFICE_API_BASE);
+  console.log("API_BASE resultante:", API_BASE);
+
+  if (!API_BASE) {
+    console.error("CRÍTICO: API_BASE está vacía. Las peticiones al backend fallarán (404).");
+  }
+}
+
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('auth_token');

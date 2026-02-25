@@ -51,6 +51,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setFullName(storedName);
     setApiKeyState(storedApiKey);
     setIsReady(true);
+
+    if (typeof window !== 'undefined') {
+      console.log("AuthProvider: API_URL detectada:", process.env.NEXT_PUBLIC_API_URL);
+    }
   }, []);
 
   useEffect(() => {
