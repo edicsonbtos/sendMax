@@ -11,5 +11,6 @@ COPY . .
 
 EXPOSE 8080
 
-# Run the application
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}
+# Use shell form to ensure environment variable expansion
+# We use the bracket form with sh -c to be explicitly clear and robust
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
