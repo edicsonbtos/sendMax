@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Card, CardContent, Typography, TextField, Button, Alert, Stack, Divider, CircularProgress } from '@mui/material';
 import { useAuth } from '@/components/AuthProvider';
-import { API_BASE } from '@/lib/api';
+import { apiPost } from '@/lib/api';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -20,14 +20,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(API_BASE + '/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.detail || 'Credenciales invalidas');
+      const data = await apiPost<{
+        access_token: string;
+        role: string;
+        full_name: string;
+      }>('/auth/login', { email, password });
 
       login(data.access_token, data.role, data.full_name);
       router.push('/');
