@@ -280,7 +280,7 @@ async def cancel_order_tx(conn: psycopg.AsyncConnection, public_id: int, reason:
             cancel_reason = %s,
             updated_at = now()
         WHERE public_id = %s
-          AND status NOT IN ('PAGADA', 'CANCELADA');
+          AND status NOT IN ('PAGADA', 'COMPLETADA', 'CANCELADA');
     """
     async with conn.cursor() as cur:
         await cur.execute(sql, (reason, public_id))

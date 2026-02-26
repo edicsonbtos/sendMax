@@ -33,8 +33,8 @@ async def get_auth_context(
             user_id = payload.get("user_id")
             if email:
                 return {"email": email, "role": role, "user_id": user_id, "auth": "jwt"}
-        except InvalidTokenError:
-            pass
+        except InvalidTokenError as e:
+            logger.warning("JWT inválido: %s", e)
 
     # 3) API KEY (interna / legacy)
     if api_key and BACKOFFICE_API_KEY and api_key == BACKOFFICE_API_KEY:

@@ -536,6 +536,7 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
             sponsor_id = None
 
         profit_para_distribuir = profit_real
+        sp_pct = Decimal("0")
 
         # Leer split desde DB (configurable en tiempo real)
         from src.utils.formatting import fmt_percent

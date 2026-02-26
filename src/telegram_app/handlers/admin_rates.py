@@ -14,9 +14,8 @@ async def rates_now(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     Admin only: genera tasas ahora (baseline/manual) sin esperar 9am (ASYNC).
     """
     telegram_id = update.effective_user.id
-    admin_id = int(settings.ADMIN_TELEGRAM_USER_ID) if settings.ADMIN_TELEGRAM_USER_ID else None
 
-    if admin_id is None or telegram_id != admin_id:
+    if not settings.is_admin_id(telegram_id):
         await update.message.reply_text("No autorizado.")
         return
 

@@ -338,17 +338,28 @@ async def on_confirm_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
 
     await q.message.reply_text("✅ Solicitud creada. Te avisaré cuando sea procesada.")
 
-    admin_chat_id = int(settings.PAYMENTS_TELEGRAM_CHAT_ID or next(iter(settings.admin_user_ids)))
-    admin_text = (
-        "💸 Retiro SOLICITADO\n\n"
-        f"Operador: {db_user.alias}\n"
-        f"País: {country}\n"
-        f"Monto: {amount:.8f} USDT\n"
-        f"Estimado: {fiat_amount:.2f} {fiat}\n"
-        f"Destino (KYC): {dest_text}\n"
-        f"ID: {withdrawal_id}"
-    )
-    await context.bot.send_message(chat_id=admin_chat_id, text=admin_text, reply_markup=_admin_request_keyboard(withdrawal_id))
+    try:
+        admin_chat_id = settings.PAYMENTS_TELEGRAM_CHAT_ID
+        if not admin_chat_id:
+            admin_ids = settings.admin_user_ids
+            if not admin_ids:
+                logger.error("No hay admin IDs ni PAYMENTS_TELEGRAM_CHAT_ID configurado para notificar retiro %s", withdrawal_id)
+                return ConversationHandler.END
+            admin_chat_id = next(iter(admin_ids))
+        admin_chat_id = int(admin_chat_id)
+
+        admin_text = (
+            "💸 Retiro SOLICITADO\n\n"
+            f"Operador: {db_user.alias}\n"
+            f"País: {country}\n"
+            f"Monto: {amount:.8f} USDT\n"
+            f"Estimado: {fiat_amount:.2f} {fiat}\n"
+            f"Destino (KYC): {dest_text}\n"
+            f"ID: {withdrawal_id}"
+        )
+        await context.bot.send_message(chat_id=admin_chat_id, text=admin_text, reply_markup=_admin_request_keyboard(withdrawal_id))
+    except Exception:
+        logger.exception("Error notificando admin sobre retiro %s (retiro ya registrado)", withdrawal_id)
     return ConversationHandler.END
 
 
