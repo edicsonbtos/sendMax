@@ -4,7 +4,7 @@ from src.telegram_app.ui.routes_popular import COUNTRY_LABELS
 from src.telegram_app.utils.text_escape import esc_html
 
 # Mapping from country code to its fiat currency
-ORIGIN_FIAT_CURRENCY = {
+COUNTRY_FIAT_CURRENCY = {
     "PERU": "PEN",
     "CHILE": "CLP",
     "VENEZUELA": "VES",
@@ -20,7 +20,7 @@ def format_origin_group_message(order) -> str:
     amount_origin = getattr(order, "amount_origin", 0)
     public_id = getattr(order, "public_id", "0")
 
-    currency = ORIGIN_FIAT_CURRENCY.get(str(origin).upper(), str(origin))
+    currency = COUNTRY_FIAT_CURRENCY.get(str(origin).upper(), str(origin))
     country_name = COUNTRY_LABELS.get(str(origin).upper(), str(origin))
 
     return (
@@ -35,7 +35,7 @@ def format_payments_group_message(order) -> str:
     beneficiary = (getattr(order, "beneficiary_text", "") or "").strip()
     public_id = getattr(order, "public_id", "0")
 
-    currency = ORIGIN_FIAT_CURRENCY.get(str(dest).upper(), str(dest))
+    currency = COUNTRY_FIAT_CURRENCY.get(str(dest).upper(), str(dest))
 
     # Usar esc_html para los datos del beneficiario para evitar romper el parse_mode HTML
     return (
