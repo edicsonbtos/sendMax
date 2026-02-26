@@ -1,6 +1,12 @@
-FROM python:3.12-slim
+﻿FROM python:3.12-slim
 
 WORKDIR /app
+
+# System deps for psycopg (libpq)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libpq5 \
+ && rm -rf /var/lib/apt/lists/*
+
 
 # Install dependencies
 COPY requirements.txt .
