@@ -1,4 +1,4 @@
-"""Router: Configuración dinámica (comisiones, splits)"""
+﻿"""Router: ConfiguraciÃ³n dinÃ¡mica (comisiones, splits)"""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -13,6 +13,28 @@ import logging
 router = APIRouter(prefix="/api/v1/config", tags=["config"])
 logger = logging.getLogger(__name__)
 
+
+def _json_obj(value, default=None):
+    """
+    Normaliza JSON/JSONB desde Postgres para soportar psycopg3:
+    - JSONB puede venir como dict/list (ya decodificado)
+    - o como str (JSON serializado)
+    """
+    if default is None:
+        default = {}
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, (bytes, bytearray)):
+        value = value.decode("utf-8", errors="ignore")
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return default
+        return json.loads(s)
+    # fallback seguro (por si viene Decimal/u otros)
+    return json.loads(json.dumps(value))
 class CommissionRouteUpdate(BaseModel):
     route: str  # "CHILE_VENEZUELA"
     percent: Decimal = Field(ge=0, le=0.5, decimal_places=4)
@@ -39,10 +61,10 @@ def _get_updated_by(auth: dict, request: Request) -> str:
 
 @router.get("/commissions")
 def get_all_commissions(auth: dict = Depends(require_admin)):
-    """Lista todas las configuraciones de comisión."""
+    """Lista todas las configuraciones de comisiÃ³n."""
     configs = {}
 
-    # Rutas específicas
+    # Rutas especÃ­ficas
     routes = fetch_one("SELECT value_json FROM settings WHERE key='commission_routes'")
     if routes:
         configs["routes"] = json.loads(routes["value_json"]) if isinstance(routes["value_json"], str) else routes["value_json"]
@@ -57,14 +79,14 @@ def get_all_commissions(auth: dict = Depends(require_admin)):
 
 @router.put("/commission/route")
 def update_commission_route(body: CommissionRouteUpdate, request: Request, auth: dict = Depends(require_admin)):
-    """Actualiza comisión para ruta específica."""
+    """Actualiza comisiÃ³n para ruta especÃ­fica."""
     updated_by = _get_updated_by(auth, request)
     user_id = auth.get("user_id")
     def _update(cur):
         # Leer actual
         cur.execute("SELECT value_json FROM settings WHERE key='commission_routes' FOR UPDATE")
         row = cur.fetchone()
-        routes = json.loads(row["value_json"]) if row and row["value_json"] else {}
+        routes = _json_obj(row["value_json"] if row else None, default={})
 
         before_json = json.dumps(routes)
         # Actualizar
@@ -97,7 +119,7 @@ def update_commission_route(body: CommissionRouteUpdate, request: Request, auth:
 
 @router.delete("/commission/route/{route}")
 def delete_commission_route(route: str, request: Request, auth: dict = Depends(require_admin)):
-    """Elimina la comisión específica para una ruta."""
+    """Elimina la comisiÃ³n especÃ­fica para una ruta."""
     updated_by = _get_updated_by(auth, request)
     user_id = auth.get("user_id")
     route_upper = route.upper()
@@ -105,7 +127,7 @@ def delete_commission_route(route: str, request: Request, auth: dict = Depends(r
     def _delete(cur):
         cur.execute("SELECT value_json FROM settings WHERE key='commission_routes' FOR UPDATE")
         row = cur.fetchone()
-        routes = json.loads(row["value_json"]) if row and row["value_json"] else {}
+        routes = _json_obj(row["value_json"] if row else None, default={})
 
         if route_upper not in routes:
             return False
@@ -143,8 +165,8 @@ def delete_commission_route(route: str, request: Request, auth: dict = Depends(r
 
 @router.put("/profit-split")
 def update_profit_split(body: ProfitSplitUpdate, request: Request, auth: dict = Depends(require_admin)):
-    """Actualiza distribución de profit."""
-    # Validar que sume sentido (op + sp ≤ 1)
+    """Actualiza distribuciÃ³n de profit."""
+    # Validar que sume sentido (op + sp â‰¤ 1)
     if body.operator_with_sponsor + body.sponsor > 1:
         raise HTTPException(status_code=400, detail="operator_with_sponsor + sponsor no puede superar 1.0")
 
@@ -185,7 +207,7 @@ async def update_margins(
     request: Request,
     auth: dict = Depends(require_admin)
 ):
-    """Actualiza márgenes y opcionalmente regenera tasas."""
+    """Actualiza mÃ¡rgenes y opcionalmente regenera tasas."""
     updated_by = _get_updated_by(auth, request)
     user_id = auth.get("user_id")
 
@@ -194,7 +216,7 @@ async def update_margins(
         for key in ["margin_default", "margin_dest_venez", "margin_route_usa_venez"]:
             val = getattr(body, key)
             if val is not None:
-                # Leer valor actual para auditoría
+                # Leer valor actual para auditorÃ­a
                 cur.execute("SELECT value_json FROM settings WHERE key=%s", (key,))
                 before = cur.fetchone()
 
@@ -241,7 +263,7 @@ async def update_margins(
                         headers={"X-INTERNAL-KEY": internal_key},
                         json={
                             "kind": "manual",
-                            "reason": f"Auto-regen tras cambio de márgenes (por {updated_by})"
+                            "reason": f"Auto-regen tras cambio de mÃ¡rgenes (por {updated_by})"
                         }
                     )
                 if resp.status_code == 200:
@@ -260,3 +282,4 @@ async def update_margins(
         "regenerated": body.regenerate,
         "regen_result": regen_result
     }
+
