@@ -26,6 +26,7 @@ from src.db.repositories.orders_repo import (
 from src.db.repositories.origin_wallet_repo import add_origin_receipt_daily
 from src.db.repositories.users_repo import get_telegram_id_by_user_id
 from src.db.repositories.wallet_repo import add_ledger_entry_tx
+from src.telegram_app.utils.templates import format_payments_group_message
 from src.integrations.binance_p2p import BinanceP2PClient
 from src.integrations.p2p_config import COUNTRIES
 from src.telegram_app.ui.routes_popular import format_rate_no_noise
@@ -64,10 +65,10 @@ def _order_actions_kb(public_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("⚙️ EN PROCESO", callback_data=f"ord:proc:{public_id}"),
-                InlineKeyboardButton("✅ PAGADA", callback_data=f"ord:paid:{public_id}"),
+                InlineKeyboardButton("⚙️ En Proceso", callback_data=f"ord:proc:{public_id}"),
+                InlineKeyboardButton("✅ Pagado(Aprobado)", callback_data=f"ord:paid:{public_id}"),
             ],
-            [InlineKeyboardButton("❌ CANCELAR", callback_data=f"ord:cancel:{public_id}")],
+            [InlineKeyboardButton("❌ Cancelar", callback_data=f"ord:cancel:{public_id}")],
         ]
     )
 
@@ -296,16 +297,7 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
 
             try:
                 target_chat_id = int(settings.PAYMENTS_TELEGRAM_CHAT_ID)
-                origin = str(order.origin_country)
-                dest = str(order.dest_country)
-
-                summary = (
-                    "📧 <b>ORDEN LISTA PARA PAGOS</b>\n\n"
-                    f"📦 <b>#{public_id}</b>\n"
-                    f"Monto Origen: <b>{order.amount_origin} {origin}</b>\n"
-                    f"Tasa: {format_rate_no_noise(order.rate_client)}\n"
-                    f"Pago Destino: <b>{order.payout_dest} {dest}</b>\n"
-                )
+                summary = format_payments_group_message(order)
 
                 await context.bot.send_message(
                     chat_id=target_chat_id,
@@ -314,14 +306,6 @@ async def handle_admin_order_action(update: Update, context: ContextTypes.DEFAUL
                     reply_markup=_order_actions_kb(public_id),
                     disable_web_page_preview=True,
                 )
-
-                if (order.beneficiary_text or "").strip():
-                    from src.telegram_app.utils.text_escape import esc_html
-                    await context.bot.send_message(
-                        chat_id=target_chat_id,
-                        text="👤 <b>Datos Beneficiario:</b>\n" + esc_html(order.beneficiary_text or ""),
-                        parse_mode="HTML",
-                    )
             except Exception:
                 logger.exception("orig_ok: fallo notificando a PAYMENTS para orden %s", public_id)
 

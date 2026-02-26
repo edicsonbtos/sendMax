@@ -28,6 +28,12 @@ async def internal_regenerate_rates(
         logger.warning(f"Intento de acceso interno no autorizado desde {request.client.host if request.client else 'unknown'}")
         raise HTTPException(status_code=403, detail="No autorizado")
 
+    # Opt-in check
+    from src.config.settings import settings
+    if not settings.ALLOW_REMOTE_RATES_REGEN:
+        logger.info("[INTERNAL] Regeneración de tasas omitida: ALLOW_REMOTE_RATES_REGEN=False")
+        return {"ok": False, "detail": "Regeneración remota no habilitada"}
+
     try:
         logger.info(f"[INTERNAL] Regenerando tasas solicitado. Kind: {body.kind}, Reason: {body.reason}")
         result = await generate_rates_full(kind=body.kind, reason=body.reason)

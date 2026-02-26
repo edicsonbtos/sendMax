@@ -33,6 +33,7 @@ from src.db.repositories.rates_repo import (
     get_route_rate,
 )
 from src.db.repositories.users_repo import get_user_by_telegram_id
+from src.telegram_app.utils.templates import format_origin_group_message
 from src.telegram_app.handlers.panic import MENU_BUTTONS_REGEX, panic_handler
 from src.telegram_app.ui.labels import BTN_NEW_ORDER
 from src.telegram_app.ui.routes_popular import (
@@ -239,24 +240,14 @@ async def _notify_admin_new_order(context: ContextTypes.DEFAULT_TYPE, order) -> 
         return
     target_chat_id = int(target_chat_id)
 
-    origin = order.origin_country
-    dest = order.dest_country
-
-    summary = (
-        "📦 <b>NUEVA ORDEN</b>\n\n"
-        f"🆔 <b>#{_fmt_public_id(order.public_id)}</b>\n"
-        f"Ruta: {COUNTRY_FLAGS[origin]} {COUNTRY_LABELS[origin]} -> {COUNTRY_FLAGS[dest]} {COUNTRY_LABELS[dest]}\n"
-        f"Monto Origen: <b>{_fmt_money(order.amount_origin)} {origin}</b>\n"
-        f"Tasa: {_fmt_rate(order.rate_client)}\n"
-        f"Pago Destino: <b>{_fmt_money(order.payout_dest)} {dest}</b>\n"
-        f"Estado: {order.status}"
-    )
+    summary = format_origin_group_message(order)
 
     kb = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ ORIGEN RECIBIDO", callback_data=f"ord:orig_ok:{order.public_id}"),
-                InlineKeyboardButton("❌ ORIGEN RECHAZADO", callback_data=f"ord:orig_rej:{order.public_id}"),
+                InlineKeyboardButton("✅ Aprobar", callback_data=f"ord:orig_ok:{order.public_id}"),
+                InlineKeyboardButton("❌ Rechazar", callback_data=f"ord:orig_rej:{order.public_id}"),
+                InlineKeyboardButton("⚙️ En Proceso", callback_data=f"ord:proc:{order.public_id}"),
             ]
         ]
     )
@@ -269,18 +260,12 @@ async def _notify_admin_new_order(context: ContextTypes.DEFAULT_TYPE, order) -> 
         disable_web_page_preview=True,
     )
 
-    if (order.beneficiary_text or "").strip():
-        await context.bot.send_message(
-            chat_id=target_chat_id,
-            text="👤 <b>Datos Beneficiario:</b>\n" + esc_html(order.beneficiary_text or ""),
-            parse_mode="HTML",
-        )
-
     if order.origin_payment_proof_file_id:
+        from src.utils.formatting import fmt_public_id
         await context.bot.send_photo(
             chat_id=target_chat_id,
             photo=order.origin_payment_proof_file_id,
-            caption=f"📄 Comprobante Origen #{_fmt_public_id(order.public_id)}",
+            caption=f"📄 Comprobante Origen #{fmt_public_id(order.public_id)}",
         )
 
 

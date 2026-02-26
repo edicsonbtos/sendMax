@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     ORIGIN_REVIEW_TELEGRAM_CHAT_ID: int | None = None
 
     FLOW_DEBUG: int = 0
+    ALLOW_REMOTE_RATES_REGEN: bool = False
 
     PAYMENT_METHODS_VENEZUELA: str | None = None
     PAYMENT_METHODS_USA: str | None = None
