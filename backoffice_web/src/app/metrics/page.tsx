@@ -50,7 +50,7 @@ import {
   Pie,
 } from 'recharts';
 import { useAuth } from '@/components/AuthProvider';
-import { apiRequest } from '@/lib/api';
+import { apiRequest, API_BASE, getToken, getApiKey } from '@/lib/api';
 
 /* ============ Types ============ */
 interface MetricsOverview {
@@ -263,6 +263,25 @@ export default function MetricsPage() {
     );
   };
 
+  const downloadOrdersMetricsCSV = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/metrics/export-orders?days=${days}`, {
+        headers: {
+          'Authorization': `Bearer ${getToken()}`,
+          'X-API-KEY': getApiKey() || ''
+        }
+      });
+      if (!response.ok) throw new Error('Error al exportar órdenes');
+      const blob = await response.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `export_ordenes_${days}d_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+    } catch (err) {
+      setError('Error descargando exportación de órdenes');
+    }
+  };
+
   return (
     <Box className="fade-in">
       {/* Header */}
@@ -281,6 +300,7 @@ export default function MetricsPage() {
               <MenuItem value={90}>90 dias</MenuItem>
             </Select>
           </FormControl>
+          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={downloadOrdersMetricsCSV}>Exportar Órdenes CSV</Button>
           <Button variant="contained" startIcon={<RefreshIcon />} onClick={fetchData} disabled={loading}>Actualizar</Button>
         </Stack>
       </Stack>
