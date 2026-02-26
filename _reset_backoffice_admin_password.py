@@ -5,7 +5,11 @@ import bcrypt
 EMAIL = "admin@sendmax.com"
 NEW_PASSWORD = "Admin123!"
 
-url = os.environ["postgresql://neondb_owner:npg_8Eqh0xcTGVXQ@ep-damp-wave-ahgz5qnw-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=requirea"]
+url = os.environ.get("DATABASE_URL")
+if not url:
+    print("Error: DATABASE_URL not set.")
+    exit(1)
+
 hashed = bcrypt.hashpw(NEW_PASSWORD.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 with psycopg.connect(url) as conn:
