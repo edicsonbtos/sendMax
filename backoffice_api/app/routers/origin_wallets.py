@@ -2,8 +2,11 @@
    Version corregida: integridad financiera + atomicidad + advisory locks
 """
 
+import io
+import csv
 from datetime import date as _date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query, Header, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ..db import fetch_one, fetch_all, run_in_transaction
 from ..auth import require_admin
@@ -601,6 +604,55 @@ def create_origin_deposit(payload: OriginDepositIn, auth: dict = Depends(require
 # ============================================================
 # GET /origin-wallets/current-balances (sin cambios - ya correcto)
 # ============================================================
+
+@router.get("/origin-wallets/export")
+def export_origin_wallets_closures(auth: dict = Depends(require_admin)):
+    """Exporta el histórico de cierres diarios en CSV."""
+    rows = fetch_all(
+        """
+        SELECT
+            c.day,
+            c.origin_country,
+            c.fiat_currency,
+            COALESCE((SELECT SUM(amount_fiat) FROM origin_receipts_daily r
+                      WHERE r.day < c.day AND r.origin_country = c.origin_country AND r.fiat_currency = c.fiat_currency), 0) -
+            COALESCE((SELECT SUM(amount_fiat) FROM origin_sweeps s
+                      WHERE s.day < c.day AND s.origin_country = c.origin_country AND s.fiat_currency = c.fiat_currency), 0) AS opening_balance,
+            COALESCE((SELECT SUM(amount_fiat) FROM origin_receipts_daily r
+                      WHERE r.day = c.day AND r.origin_country = c.origin_country AND r.fiat_currency = c.fiat_currency), 0) AS in_today,
+            COALESCE((SELECT SUM(amount_fiat) FROM origin_sweeps s
+                      WHERE s.day = c.day AND s.origin_country = c.origin_country AND s.fiat_currency = c.fiat_currency), 0) AS out_today,
+            COALESCE((SELECT SUM(amount_fiat) FROM origin_receipts_daily r
+                      WHERE r.day <= c.day AND r.origin_country = c.origin_country AND r.fiat_currency = c.fiat_currency), 0) -
+            COALESCE((SELECT SUM(amount_fiat) FROM origin_sweeps s
+                      WHERE s.day <= c.day AND s.origin_country = c.origin_country AND s.fiat_currency = c.fiat_currency), 0) AS closing_balance
+        FROM origin_wallet_closures c
+        ORDER BY c.day DESC, c.origin_country ASC
+        """
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Día", "País", "Moneda", "Balance Inicial", "Entradas", "Salidas", "Balance Final"])
+
+    for r in rows:
+        writer.writerow([
+            r["day"],
+            r["origin_country"],
+            r["fiat_currency"],
+            round(float(r["opening_balance"]), 2),
+            round(float(r["in_today"]), 2),
+            round(float(r["out_today"]), 2),
+            round(float(r["closing_balance"]), 2)
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=cierres_billeteras_{_date.today()}.csv"}
+    )
+
 
 @router.get("/origin-wallets/current-balances")
 def origin_wallets_current_balances(auth: dict = Depends(require_admin)):

@@ -13,7 +13,11 @@ Fixes aplicados:
 
 from __future__ import annotations
 
+import io
+import csv
+from datetime import date as _date
 from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi.responses import StreamingResponse
 from ..db import fetch_one, fetch_all
 from ..auth import require_operator_or_admin
 
@@ -223,6 +227,67 @@ def metrics_p2p_prices(
 # ============================================================
 # GET /metrics/company-overview
 # ============================================================
+
+@router.get("/metrics/export-orders")
+def export_orders_metrics(
+    days: int = Query(default=30, le=365),
+    auth: dict = Depends(require_operator_or_admin)
+):
+    """Exporta órdenes en el periodo solicitado con foco en profit real."""
+    wh, prm = _op_filter(auth)
+
+    rows = fetch_all(
+        f"""
+        SELECT
+            public_id,
+            created_at,
+            origin_country,
+            dest_country,
+            status,
+            amount_origin,
+            fiat_origin,
+            payout_dest,
+            dest_currency,
+            profit_usdt,
+            profit_real_usdt
+        FROM orders
+        WHERE created_at >= (CURRENT_DATE - (%s::int - 1) * INTERVAL '1 day')
+        {wh}
+        ORDER BY created_at DESC
+        """,
+        (days,) + prm,
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "ID", "Fecha", "País Origen", "País Destino", "Status",
+        "Monto Origen", "Moneda Origen", "Payout Destino", "Moneda Destino",
+        "Profit Teórico (USDT)", "Utilidad Neta (USDT)"
+    ])
+
+    for r in rows:
+        writer.writerow([
+            r["public_id"],
+            r["created_at"].isoformat() if r["created_at"] else "",
+            r["origin_country"],
+            r["dest_country"],
+            r["status"],
+            round(float(r["amount_origin"] or 0), 2),
+            r["fiat_origin"],
+            round(float(r["payout_dest"] or 0), 2),
+            r["dest_currency"],
+            round(float(r["profit_usdt"] or 0), 2),
+            round(float(r["profit_real_usdt"] or 0), 2)
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=export_ordenes_{days}d_{_date.today()}.csv"}
+    )
+
 
 @router.get("/metrics/company-overview")
 def metrics_company_overview(auth: dict = Depends(require_operator_or_admin)):
