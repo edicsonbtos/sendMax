@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import require_admin, require_operator_or_admin
-from ..db import fetch_all, fetch_one, execute
+from ..db import fetch_all, fetch_one
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/vaults", tags=["Vaults"])
