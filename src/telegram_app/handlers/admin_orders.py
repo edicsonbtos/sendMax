@@ -28,6 +28,7 @@ from src.db.repositories.users_repo import get_telegram_id_by_user_id
 from src.db.repositories.wallet_repo import add_ledger_entry_tx
 from src.telegram_app.utils.templates import format_payments_group_message
 from src.integrations.binance_p2p import BinanceP2PClient
+from src.db.repositories.trust_repo import update_trust_score, DELTA_ORDER_COMPLETED, DELTA_ORDER_CANCELLED
 from src.integrations.p2p_config import COUNTRIES
 from src.telegram_app.ui.routes_popular import format_rate_no_noise
 
@@ -705,6 +706,19 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         ]
 
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        # ── Trust Score: +2 al operador por orden completada (fire-and-forget) ──
+        try:
+            asyncio.ensure_future(
+                update_trust_score(
+                    user_id=int(order.operator_user_id),
+                    delta=DELTA_ORDER_COMPLETED,
+                    reason="ORDER_COMPLETED",
+                    ref_order_public_id=int(public_id),
+                )
+            )
+        except Exception as _te:
+            logger.warning("trust_score update failed (non-blocking): %s", _te)
 
     except Exception as e:
         logger.exception("process_paid_proof_photo: fallo cerrando orden %s: %s", public_id, e)
