@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes
+
+logger = logging.getLogger(__name__)
 
 from src.config.settings import settings
 from src.db.connection import get_async_conn
@@ -98,21 +102,34 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if text == BTN_ADMIN_RESET:
         context.user_data["awaiting_reset_confirm"] = True
         await update.message.reply_text(
-            "⚠️ Reset de datos (modo prueba)\n\n"
-            "Esto borrará:\n"
-            "• Órdenes\n"
-            "• Tasas/versiones\n"
-            "• Usuarios (excepto admin)\n\n"
-            "¿Seguro que deseas resetear TODO?",
+            "⚠️ *RESET TOTAL — Confirmación requerida*\n\n"
+            "Este proceso borrará permanentemente:\n"
+            "• Todas las órdenes y retiros\n"
+            "• Todo el historial de billeteras (ledger)\n"
+            "• Tasas y versiones de precios\n"
+            "• Todos los usuarios (excepto admin y TREASURY)\n\n"
+            "🔴 *Para confirmar, escribe exactamente:*\n"
+            "`CONFIRMAR RESET`\n\n"
+            "Cualquier otro texto cancela la operación.",
+            parse_mode="Markdown",
             reply_markup=admin_reset_confirm_keyboard(),
         )
         return
 
-    if text == BTN_ADMIN_RESET_YES:
+    if text == BTN_ADMIN_RESET_YES or text == "CONFIRMAR RESET":
         if not context.user_data.get("awaiting_reset_confirm"):
-            await update.message.reply_text(f"Primero pulsa {BTN_ADMIN_RESET}.")
+            await update.message.reply_text(f"Primero pulsa {BTN_ADMIN_RESET} e ingresa el texto de confirmación.")
             return
 
+        if text == BTN_ADMIN_RESET_YES:
+            # El botón legacy sigue apareciendo en teclado; pedimos el texto
+            await update.message.reply_text(
+                "✍️ Escribe exactamente `CONFIRMAR RESET` para ejecutar, o cualquier otra cosa para cancelar.",
+                parse_mode="Markdown",
+            )
+            return
+
+        # Texto correcto: ejecutar reset
         context.user_data.pop("awaiting_reset_confirm", None)
 
         admin_telegram = int(settings.ADMIN_TELEGRAM_USER_ID)
@@ -163,3 +180,11 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data.pop("awaiting_reset_confirm", None)
         await update.message.reply_text("Reset cancelado ✅", reply_markup=admin_panel_keyboard())
         return
+
+    # Texto libre mientras awaiting_reset_confirm: cualquier cosa distinta de CONFIRMAR RESET cancela
+    if context.user_data.get("awaiting_reset_confirm"):
+        context.user_data.pop("awaiting_reset_confirm", None)
+        await update.message.reply_text(
+            "🚫 Reset cancelado. No se borró nada.",
+            reply_markup=admin_panel_keyboard(),
+        )

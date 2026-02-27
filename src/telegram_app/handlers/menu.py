@@ -33,6 +33,7 @@ from src.telegram_app.ui.keyboards import main_menu_keyboard
 from src.telegram_app.ui.labels import (
     BTN_ADMIN,
     BTN_ADMIN_ALERT_TEST,
+    BTN_ADMIN_BROADCAST,
     BTN_ADMIN_MENU,
     BTN_ADMIN_ORDERS,
     BTN_ADMIN_RATES_NOW,
@@ -64,6 +65,7 @@ MENU_BUTTONS = {
     BTN_ADMIN_WITHDRAWALS,
     BTN_ADMIN_RATES_NOW,
     BTN_ADMIN_ALERT_TEST,
+    BTN_ADMIN_BROADCAST,
     BTN_ADMIN_RESET,
     BTN_ADMIN_RESET_YES,
     BTN_ADMIN_RESET_CANCEL,
@@ -186,13 +188,18 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await handle_payment_methods_country(update, context)
         return
 
-    # Admin panel router
+    # Admin panel router - incluye Broadcast y teclado de admin completo
     if _is_admin(update):
         if text in {
             BTN_ADMIN_ORDERS, BTN_ADMIN_WITHDRAWALS, BTN_ADMIN_RATES_NOW,
-            BTN_ADMIN_ALERT_TEST, BTN_ADMIN_RESET, BTN_ADMIN_RESET_YES,
+            BTN_ADMIN_ALERT_TEST, BTN_ADMIN_BROADCAST,
+            BTN_ADMIN_RESET, BTN_ADMIN_RESET_YES,
             BTN_ADMIN_RESET_CANCEL, BTN_ADMIN_MENU
         }:
+            await admin_panel_router(update, context)
+            return
+        # Texto libre durante flujo de confirmacion de reset
+        if context.user_data.get("awaiting_reset_confirm"):
             await admin_panel_router(update, context)
             return
 

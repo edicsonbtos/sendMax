@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from .routers import (
     diagnostics, metrics, orders, origin_wallets,
     settings, alerts, corrections, auth, users,
-    config, rates_admin, exports,
+    config, rates_admin, exports, operator,
 )
 from .db import close_pools
 from .config import validate_config, IS_PRODUCTION, ALLOWED_ORIGINS
@@ -129,3 +129,4 @@ app.include_router(settings.router)
 app.include_router(alerts.router)
 app.include_router(corrections.router)
 app.include_router(exports.router)
+app.include_router(operator.router)
