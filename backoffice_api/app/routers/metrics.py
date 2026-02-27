@@ -225,11 +225,31 @@ def metrics_p2p_prices(
 # ============================================================
 
 @router.get("/metrics/company-overview")
-def metrics_company_overview(auth: dict = Depends(require_operator_or_admin)):
+def metrics_company_overview(
+    date_from: str | None = Query(None, description="YYYY-MM-DD"),
+    date_to: str | None = Query(None, description="YYYY-MM-DD"),
+    origin_country: str | None = Query(None),
+    auth: dict = Depends(require_operator_or_admin),
+):
     wh, prm = _op_filter(auth)
     admin = _is_admin(auth)
 
-    # --- Query 1: conteos + profit (siempre) ---
+    # Build dynamic date/country filters
+    extra_conditions = ""
+    extra_params: list = []
+    if date_from:
+        extra_conditions += " AND created_at >= %s::timestamptz"
+        extra_params.append(date_from)
+    if date_to:
+        extra_conditions += " AND created_at < (%s::date + interval '1 day')::timestamptz"
+        extra_params.append(date_to)
+    if origin_country:
+        extra_conditions += " AND origin_country = %s"
+        extra_params.append(origin_country.upper())
+
+    combined_prm = prm + tuple(extra_params)
+
+    # --- Query 1: conteos + profit ---
     row = fetch_one(
         f"""
         SELECT
@@ -239,11 +259,12 @@ def metrics_company_overview(auth: dict = Depends(require_operator_or_admin)):
           ) AS pending_orders,
           COUNT(*) FILTER (WHERE status='PAGADA') AS completed_orders,
           COALESCE(SUM(profit_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_usd,
-          COALESCE(SUM(profit_real_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_real_usd
+          COALESCE(SUM(profit_real_usdt) FILTER (WHERE status='PAGADA'), 0) AS total_profit_real_usd,
+          COALESCE(SUM(amount_origin) FILTER (WHERE status='PAGADA'), 0) AS total_volume_origin
         FROM orders
-        WHERE 1=1 {wh}
+        WHERE 1=1 {wh} {extra_conditions}
         """,
-        prm,
+        combined_prm,
     ) or {}
 
     # --- Query 2: volumen por dest_currency (siempre) ---
@@ -251,11 +272,11 @@ def metrics_company_overview(auth: dict = Depends(require_operator_or_admin)):
         f"""
         SELECT dest_currency, COALESCE(SUM(payout_dest),0) AS vol, COUNT(*) AS cnt
         FROM orders
-        WHERE status='PAGADA' {wh}
+        WHERE status='PAGADA' {wh} {extra_conditions}
         GROUP BY dest_currency
         ORDER BY vol DESC
         """,
-        prm,
+        combined_prm,
     ) or []
 
     paid_by_dest_currency = [
@@ -340,6 +361,7 @@ def metrics_company_overview(auth: dict = Depends(require_operator_or_admin)):
         "origin_wallets": origin_wallets_data,
         "volume": {
             "paid_usd_usdt": paid_usd_usdt,
+            "total_volume_origin": float(row.get("total_volume_origin") or 0),
             "paid_by_dest_currency": paid_by_dest_currency,
         },
     }
