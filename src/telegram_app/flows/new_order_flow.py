@@ -53,6 +53,7 @@ from src.db.repositories.beneficiary_repo import (
     link_order_to_beneficiary,
     mark_smart_save_pending,
 )
+from src.db.repositories.trust_repo import get_trust_score
 
 logger = logging.getLogger(__name__)
 
@@ -781,6 +782,95 @@ async def _show_confirm_screen(update: Update, context: ContextTypes.DEFAULT_TYP
     return ASK_CONFIRM
 
 
+async def _try_auto_approve(
+    *,
+    order,
+    operator_user_id: int,
+    amount_origin_fiat,
+    rate_client,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> bool:
+    """
+    Sprint 3 — Piloto Automático.
+    Auto-aprueba la orden si:
+      1. auto_approve_enabled = 'true' en settings
+      2. trust_score del operador >= auto_approve_min_trust (default 90)
+      3. monto estimado en USD < auto_approve_max_amount_usd (default 500)
+
+    Retorna True si fue auto-aprobado (para suprimir la notificación manual al admin).
+    Nunca lanza excepción — cualquier fallo deja el flujo normal intacto.
+    """
+    try:
+        # Leer configuración desde DB
+        async with get_async_conn() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    """
+                    SELECT key, value FROM settings
+                    WHERE key IN (
+                        'auto_approve_enabled',
+                        'auto_approve_min_trust',
+                        'auto_approve_max_amount_usd'
+                    );
+                    """,
+                )
+                rows = await cur.fetchall()
+
+        cfg = {r[0]: r[1] for r in rows}
+        if cfg.get("auto_approve_enabled", "false").lower() != "true":
+            return False  # Feature flag OFF → flujo normal
+
+        min_trust = float(cfg.get("auto_approve_min_trust", "90"))
+        max_usd   = float(cfg.get("auto_approve_max_amount_usd", "500"))
+
+        # Obtener trust score del operador
+        score = float(await get_trust_score(operator_user_id))
+        if score < min_trust:
+            return False
+
+        # Estimar monto en USD (amount_origin_fiat × rate_client ≈ USD payout)
+        from decimal import Decimal
+        estimated_usd = float(Decimal(str(amount_origin_fiat)) * Decimal(str(rate_client)))
+        if estimated_usd >= max_usd:
+            return False
+
+        # ✅ Condiciones cumplidas — Auto-aprobar
+        async with get_async_conn() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "UPDATE orders SET status = 'ORIGEN_CONFIRMADO', updated_at = now() "
+                    "WHERE public_id = %s AND status = 'ORIGEN_VERIFICANDO';",
+                    (int(order.public_id),),
+                )
+                await conn.commit()
+
+        logger.info(
+            "[AutoPilot] Orden #%s auto-aprobada — operador=%s score=%.1f usd_est=%.2f",
+            order.public_id, operator_user_id, score, estimated_usd,
+        )
+
+        # Notificar al admin con mensaje especial 🚀
+        target_chat_id = settings.ORIGIN_REVIEW_TELEGRAM_CHAT_ID or settings.ADMIN_TELEGRAM_USER_ID
+        if target_chat_id:
+            await context.bot.send_message(
+                chat_id=int(target_chat_id),
+                text=(
+                    f"🚀 <b>Orden #{order.public_id} AUTO-APROBADA</b>\n\n"
+                    f"✅ Historial de confianza del operador verificado\n"
+                    f"⭐ Trust Score: <b>{score:.0f}/100</b>\n"
+                    f"💰 Monto est. USD: <b>${estimated_usd:.2f}</b>\n\n"
+                    "La orden avanzó directamente a <b>ORIGEN CONFIRMADO</b>. "
+                    "No requiere aprobación manual."
+                ),
+                parse_mode="HTML",
+            )
+        return True
+
+    except Exception as e:
+        logger.warning("[AutoPilot] Error al intentar auto-aprobar orden #%s: %s", getattr(order, "public_id", "?"), e)
+        return False
+
+
 async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = (update.message.text or "").strip()
 
@@ -851,8 +941,18 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("❌ Error al registrar la orden. Por favor intenta de nuevo.")
         return ConversationHandler.END
 
+    # ── Sprint 3: Auto-aprobación inteligente ─────────────────────────────
+    auto_approved = await _try_auto_approve(
+        order=order,
+        operator_user_id=int(user.id),
+        amount_origin_fiat=amount_origin,
+        rate_client=rate_client,
+        context=context,
+    )
+
     try:
-        await _notify_admin_new_order(context, order)
+        if not auto_approved:
+            await _notify_admin_new_order(context, order)
     except Exception as e:
         logger.exception(f"Error al notificar admin de nueva orden #{order.public_id}")
 

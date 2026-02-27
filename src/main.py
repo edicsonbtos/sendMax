@@ -76,6 +76,33 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Rates scheduler registered")
 
+    # ── Sprint 4: Alert Copilot jobs ──────────────────────────────────────
+    async def job_vault_alert(context):
+        if not is_pool_open():
+            logger.warning("skipped job_vault_alert: DB pool not ready")
+            return
+        await rates_scheduler.run_vault_alert_check()
+
+    async def job_stuck_orders(context):
+        if not is_pool_open():
+            logger.warning("skipped job_stuck_orders: DB pool not ready")
+            return
+        await rates_scheduler.run_stuck_orders_check()
+
+    bot_app.job_queue.run_repeating(
+        job_vault_alert,
+        interval=30 * 60,   # cada 30 minutos
+        first=90,           # primera ejecución a los 90s (escalonado con rates check)
+        name="vault_alert_check",
+    )
+    bot_app.job_queue.run_repeating(
+        job_stuck_orders,
+        interval=60 * 60,   # cada 60 minutos
+        first=120,
+        name="stuck_orders_check",
+    )
+    logger.info("Alert Copilot (Sprint 4) scheduler registered")
+
     if settings.WEBHOOK_URL:
         webhook_url = settings.WEBHOOK_URL.rstrip("/")
         url = f"{webhook_url}/webhook"

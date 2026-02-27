@@ -4,11 +4,18 @@ Scheduler de tasas usando JobQueue de python-telegram-bot.
 - run_9am_baseline: genera tasas completas a las 9am VET
 - run_30m_check: compara precios actuales de Binance con la última versión
   y regenera si la variación supera el umbral configurado (default 3%).
+
+Sprint 4 (Alert Copilot):
+- run_vault_alert_check: alerta si vault.balance < vault.alert_threshold
+- run_stuck_orders_check: alerta si orden lleva > 2h en estado activo sin cerrar
 """
 from __future__ import annotations
 
 import logging
 from decimal import Decimal
+
+from src.config.settings import settings
+from src.db.connection import get_async_conn
 
 logger = logging.getLogger("rates_scheduler")
 
@@ -118,3 +125,101 @@ class RatesScheduler:
 
         except Exception:
             logger.exception("[rates] 30m check FALLÓ")
+
+    # ════════════════════════════════════════════════════════════
+    # SPRINT 4 — Copiloto de Alertas
+    # ════════════════════════════════════════════════════════════
+
+    async def run_vault_alert_check(self) -> None:
+        """Alerta si alguna bóveda tiene balance < alert_threshold."""
+        admin_chat_id = getattr(settings, "ADMIN_TELEGRAM_USER_ID", None)
+        if not admin_chat_id:
+            logger.warning("[vault_alert] ADMIN_TELEGRAM_USER_ID no configurado")
+            return
+        try:
+            async with get_async_conn() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        """
+                        SELECT name, balance, alert_threshold, type
+                        FROM vaults
+                        WHERE is_active = true
+                          AND alert_threshold > 0
+                          AND balance < alert_threshold
+                        ORDER BY (alert_threshold - balance) DESC;
+                        """
+                    )
+                    cols = [d[0] for d in cur.description]
+                    rows = await cur.fetchall()
+
+            if not rows:
+                logger.info("[vault_alert] Todas las bóvedas OK")
+                return
+
+            lines = ["🚨 <b>RADAR DE BÓVEDAS — STOCK BAJO</b>\n"]
+            for row in rows:
+                r = dict(zip(cols, row))
+                deficit = float(r["alert_threshold"]) - float(r["balance"])
+                lines.append(
+                    f"⚠️ <b>{r['name']}</b>  [{r.get('type', '?')}]\n"
+                    f"   Saldo: <b>${float(r['balance']):.2f}</b> "
+                    f"/ Mínimo: ${float(r['alert_threshold']):.2f} "
+                    f"(déficit: <b>-${deficit:.2f}</b>)"
+                )
+
+            await self.app.bot.send_message(
+                chat_id=int(admin_chat_id),
+                text="\n\n".join(lines),
+                parse_mode="HTML",
+            )
+            logger.info("[vault_alert] Alerta enviada: %d bóvedas bajo mínimo", len(rows))
+
+        except Exception:
+            logger.exception("[vault_alert] Error en run_vault_alert_check")
+
+    async def run_stuck_orders_check(self) -> None:
+        """Alerta si alguna orden lleva más de 2h sin moverse."""
+        admin_chat_id = getattr(settings, "ADMIN_TELEGRAM_USER_ID", None)
+        if not admin_chat_id:
+            return
+        try:
+            async with get_async_conn() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        """
+                        SELECT public_id, status, origin_country, dest_country,
+                               amount_origin,
+                               EXTRACT(EPOCH FROM (now() - updated_at)) / 3600 AS hours_stuck
+                        FROM orders
+                        WHERE status IN ('ORIGEN_CONFIRMADO', 'EN_PROCESO')
+                          AND updated_at < now() - INTERVAL '2 hours'
+                        ORDER BY updated_at ASC
+                        LIMIT 10;
+                        """
+                    )
+                    cols = [d[0] for d in cur.description]
+                    rows = await cur.fetchall()
+
+            if not rows:
+                logger.info("[stuck_orders] Sin órdenes atascadas")
+                return
+
+            lines = [f"⏰ <b>ATASCO — {len(rows)} orden(es) sin cerrar</b>\n"]
+            for row in rows:
+                r = dict(zip(cols, row))
+                lines.append(
+                    f"📦 Orden <b>#{r['public_id']}</b> — {r['status']}\n"
+                    f"   {r['origin_country']} → {r['dest_country']} "
+                    f"| {float(r['amount_origin']):.2f}\n"
+                    f"   ⏱ <b>{float(r['hours_stuck']):.1f}h</b> sin movimiento"
+                )
+
+            await self.app.bot.send_message(
+                chat_id=int(admin_chat_id),
+                text="\n\n".join(lines),
+                parse_mode="HTML",
+            )
+            logger.info("[stuck_orders] Alerta enviada: %d órdenes atascadas", len(rows))
+
+        except Exception:
+            logger.exception("[stuck_orders] Error en run_stuck_orders_check")
