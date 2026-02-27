@@ -38,6 +38,19 @@ SETTING_VALIDATORS: Dict[str, Dict] = {
         "required_fields": {"percent": (float, int)},
         "ranges": {"percent": (0.0, 50.0)},
     },
+    # Configuración de Entrega en Efectivo USD (Venezuela)
+    "cash_delivery": {
+        "required_fields": {
+            "zelle_usdt_cost": (float, int),
+            "margin_cash_zelle": (float, int),
+            "margin_cash_general": (float, int),
+        },
+        "ranges": {
+            "zelle_usdt_cost": (1.0, 2.0),   # Costo Zelle por 1 USDT (ej. 1.03)
+            "margin_cash_zelle": (0.0, 50.0), # Margen en % para ruta Zelle→Efectivo
+            "margin_cash_general": (0.0, 50.0), # Margen en % para otras rutas→Efectivo
+        },
+    },
 }
 
 PAYMENT_COUNTRIES = ["USA", "CHILE", "PERU", "COLOMBIA", "VENEZUELA", "MEXICO", "ARGENTINA"]

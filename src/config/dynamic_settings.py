@@ -100,6 +100,45 @@ class DynamicConfig:
             return MAX_COMMISSION
         return val
 
+    async def get_cash_delivery_config(self) -> dict[str, Decimal]:
+        """
+        Lee la configuración de Entrega en Efectivo (USD) desde DB.
+        Key DB: cash_delivery → {"zelle_usdt_cost": 1.03, "margin_cash_zelle": 12.0, "margin_cash_general": 10.0}
+
+        Los márgenes están en porcentaje (12.0 = 12%) internamente se convierten a decimal (0.12).
+        Defaults: zelle_usdt_cost=1.03, margin_cash_zelle=12%, margin_cash_general=10%
+        """
+        DEFAULT_ZELLE_COST = Decimal("1.03")
+        DEFAULT_MARGIN_ZELLE = Decimal("0.12")
+        DEFAULT_MARGIN_GENERAL = Decimal("0.10")
+
+        try:
+            config = await get_setting_json("cash_delivery")
+            if config:
+                zelle_cost = Decimal(str(config.get("zelle_usdt_cost", "1.03")))
+                margin_zelle = Decimal(str(config.get("margin_cash_zelle", "12.0"))) / Decimal("100")
+                margin_general = Decimal(str(config.get("margin_cash_general", "10.0"))) / Decimal("100")
+
+                # Validaciones de seguridad
+                if zelle_cost <= Decimal("0"):
+                    zelle_cost = DEFAULT_ZELLE_COST
+                margin_zelle = self._clamp(margin_zelle, "margin_cash_zelle")
+                margin_general = self._clamp(margin_general, "margin_cash_general")
+
+                return {
+                    "zelle_usdt_cost": zelle_cost,
+                    "margin_cash_zelle": margin_zelle,
+                    "margin_cash_general": margin_general,
+                }
+        except Exception as e:
+            logger.warning(f"Error reading cash_delivery config: {e}")
+
+        return {
+            "zelle_usdt_cost": DEFAULT_ZELLE_COST,
+            "margin_cash_zelle": DEFAULT_MARGIN_ZELLE,
+            "margin_cash_general": DEFAULT_MARGIN_GENERAL,
+        }
+
     async def get_profit_split(self) -> dict[str, Decimal]:
         """
         Lee split de profit desde DB.

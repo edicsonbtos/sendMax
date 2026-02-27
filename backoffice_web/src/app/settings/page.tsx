@@ -35,9 +35,10 @@ import {
   History as HistoryIcon,
   CheckCircle as CheckIcon,
   Sync as SyncIcon,
+  AttachMoney as CashIcon,
 } from "@mui/icons-material";
 import { useAuth } from "@/components/AuthProvider";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, apiPut } from "@/lib/api";
 
 /* ============ Types ============ */
 interface RateVersion {
@@ -73,6 +74,128 @@ function formatDate(iso: string | null): string {
     day: "numeric", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
+}
+
+/* ============ CashDeliveryPanel ============ */
+interface CashDeliveryPanelProps {
+  saving: boolean;
+  setSaving: (v: boolean) => void;
+  setError: (v: string | null) => void;
+  setSuccess: (v: string | null) => void;
+}
+
+function CashDeliveryPanel({ saving, setSaving, setError, setSuccess }: CashDeliveryPanelProps) {
+  const [zelleCost, setZelleCost] = React.useState("1.03");
+  const [marginZelle, setMarginZelle] = React.useState("12");
+  const [marginGeneral, setMarginGeneral] = React.useState("10");
+  const [loaded, setLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    apiGet<{ value_json?: { zelle_usdt_cost?: number; margin_cash_zelle?: number; margin_cash_general?: number } }>("/settings/cash_delivery")
+      .then((res) => {
+        const v = res?.value_json;
+        if (v) {
+          if (v.zelle_usdt_cost !== undefined) setZelleCost(String(v.zelle_usdt_cost));
+          if (v.margin_cash_zelle !== undefined) setMarginZelle(String(v.margin_cash_zelle));
+          if (v.margin_cash_general !== undefined) setMarginGeneral(String(v.margin_cash_general));
+        }
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true)); // use defaults if not yet in DB
+  }, []);
+
+  async function save() {
+    const cost = Number(String(zelleCost).replace(",", "."));
+    const mz = Number(String(marginZelle).replace(",", "."));
+    const mg = Number(String(marginGeneral).replace(",", "."));
+
+    if (!Number.isFinite(cost) || cost < 1.0 || cost > 2.0)
+      return setError("Costo Zelle: debe estar entre 1.0 y 2.0");
+    if (!Number.isFinite(mz) || mz < 0 || mz > 50)
+      return setError("Margen Zelle: debe estar entre 0 y 50");
+    if (!Number.isFinite(mg) || mg < 0 || mg > 50)
+      return setError("Margen General: debe estar entre 0 y 50");
+
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPut("/settings/cash_delivery", {
+        value_json: {
+          zelle_usdt_cost: cost,
+          margin_cash_zelle: mz,
+          margin_cash_general: mg,
+        },
+      });
+      setSuccess("💵 Configuración de Efectivo USD guardada. Activa en el próximo ciclo de tasas (≤60s).");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error guardando configuración efectivo");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!loaded) return null;
+
+  return (
+    <Paper sx={{ p: 3, borderLeft: "4px solid #F59E0B" }}>
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
+        <CashIcon sx={{ color: "#F59E0B" }} />
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+            💵 Entrega en Efectivo USD (Venezuela)
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Ruta USA Zelle → Efectivo usa costo fijo. Otros países usan precio Binance.
+          </Typography>
+        </Box>
+      </Stack>
+      <Divider sx={{ mb: 2.5 }} />
+      <Stack direction="row" spacing={3} sx={{ mb: 3 }}>
+        <TextField
+          label="Costo Zelle por 1 USDT"
+          value={zelleCost}
+          onChange={(e) => setZelleCost(e.target.value)}
+          helperText="Ej: 1.03 = pagas 1.03 USD Zelle para recibir 1 USDT"
+          size="small"
+          fullWidth
+          type="number"
+          inputProps={{ step: "0.01", min: "1.0", max: "2.0" }}
+        />
+        <TextField
+          label="Margen Zelle → Efectivo (%)"
+          value={marginZelle}
+          onChange={(e) => setMarginZelle(e.target.value)}
+          helperText="Comisión para ruta USA(Zelle) → Efectivo USD"
+          size="small"
+          fullWidth
+          InputProps={{ endAdornment: "%" }}
+        />
+        <TextField
+          label="Margen General → Efectivo (%)"
+          value={marginGeneral}
+          onChange={(e) => setMarginGeneral(e.target.value)}
+          helperText="Comisión para otras rutas (CLP, COP, etc.) → Efectivo"
+          size="small"
+          fullWidth
+          InputProps={{ endAdornment: "%" }}
+        />
+      </Stack>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Typography variant="caption" color="text.secondary">
+          Tasas activas en ≤60s tras guardar (cache automático)
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<SaveIcon />}
+          onClick={save}
+          disabled={saving}
+          sx={{ backgroundColor: "#F59E0B", "&:hover": { backgroundColor: "#D97706" } }}
+        >
+          Guardar Efectivo USD
+        </Button>
+      </Stack>
+    </Paper>
+  );
 }
 
 /* ============ Component ============ */
@@ -375,6 +498,10 @@ export default function SettingsPage() {
             </Button>
           </Box>
         </Paper>
+
+        {/* 💵 Entrega en Efectivo USD */}
+        <CashDeliveryPanel saving={saving} setSaving={setSaving} setError={setError} setSuccess={setSuccess} />
+
       </Stack>
 
       {/* Confirm Dialog */}

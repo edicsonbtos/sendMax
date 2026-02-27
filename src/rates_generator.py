@@ -169,7 +169,60 @@ async def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
                             ),
                         )
 
+                     # 5. === RUTAS VENEZUELA_CASH (Entrega en Efectivo) ===
+                    # Fetch config outside inner loop (already in transaction, reads committed data)
+                    cash_cfg = await dynamic_config.get_cash_delivery_config()
+                    zelle_cost: Decimal = cash_cfg["zelle_usdt_cost"]       # e.g. 1.03
+                    margin_zelle: Decimal = cash_cfg["margin_cash_zelle"]    # e.g. 0.12
+                    margin_general: Decimal = cash_cfg["margin_cash_general"] # e.g. 0.10
+
+                    for origin in codes:
+                        try:
+                            if origin == "USA":
+                                # Costo fijo Zelle: 1.03 USD = 1 USDT
+                                # el buy_origin=zelle_cost, sell_dest=1 (USD efectivo)
+                                buy_origin_cash = zelle_cost
+                                sell_dest_cash = Decimal("1")
+                                rate_base_cash = sell_dest_cash / buy_origin_cash
+                                rate_client_cash = rate_base_cash * (Decimal("1") - margin_zelle)
+                                comm_pct_cash = margin_zelle
+                            else:
+                                # Costo de adquisición = precio de Binance BUY del país origen
+                                buy_origin_cash = country_prices[origin]["buy"]
+                                sell_dest_cash = Decimal("1")   # 1 USDT = 1 USD efectivo (delivery at par)
+                                rate_base_cash = sell_dest_cash / buy_origin_cash
+                                rate_client_cash = rate_base_cash * (Decimal("1") - margin_general)
+                                comm_pct_cash = margin_general
+
+                            await cur.execute(
+                                """
+                                INSERT INTO route_rates (
+                                    rate_version_id,
+                                    origin_country, dest_country,
+                                    commission_pct,
+                                    buy_origin, sell_dest,
+                                    rate_base, rate_client
+                                )
+                                VALUES (%s,%s,%s,%s,%s,%s,%s,%s);
+                                """,
+                                (
+                                    version_id,
+                                    origin, "VENEZUELA_CASH",
+                                    comm_pct_cash,
+                                    buy_origin_cash, sell_dest_cash,
+                                    rate_base_cash, rate_client_cash,
+                                ),
+                            )
+                            logger.info(
+                                "VENEZUELA_CASH route %s→CASH: buy_origin=%s rate_client=%s (margin=%s%%)",
+                                origin, buy_origin_cash, rate_client_cash.quantize(Decimal("0.0001")),
+                                (comm_pct_cash * 100).quantize(Decimal("0.01")),
+                            )
+                        except Exception as e:
+                            logger.warning("Failed to generate VENEZUELA_CASH route for origin=%s: %s", origin, e)
+
         return GenerateResult(
+
             version_id=int(version_id),
             countries_ok=sorted(country_prices.keys()),
             countries_failed=failed,

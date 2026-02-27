@@ -22,6 +22,8 @@ COUNTRY_LABELS = {
     "VENEZUELA": "Venezuela",
     "ARGENTINA": "Argentina",
     "MEXICO": "México",
+    # Pseudo-destino: Efectivo USD en Venezuela (lógica de tasas especial)
+    "VENEZUELA_CASH": "Efectivo USD",
 }
 
 COUNTRY_FLAGS = {
@@ -32,6 +34,7 @@ COUNTRY_FLAGS = {
     "VENEZUELA": "🇻🇪",
     "ARGENTINA": "🇦🇷",
     "MEXICO": "🇲🇽",
+    "VENEZUELA_CASH": "💵",
 }
 
 POPULAR_ROUTES = [
@@ -43,7 +46,15 @@ POPULAR_ROUTES = [
     ("CHILE", "COLOMBIA"),
     ("USA", "COLOMBIA"),
     ("USA", "MEXICO"),
+    # Rutas efectivo USD en Venezuela
+    ("USA", "VENEZUELA_CASH"),
+    ("CHILE", "VENEZUELA_CASH"),
+    ("PERU", "VENEZUELA_CASH"),
+    ("COLOMBIA", "VENEZUELA_CASH"),
 ]
+
+# Países solo disponibles como DESTINO (no como origen)
+DEST_ONLY_CODES = frozenset({"VENEZUELA_CASH"})
 
 
 def route_label(origin: str, dest: str) -> str:

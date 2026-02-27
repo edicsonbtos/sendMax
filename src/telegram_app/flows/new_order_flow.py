@@ -39,6 +39,7 @@ from src.telegram_app.ui.labels import BTN_NEW_ORDER
 from src.telegram_app.ui.routes_popular import (
     COUNTRY_FLAGS,
     COUNTRY_LABELS,
+    DEST_ONLY_CODES,
     format_rate_no_noise,
 )
 from src.telegram_app.utils.text_escape import esc_html
@@ -99,9 +100,24 @@ def _fmt_public_id(public_id: int) -> str:
     return f"{year}-{public_id:06d}"
 
 
-def _country_keyboard() -> ReplyKeyboardMarkup:
+# Paises validos como ORIGEN (nunca псевдо-destinos)
+_ORIGIN_CODES = [c for c in ["USA", "CHILE", "PERU", "COLOMBIA", "VENEZUELA", "MEXICO", "ARGENTINA"] if c not in DEST_ONLY_CODES]
+# Paises validos como DESTINO (incluye pseudo-destinos)
+_DEST_CODES = ["USA", "CHILE", "PERU", "COLOMBIA", "VENEZUELA", "ARGENTINA", "MEXICO", "VENEZUELA_CASH"]
+
+
+def _origin_keyboard() -> ReplyKeyboardMarkup:
     rows = []
-    for code in ["USA", "CHILE", "PERU", "COLOMBIA", "VENEZUELA", "MEXICO", "ARGENTINA"]:
+    for code in _ORIGIN_CODES:
+        rows.append([KeyboardButton(f"{COUNTRY_FLAGS[code]} {COUNTRY_LABELS[code]}")])
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True, one_time_keyboard=True)
+
+
+def _dest_keyboard(origin: str) -> ReplyKeyboardMarkup:
+    rows = []
+    for code in _DEST_CODES:
+        if code == origin:
+            continue  # No auto-ruta
         rows.append([KeyboardButton(f"{COUNTRY_FLAGS[code]} {COUNTRY_LABELS[code]}")])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True, one_time_keyboard=True)
 
@@ -139,10 +155,11 @@ def _after_edit_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
-def _parse_country(text: str) -> str | None:
+def _parse_country(text: str, allowed: list[str] | None = None) -> str | None:
     t = (text or "").strip()
-    for code, label in COUNTRY_LABELS.items():
-        if t == f"{COUNTRY_FLAGS[code]} {label}":
+    codes = allowed if allowed is not None else list(COUNTRY_LABELS.keys())
+    for code in codes:
+        if t == f"{COUNTRY_FLAGS[code]} {COUNTRY_LABELS[code]}":
             return code
     return None
 
@@ -284,39 +301,38 @@ async def entry_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         update,
         context,
         "📤 Nuevo envío\n\nElige el país de *origen*:",
-        reply_markup=_country_keyboard(),
+        reply_markup=_origin_keyboard(),
         parse_mode="Markdown",
     )
     return ASK_ORIGIN
 
 
 async def receive_origin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    code = _parse_country(update.message.text)
+    code = _parse_country(update.message.text, allowed=_ORIGIN_CODES)
     if not code:
-        await _screen_send_or_edit(update, context, "Selecciona un país usando los botones 👇", reply_markup=_country_keyboard())
+        await _screen_send_or_edit(update, context, "Selecciona un país usando los botones 👇", reply_markup=_origin_keyboard())
         return ASK_ORIGIN
 
-    context.user_data["order"]["origin"] = code
-
+    context.user_data["order"]["origin"] = code  # save first
     await _screen_send_or_edit(
         update,
         context,
-        "Perfecto ✅ Ahora elige el país de *destino*:",
-        reply_markup=_country_keyboard(),
+        "Perfecto ✅ Ahora elige el país/método de *destino*:",
+        reply_markup=_dest_keyboard(code),
         parse_mode="Markdown",
     )
     return ASK_DEST
 
 
 async def receive_dest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    code = _parse_country(update.message.text)
+    code = _parse_country(update.message.text, allowed=_DEST_CODES)
+    origin = context.user_data["order"].get("origin", "")
     if not code:
-        await _screen_send_or_edit(update, context, "Selecciona un país usando los botones 👇", reply_markup=_country_keyboard())
+        await _screen_send_or_edit(update, context, "Selecciona un destino usando los botones 👇", reply_markup=_dest_keyboard(origin))
         return ASK_DEST
 
-    origin = context.user_data["order"].get("origin")
     if code == origin:
-        await _screen_send_or_edit(update, context, "Esa ruta no es válida. Elige un destino diferente 👇", reply_markup=_country_keyboard())
+        await _screen_send_or_edit(update, context, "Esa ruta no es válida. Elige un destino diferente 👇", reply_markup=_dest_keyboard(origin))
         return ASK_DEST
 
     context.user_data["order"]["dest"] = code
