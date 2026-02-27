@@ -31,6 +31,7 @@ from src.db.repositories.orders_repo import (
 from src.db.repositories.rates_repo import (
     get_latest_active_rate_version,
     get_route_rate,
+    get_country_price_for_version,
 )
 from src.db.repositories.users_repo import get_user_by_telegram_id
 from src.telegram_app.utils.templates import format_origin_group_message
@@ -431,6 +432,51 @@ async def receive_benef(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     return ASK_PROOF
 
 
+async def _compute_cash_rate_on_the_fly(
+    rate_version_id: int,
+    origin: str,
+) -> "RouteRate | None":
+    """
+    Calcula la tasa VENEZUELA_CASH al vuelo cuando no está en route_rates todavía.
+    Usa los precios Binance ya almacenados en p2p_country_prices para esta versión.
+    """
+    try:
+        from src.db.repositories.rates_repo import RouteRate
+        cash_cfg = await dynamic_config.get_cash_delivery_config()
+        zelle_cost: Decimal = cash_cfg["zelle_usdt_cost"]
+        margin_zelle: Decimal = cash_cfg["margin_cash_zelle"]
+        margin_general: Decimal = cash_cfg["margin_cash_general"]
+
+        if origin == "USA":
+            buy_origin = zelle_cost
+            comm_pct = margin_zelle
+        else:
+            cp = await get_country_price_for_version(
+                rate_version_id=rate_version_id, country=origin
+            )
+            if not cp:
+                return None
+            buy_origin = cp.buy_price
+            comm_pct = margin_general
+
+        sell_dest = Decimal("1")  # 1 USD efectivo
+        rate_base = sell_dest / buy_origin
+        rate_client = rate_base * (Decimal("1") - comm_pct)
+
+        return RouteRate(
+            origin_country=origin,
+            dest_country="VENEZUELA_CASH",
+            commission_pct=comm_pct,
+            buy_origin=buy_origin,
+            sell_dest=sell_dest,
+            rate_base=rate_base,
+            rate_client=rate_client,
+        )
+    except Exception as e:
+        logger.warning("_compute_cash_rate_on_the_fly failed origin=%s: %s", origin, e)
+        return None
+
+
 async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Caso: Llega texto en lugar de foto
     if update.message and update.message.text:
@@ -481,9 +527,14 @@ async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     rr = await get_route_rate(rate_version_id=rv.id, origin_country=origin, dest_country=dest)
     if not rr:
-        await _screen_send_or_edit(update, context, "Esa ruta no está disponible ahora mismo. Intenta otra ruta.")
-        _reset_flow_memory(context)
-        return ConversationHandler.END
+        # Si la ruta no está en DB (ej: primera vez con VENEZUELA_CASH antes de regenerar tasas),
+        # intentamos calcularla al vuelo desde los precios disponibles.
+        if dest == "VENEZUELA_CASH":
+            rr = await _compute_cash_rate_on_the_fly(rv.id, origin)
+        if not rr:
+            await _screen_send_or_edit(update, context, "Esa ruta no está disponible ahora mismo. Intenta otra ruta.")
+            _reset_flow_memory(context)
+            return ConversationHandler.END
 
     # Leer comisión de DB (ASYNC - fuera del flow sync)
     comm_pct = await dynamic_config.get_commission_pct(origin, dest)

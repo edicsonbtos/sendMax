@@ -51,7 +51,14 @@ class DynamicConfig:
             except Exception as e:
                 logger.warning(f"Invalid route commission {route_key}: {e}")
 
-        # 2. Por destino (legacy compatible)
+        # 2. Efectivo USD (VENEZUELA_CASH) - margen especial
+        if dest_u == "VENEZUELA_CASH":
+            cash_cfg = await self.get_cash_delivery_config()
+            if origin_u == "USA":
+                return self._clamp(cash_cfg["margin_cash_zelle"], "cash_zelle")
+            return self._clamp(cash_cfg["margin_cash_general"], "cash_general")
+
+        # 3. Por destino (legacy compatible)
         if dest_u == "VENEZUELA":
             if origin_u == "USA":
                 val = await self._get_from_db("margin_route_usa_venez", "percent",
