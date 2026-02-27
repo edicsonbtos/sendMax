@@ -177,6 +177,61 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
     )
     monthly_goal = float(goal_row["value"]) if goal_row and goal_row.get("value") else 500.0
 
+    # ── Trust Score del operador ───────────────────────────────────────────
+    ts_row = fetch_one(
+        "SELECT COALESCE(trust_score, 50) AS trust_score FROM users WHERE id = %s",
+        (user_id,),
+    )
+    trust_score = float(ts_row["trust_score"]) if ts_row else 50.0
+
+    # ── Leaderboard: Top 10 operadores por trust_score ─────────────────────
+    leaderboard = fetch_all(
+        """
+        SELECT u.id, u.alias, u.full_name,
+               COALESCE(u.trust_score, 50) AS trust_score,
+               u.kyc_status,
+               COALESCE((
+                   SELECT SUM(wl.amount_usdt) FROM wallet_ledger wl
+                   WHERE wl.user_id = u.id AND wl.type = 'ORDER_PROFIT'
+                     AND wl.created_at >= date_trunc('month', now())
+               ), 0) AS profit_month,
+               COALESCE((
+                   SELECT COUNT(*) FROM orders o
+                   WHERE o.operator_user_id = u.id AND o.status = 'PAGADA'
+                     AND o.created_at >= date_trunc('month', now())
+               ), 0) AS orders_month
+        FROM users u
+        WHERE u.role IN ('operator', 'admin')
+        ORDER BY u.trust_score DESC NULLS LAST, profit_month DESC
+        LIMIT 10
+        """,
+    )
+
+    # ── Órdenes completadas hoy ────────────────────────────────────────────
+    orders_today_row = fetch_one(
+        """
+        SELECT COUNT(*) AS cnt FROM orders
+        WHERE operator_user_id = %s AND status = 'PAGADA'
+          AND created_at >= date_trunc('day', now())
+        """,
+        (user_id,),
+    )
+    orders_today = int(orders_today_row["cnt"]) if orders_today_row else 0
+
+    # ── Actividad 24h (para line chart) ────────────────────────────────────
+    activity_24h = fetch_all(
+        """
+        SELECT date_trunc('hour', created_at) AS hour,
+               COUNT(*) AS order_count
+        FROM orders
+        WHERE operator_user_id = %s
+          AND created_at >= now() - INTERVAL '24 hours'
+        GROUP BY hour
+        ORDER BY hour ASC
+        """,
+        (user_id,),
+    )
+
     return {
         "ok": True,
         "user": _row(user),
@@ -188,6 +243,8 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
             "referrals_month": _s(metrics.get("referrals_month")) if metrics else "0.00",
         },
         "monthly_goal": monthly_goal,
+        "trust_score": trust_score,
+        "orders_today": orders_today,
         "profit_by_country": [
             {
                 "origin_country": r["origin_country"],
@@ -204,6 +261,25 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
                 "last_order_at": _s(r["last_order_at"]),
             }
             for r in (top_clients or [])
+        ],
+        "leaderboard": [
+            {
+                "alias": r["alias"],
+                "full_name": r.get("full_name") or r["alias"],
+                "trust_score": float(r["trust_score"]),
+                "profit_month": _s(r["profit_month"]),
+                "orders_month": int(r["orders_month"]),
+                "kyc_status": r.get("kyc_status") or "PENDING",
+                "is_me": int(r["id"]) == int(user_id),
+            }
+            for r in (leaderboard or [])
+        ],
+        "activity_24h": [
+            {
+                "hour": _s(r["hour"]),
+                "order_count": int(r["order_count"]),
+            }
+            for r in (activity_24h or [])
         ],
         "recent_orders": _rows(recent_orders),
         "withdrawals": _rows(withdrawals),

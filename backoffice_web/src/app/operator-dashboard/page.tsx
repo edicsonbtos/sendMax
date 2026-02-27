@@ -1,13 +1,18 @@
 'use client';
 
 /**
- * Operator Dashboard 10x — Dark Tech Premium
+ * Operator Dashboard 10x — Dark Tech Premium with Gamification
  * Design: #050505 bg, cyan #00E5FF accents, glassmorphism
- * Features: Wallet card, KPIs, Progress bar, Profit by country, Top 5 clients, Orders, Withdrawals
+ * Features: Trust Score badge, Leaderboard, Wallet card, 24h Activity chart,
+ *           Progress bar, Profit by country, Top 5 clients, Orders, Withdrawals
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiRequest } from '@/lib/api';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, ResponsiveContainer, Area, AreaChart,
+} from 'recharts';
 
 /* ═══════════════════════════════════════════════════
    Types
@@ -23,13 +28,27 @@ interface ProfitByCountry { origin_country: string; total_profit_usdt: string; o
 interface TopClient { name: string; order_count: number; total_sent: string; last_order_at: string | null; }
 interface Order { public_id: string; origin_country: string; dest_country: string; amount_origin: string; payout_dest: string; profit_usdt: string; status: string; created_at: string; }
 interface Withdrawal { id: number; amount_usdt: string; status: string; dest_text: string; country: string; created_at: string; resolved_at: string | null; }
+interface LeaderboardEntry {
+  alias: string;
+  full_name: string;
+  trust_score: number;
+  profit_month: string;
+  orders_month: number;
+  kyc_status: string;
+  is_me: boolean;
+}
+interface ActivityHour { hour: string; order_count: number; }
 interface DashboardData {
   ok: boolean;
   user: { alias: string; full_name: string; role: string };
   wallet: WalletData;
   monthly_goal: number;
+  trust_score: number;
+  orders_today: number;
   profit_by_country: ProfitByCountry[];
   top_clients: TopClient[];
+  leaderboard: LeaderboardEntry[];
+  activity_24h: ActivityHour[];
   recent_orders: Order[];
   withdrawals: Withdrawal[];
   referrals_count: number;
@@ -40,12 +59,21 @@ interface DashboardData {
    ═══════════════════════════════════════════════════ */
 const usd = (v: string | number) => `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (iso: string | null) => iso ? new Date(iso).toLocaleString('es-VE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+const fmtHour = (iso: string) => { try { return new Date(iso).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }); } catch { return iso; } };
 const flag: Record<string, string> = { USA: '🇺🇸', CHILE: '🇨🇱', COLOMBIA: '🇨🇴', PERU: '🇵🇪', VENEZUELA: '🇻🇪', MEXICO: '🇲🇽', ARGENTINA: '🇦🇷' };
 const STATUS_COLOR: Record<string, string> = { PAGADA: '#00c896', COMPLETADA: '#00c896', EN_PROCESO: '#00b4d8', ORIGEN_VERIFICANDO: '#f9c74f', ORIGEN_CONFIRMADO: '#f9c74f', CREADA: '#888', CANCELADA: '#f44' };
 const CHART_COLORS = ['#00E5FF', '#7B2FBE', '#ff6b6b', '#f9c74f', '#43aa8b', '#f8961e'];
+const RANK_MEDALS = ['🥇', '🥈', '🥉'];
+
+function trustBadge(score: number): { emoji: string; label: string; color: string } {
+  if (score >= 90) return { emoji: '💎', label: 'Élite', color: '#00E5FF' };
+  if (score >= 75) return { emoji: '⭐', label: 'Confiable', color: '#f9c74f' };
+  if (score >= 50) return { emoji: '🟢', label: 'Estable', color: '#43aa8b' };
+  return { emoji: '🔵', label: 'Nuevo', color: '#888' };
+}
 
 /* ═══════════════════════════════════════════════════
-   Styles (inline — no Tailwind, no MUI)
+   Styles
    ═══════════════════════════════════════════════════ */
 const S = {
   page: { minHeight: '100vh', background: '#050505', color: '#e0e0e0', fontFamily: "'Inter', 'Segoe UI', sans-serif", padding: '24px', boxSizing: 'border-box' as const },
@@ -78,6 +106,112 @@ function GlassCard({ children, style = {} }: { children: React.ReactNode; style?
   return <div style={{ ...S.glass(), ...style }}>{children}</div>;
 }
 
+function TrustScoreBadge({ score }: { score: number }) {
+  const b = trustBadge(score);
+  return (
+    <div style={{
+      ...S.glass('rgba(0,229,255,0.12)'),
+      display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px',
+    }}>
+      <div style={{
+        width: 56, height: 56, borderRadius: '50%',
+        background: `conic-gradient(${b.color} ${score}%, rgba(255,255,255,0.06) 0)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <div style={{
+          width: 44, height: 44, borderRadius: '50%', background: '#0a0a0a',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '20px', fontWeight: 800, color: b.color,
+        }}>
+          {score}
+        </div>
+      </div>
+      <div>
+        <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>Trust Score</p>
+        <p style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: b.color }}>
+          {b.emoji} {b.label}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
+  if (!entries.length) return <p style={{ color: '#555', textAlign: 'center', padding: '16px 0' }}>Sin datos</p>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {entries.map((e, i) => {
+        const isGold = i === 0;
+        const medal = RANK_MEDALS[i] || `${i + 1}`;
+        return (
+          <div key={e.alias} style={{
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '8px 12px', borderRadius: '12px',
+            background: e.is_me ? 'rgba(0,229,255,0.08)' : 'transparent',
+            border: e.is_me ? '1px solid rgba(0,229,255,0.25)' : '1px solid transparent',
+            transition: 'background 0.2s',
+          }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: isGold ? '20px' : '14px', fontWeight: 800,
+              background: isGold ? 'linear-gradient(135deg, #FFD700, #FFA500)' : 'rgba(255,255,255,0.05)',
+              color: isGold ? '#000' : '#888',
+              animation: isGold ? 'pulse 2s infinite' : 'none',
+              boxShadow: isGold ? '0 0 20px rgba(255,215,0,0.4)' : 'none',
+            }}>{medal}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{
+                margin: 0, fontSize: '13px', fontWeight: e.is_me ? 800 : 600,
+                color: e.is_me ? '#00E5FF' : '#e0e0e0',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {e.full_name} {e.is_me && '← Tú'}
+                {e.kyc_status === 'APPROVED' && e.trust_score < 90 ? '' : ''}
+              </p>
+              <p style={{ margin: 0, fontSize: '10px', color: '#555' }}>
+                @{e.alias} · {e.orders_month} órdenes · {usd(e.profit_month)}
+              </p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{
+                margin: 0, fontSize: '16px', fontWeight: 800,
+                color: trustBadge(e.trust_score).color,
+              }}>{e.trust_score}</p>
+              <p style={{ margin: 0, fontSize: '9px', color: '#555' }}>score</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Activity24hChart({ data }: { data: ActivityHour[] }) {
+  const chartData = data.map(d => ({ name: fmtHour(d.hour), orders: d.order_count }));
+  if (!chartData.length) return <p style={{ color: '#555', textAlign: 'center', padding: '20px 0' }}>Sin actividad en 24h</p>;
+  return (
+    <ResponsiveContainer width="100%" height={160}>
+      <AreaChart data={chartData}>
+        <defs>
+          <linearGradient id="cyanGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#00E5FF" stopOpacity={0.3} />
+            <stop offset="95%" stopColor="#00E5FF" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+        <XAxis dataKey="name" stroke="#555" fontSize={10} />
+        <YAxis stroke="#555" fontSize={10} allowDecimals={false} />
+        <RechartsTooltip
+          contentStyle={{ background: '#111', border: '1px solid #333', borderRadius: '8px', fontSize: '12px' }}
+          labelStyle={{ color: '#00E5FF' }}
+        />
+        <Area type="monotone" dataKey="orders" stroke="#00E5FF" strokeWidth={2} fill="url(#cyanGrad)" />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
 function MiniBarChart({ data }: { data: ProfitByCountry[] }) {
   if (!data.length) return <p style={{ color: '#555', textAlign: 'center', padding: '16px 0' }}>Sin datos</p>;
   const max = Math.max(...data.map(d => Number(d.total_profit_usdt)));
@@ -107,11 +241,11 @@ function ProgressRing({ pct }: { pct: number }) {
   return (
     <svg width="100" height="100" viewBox="0 0 100 100">
       <circle cx="50" cy="50" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
-      <circle cx="50" cy="50" r={r} fill="none" stroke="url(#grad)" strokeWidth="10"
+      <circle cx="50" cy="50" r={r} fill="none" stroke="url(#gradRing)" strokeWidth="10"
         strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={circ / 4} strokeLinecap="round"
         style={{ transition: 'stroke-dasharray 1s ease' }} />
       <defs>
-        <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <linearGradient id="gradRing" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#00E5FF" />
           <stop offset="100%" stopColor="#7B2FBE" />
         </linearGradient>
@@ -142,7 +276,7 @@ export default function OperatorDashboardPage() {
     <div style={{ ...S.page, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
       <div style={{ width: 48, height: 48, border: '3px solid #00E5FF', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
       <p style={{ color: '#555' }}>Conectando con el servidor…</p>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}`}</style>
     </div>
   );
 
@@ -155,12 +289,15 @@ export default function OperatorDashboardPage() {
   );
 
   if (!data) return null;
-  const { wallet, profit_by_country, top_clients, recent_orders, withdrawals, referrals_count, user: u, monthly_goal } = data;
+  const { wallet, trust_score, orders_today, profit_by_country, top_clients, leaderboard, activity_24h, recent_orders, withdrawals, referrals_count, user: u, monthly_goal } = data;
   const profitMonthNum = Number(wallet.profit_month);
   const goalPct = monthly_goal > 0 ? (profitMonthNum / monthly_goal) * 100 : 0;
+  const tb = trustBadge(trust_score);
 
   return (
     <div style={S.page}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}`}</style>
+
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
@@ -169,13 +306,16 @@ export default function OperatorDashboardPage() {
             {u?.full_name || u?.alias} · {referrals_count} referido{referrals_count !== 1 ? 's' : ''}
           </p>
         </div>
-        <div style={{ ...S.glass(), padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={S.dot('#00E5FF')} />
-          <span style={{ fontSize: '12px', color: '#00E5FF', fontWeight: 600 }}>LIVE</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <TrustScoreBadge score={trust_score} />
+          <div style={{ ...S.glass(), padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={S.dot('#00E5FF')} />
+            <span style={{ fontSize: '12px', color: '#00E5FF', fontWeight: 600 }}>LIVE</span>
+          </div>
         </div>
       </div>
 
-      {/* ── Wallet Card ── */}
+      {/* ── Wallet Card + Today KPIs ── */}
       <div style={{ ...S.glass('rgba(0,229,255,0.12)'), marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <p style={S.label}>💰 Saldo disponible</p>
@@ -184,47 +324,59 @@ export default function OperatorDashboardPage() {
         </div>
         <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
           <div>
-            <p style={S.label}>Hoy</p>
+            <p style={S.label}>Ganancias Hoy</p>
             <p style={{ ...S.kpiVal, color: Number(wallet.profit_today) > 0 ? '#00c896' : '#555' }}>{usd(wallet.profit_today)}</p>
           </div>
           <div>
-            <p style={S.label}>Este mes</p>
+            <p style={S.label}>Órdenes Hoy</p>
+            <p style={{ ...S.kpiVal, color: '#7B2FBE' }}>{orders_today}</p>
+          </div>
+          <div>
+            <p style={S.label}>Este Mes</p>
             <p style={S.kpiVal}>{usd(wallet.profit_month)}</p>
           </div>
           <div>
-            <p style={S.label}>Referidos mes</p>
-            <p style={{ ...S.kpiVal, color: '#f9c74f' }}>{usd(wallet.referrals_month)}</p>
-          </div>
-          <div>
-            <p style={S.label}>Total histórico</p>
+            <p style={S.label}>Total Histórico</p>
             <p style={{ ...S.kpiVal, color: '#7B2FBE' }}>{usd(wallet.profit_total)}</p>
           </div>
         </div>
       </div>
 
-      {/* ── Progress + Charts row ── */}
+      {/* ── Leaderboard + Activity Chart ── */}
       <div style={{ ...S.row, marginBottom: '20px' }}>
-        {/* Progress */}
-        <GlassCard style={{ ...S.flex1, minWidth: '220px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-          <p style={S.sectionTitle}>🎯 Meta Mensual</p>
-          <ProgressRing pct={goalPct} />
-          <p style={{ color: '#aaa', fontSize: '12px', textAlign: 'center' }}>
-            {usd(wallet.profit_month)} / {usd(monthly_goal)} USDT
-          </p>
-          <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px' }}>
-            <div style={{ height: '100%', width: `${Math.min(goalPct, 100)}%`, background: 'linear-gradient(90deg,#00E5FF,#7B2FBE)', borderRadius: '2px' }} />
-          </div>
+        <GlassCard style={{ flex: '1', minWidth: '300px' }}>
+          <p style={S.sectionTitle}>🏆 Ranking de Operadores</p>
+          <LeaderboardTable entries={leaderboard} />
         </GlassCard>
 
-        {/* Profit by country */}
-        <GlassCard style={{ flex: '2', minWidth: '260px' }}>
+        <div style={{ flex: '1', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <GlassCard>
+            <p style={S.sectionTitle}>📈 Actividad 24h</p>
+            <Activity24hChart data={activity_24h} />
+          </GlassCard>
+
+          <GlassCard style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+            <p style={S.sectionTitle}>🎯 Meta Mensual</p>
+            <ProgressRing pct={goalPct} />
+            <p style={{ color: '#aaa', fontSize: '12px', textAlign: 'center' }}>
+              {usd(wallet.profit_month)} / {usd(monthly_goal)} USDT
+            </p>
+            <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px' }}>
+              <div style={{ height: '100%', width: `${Math.min(goalPct, 100)}%`, background: 'linear-gradient(90deg,#00E5FF,#7B2FBE)', borderRadius: '2px' }} />
+            </div>
+          </GlassCard>
+        </div>
+      </div>
+
+      {/* ── Profit by Country + Top 5 Clients ── */}
+      <div style={{ ...S.row, marginBottom: '20px' }}>
+        <GlassCard style={{ flex: '1', minWidth: '260px' }}>
           <p style={S.sectionTitle}>🌎 Ganancias por País</p>
           <MiniBarChart data={profit_by_country} />
         </GlassCard>
 
-        {/* Top 5 clients */}
-        <GlassCard style={{ flex: '2', minWidth: '260px' }}>
-          <p style={S.sectionTitle}>🏆 Top 5 Clientes Frecuentes</p>
+        <GlassCard style={{ flex: '1', minWidth: '260px' }}>
+          <p style={S.sectionTitle}>👤 Top 5 Clientes Frecuentes</p>
           {top_clients.length === 0 ? (
             <p style={{ color: '#555', fontSize: '12px', textAlign: 'center', padding: '20px 0' }}>Sin órdenes pagadas aún</p>
           ) : (

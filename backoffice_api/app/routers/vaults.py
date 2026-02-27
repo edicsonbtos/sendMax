@@ -63,7 +63,9 @@ def list_vaults(auth: dict = Depends(require_operator_or_admin)):
     """Lista todas las bóvedas activas con su saldo actual."""
     rows = fetch_all(
         """
-        SELECT id, name, vault_type, currency, balance, description, is_active, updated_at
+        SELECT id, name, vault_type, currency, balance, description,
+               is_active, updated_at,
+               COALESCE(alert_threshold, 0) AS alert_threshold
         FROM vaults
         ORDER BY vault_type, name
         """

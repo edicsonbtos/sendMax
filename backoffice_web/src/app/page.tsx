@@ -16,7 +16,7 @@ import {
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
-  BarChart, Bar, Cell,
+  BarChart, Bar, Cell, PieChart, Pie,
 } from 'recharts';
 import { useAuth } from '@/components/AuthProvider';
 import { apiRequest, API_BASE, getToken, getApiKey } from '@/lib/api';
@@ -104,7 +104,7 @@ interface ProfitDay { day: string; profit: number; profit_real: number; orders: 
    VaultRadarSection — Radar de Bóvedas
    ═══════════════════════════════════════════════════ */
 
-interface VaultRowData { id: number; name: string; vault_type: string; currency: string; balance: string; is_active: boolean }
+interface VaultRowData { id: number; name: string; vault_type: string; currency: string; balance: string; alert_threshold: string; is_active: boolean }
 interface ProviderRowData { provider_id: number; provider_name: string; order_count: number; total_fee_usdt: string }
 
 const VAULT_GRADIENT: Record<string, string> = {
@@ -147,27 +147,52 @@ function VaultRadarSection() {
             <Chip label={`${activeVaults.length} activas`} size="small" sx={{ backgroundColor: '#EFEAFF', color: '#4B2E83', fontWeight: 700 }} />
           </Stack>
           <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', gap: 2 }}>
-            {activeVaults.map(v => (
-              <Card key={v.id} sx={{
-                flex: '1 1 calc(20% - 16px)', minWidth: 155, maxWidth: 240,
-                background: VAULT_GRADIENT[v.vault_type] || VAULT_GRADIENT.Digital,
-                borderRadius: '16px', border: 'none',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-                transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-2px)' },
-              }}>
-                <CardContent sx={{ p: 2 }}>
-                  <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.05em', mb: 0.5 }}>
-                    {VAULT_ICON[v.vault_type] || '🏦'} {v.vault_type.toUpperCase()}
-                  </Typography>
-                  <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '1.4rem', fontFamily: 'monospace', lineHeight: 1.1 }}>
-                    {formatCompact(Number(v.balance))} <span style={{ fontSize: '0.8rem', opacity: 0.75 }}>{v.currency}</span>
-                  </Typography>
-                  <Typography sx={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.73rem', mt: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {v.name}
-                  </Typography>
-                </CardContent>
-              </Card>
-            ))}
+            {activeVaults.map(v => {
+              const bal = Number(v.balance);
+              const thr = Number(v.alert_threshold || '0');
+              const fillPct = thr > 0 ? Math.min(100, (bal / thr) * 100) : 100;
+              const isLow = thr > 0 && bal < thr;
+              return (
+                <Card key={v.id} sx={{
+                  flex: '1 1 calc(20% - 16px)', minWidth: 175, maxWidth: 260,
+                  background: VAULT_GRADIENT[v.vault_type] || VAULT_GRADIENT.Digital,
+                  borderRadius: '16px', border: isLow ? '2px solid #ff6b6b' : 'none',
+                  boxShadow: isLow ? '0 4px 16px rgba(255,60,60,0.25)' : '0 4px 16px rgba(0,0,0,0.12)',
+                  transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-2px)' },
+                }}>
+                  <CardContent sx={{ p: 2 }}>
+                    <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.05em', mb: 0.5 }}>
+                      {VAULT_ICON[v.vault_type] || '🏦'} {v.vault_type.toUpperCase()}
+                      {isLow && <span style={{ marginLeft: 6, color: '#ff6b6b', fontWeight: 900, animation: 'pulse 1.5s infinite' }}>⚠️ BAJO</span>}
+                    </Typography>
+                    <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '1.4rem', fontFamily: 'monospace', lineHeight: 1.1 }}>
+                      {formatCompact(bal)} <span style={{ fontSize: '0.8rem', opacity: 0.75 }}>{v.currency}</span>
+                    </Typography>
+                    <Typography sx={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.73rem', mt: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {v.name}
+                    </Typography>
+                    {thr > 0 && (
+                      <Box sx={{ mt: 1 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'rgba(255,255,255,0.5)', mb: 0.3 }}>
+                          <span>Llenado</span>
+                          <span>{Math.round(fillPct)}%</span>
+                        </Box>
+                        <Box sx={{ height: 6, borderRadius: 3, bgcolor: 'rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+                          <Box sx={{
+                            height: '100%', borderRadius: 3,
+                            width: `${fillPct}%`,
+                            bgcolor: isLow ? '#ff6b6b' : '#00E5FF',
+                            transition: 'width 0.8s ease, background-color 0.3s',
+                          }} />
+                        </Box>
+                        <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.6rem', mt: 0.2 }}>
+                          Mínimo: {formatCompact(Number(v.alert_threshold))} {v.currency}
+                        </Typography>
+                      </Box>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
           </Stack>
         </CardContent>
       </Card>
