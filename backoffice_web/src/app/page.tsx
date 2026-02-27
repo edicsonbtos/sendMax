@@ -25,7 +25,7 @@ import { apiRequest, API_BASE, getToken, getApiKey } from '@/lib/api';
    Helpers
    ═══════════════════════════════════════════════════ */
 
-const currencyDecimals = (c: string) => ['COP','VES','CLP'].includes(c) ? 0 : 2;
+const currencyDecimals = (c: string) => ['COP', 'VES', 'CLP'].includes(c) ? 0 : 2;
 const formatMoney = (a: number, c: string) => {
   const d = currencyDecimals(c);
   return a.toLocaleString('es-VE', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -36,11 +36,11 @@ const formatCompact = (n: number): string => {
   return n.toFixed(2);
 };
 const getCurrencySymbol = (c: string) => {
-  const m: Record<string,string> = {USD:'$',USDT:'$',COP:'COL$',VES:'Bs.',CLP:'CLP$',PEN:'S/',ARS:'AR$',BRL:'R$',MXN:'MX$',BOB:'Bs'};
-  return m[c]||c;
+  const m: Record<string, string> = { USD: '$', USDT: '$', COP: 'COL$', VES: 'Bs.', CLP: 'CLP$', PEN: 'S/', ARS: 'AR$', BRL: 'R$', MXN: 'MX$', BOB: 'Bs' };
+  return m[c] || c;
 };
 
-function downloadCSV(endpoint: string, filename: string, params: Record<string,string>) {
+function downloadCSV(endpoint: string, filename: string, params: Record<string, string>) {
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => { if (v) qs.set(k, v); });
   const url = `${API_BASE}${endpoint}?${qs.toString()}`;
@@ -76,7 +76,7 @@ interface CompanyOverview {
   orders: { total_orders: number; pending_orders: number; completed_orders: number };
   profit: { total_profit_usd: number; total_profit_real_usd?: number };
   origin_wallets: {
-    pending_by_currency: Record<string,number>;
+    pending_by_currency: Record<string, number>;
     top_pending: { origin_country: string; fiat_currency: string; current_balance: number }[];
   } | null;
   volume: {
@@ -88,7 +88,7 @@ interface CompanyOverview {
 interface MetricsOverview {
   total_orders: number; pending_orders: number; completed_orders: number;
   total_volume_usd: number; total_profit_usd: number; total_profit_real_usd?: number;
-  status_counts: Record<string,number>; awaiting_paid_proof: number;
+  status_counts: Record<string, number>; awaiting_paid_proof: number;
 }
 interface StuckAlert { public_id: number; origin_country: string; dest_country: string; status: string; created_at: string; updated_at: string }
 interface AlertsResponse { ok: boolean; cutoff_utc: string; origin_verificando_stuck: StuckAlert[]; awaiting_paid_proof_stuck: StuckAlert[] }
@@ -100,7 +100,109 @@ interface ProfitDay { day: string; profit: number; profit_real: number; orders: 
    KPI Card Component
    ═══════════════════════════════════════════════════ */
 
-type IconComponent = React.ElementType<{sx?: object}>;
+/* ═══════════════════════════════════════════════════
+   VaultRadarSection — Radar de Bóvedas
+   ═══════════════════════════════════════════════════ */
+
+interface VaultRowData { id: number; name: string; vault_type: string; currency: string; balance: string; is_active: boolean }
+interface ProviderRowData { provider_id: number; provider_name: string; order_count: number; total_fee_usdt: string }
+
+const VAULT_GRADIENT: Record<string, string> = {
+  Digital: 'linear-gradient(135deg, #4B2E83 0%, #7C3AED 100%)',
+  Physical: 'linear-gradient(135deg, #059669 0%, #16A34A 100%)',
+  Crypto: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
+};
+const VAULT_ICON: Record<string, string> = { Digital: '🏦', Physical: '💵', Crypto: '₿' };
+
+function VaultRadarSection() {
+  const [vaults, setVaults] = React.useState<VaultRowData[]>([]);
+  const [providers, setProviders] = React.useState<ProviderRowData[]>([]);
+  const [loaded, setLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    Promise.all([
+      apiRequest('/vaults').catch(() => ({ vaults: [] })),
+      apiRequest('/vaults/provider-liquidation').catch(() => ({ providers: [] })),
+    ]).then(([vRes, pRes]) => {
+      if (!mounted) return;
+      setVaults(vRes?.vaults || []);
+      setProviders(pRes?.providers || []);
+      setLoaded(true);
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  if (!loaded || !vaults.length) return null;
+
+  const activeVaults = vaults.filter(v => v.is_active);
+
+  return (
+    <>
+      <Card sx={{ mb: 3, borderRadius: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.05)', border: '1px solid rgba(75,46,131,0.18)' }}>
+        <CardContent sx={{ p: 3 }}>
+          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
+            <VaultIcon sx={{ color: '#4B2E83' }} />
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>🔐 Radar de Bóvedas</Typography>
+            <Chip label={`${activeVaults.length} activas`} size="small" sx={{ backgroundColor: '#EFEAFF', color: '#4B2E83', fontWeight: 700 }} />
+          </Stack>
+          <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', gap: 2 }}>
+            {activeVaults.map(v => (
+              <Card key={v.id} sx={{
+                flex: '1 1 calc(20% - 16px)', minWidth: 155, maxWidth: 240,
+                background: VAULT_GRADIENT[v.vault_type] || VAULT_GRADIENT.Digital,
+                borderRadius: '16px', border: 'none',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-2px)' },
+              }}>
+                <CardContent sx={{ p: 2 }}>
+                  <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.05em', mb: 0.5 }}>
+                    {VAULT_ICON[v.vault_type] || '🏦'} {v.vault_type.toUpperCase()}
+                  </Typography>
+                  <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '1.4rem', fontFamily: 'monospace', lineHeight: 1.1 }}>
+                    {formatCompact(Number(v.balance))} <span style={{ fontSize: '0.8rem', opacity: 0.75 }}>{v.currency}</span>
+                  </Typography>
+                  <Typography sx={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.73rem', mt: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {v.name}
+                  </Typography>
+                </CardContent>
+              </Card>
+            ))}
+          </Stack>
+        </CardContent>
+      </Card>
+
+      {providers.length > 0 && (
+        <Card sx={{ mb: 3, borderRadius: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.05)', border: '1px solid rgba(217,119,6,0.25)' }}>
+          <CardContent sx={{ p: 3 }}>
+            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1.5 }}>
+              <MoneyIcon sx={{ color: '#D97706' }} />
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>💳 Liquidación de Proveedores</Typography>
+            </Stack>
+            <Typography variant="body2" sx={{ color: '#64748B', mb: 2, fontSize: '0.82rem' }}>
+              Fees acumulados por uso de cuentas de terceros. Lo que debe Sendmax a cada proveedor.
+            </Typography>
+            <Stack spacing={1}>
+              {providers.map(p => (
+                <Stack key={p.provider_id} direction="row" alignItems="center" justifyContent="space-between"
+                  sx={{ p: 1.5, background: '#FFFBF0', borderRadius: '12px', border: '1px solid rgba(217,119,6,0.15)' }}>
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>{p.provider_name}</Typography>
+                    <Typography sx={{ color: '#64748B', fontSize: '0.75rem' }}>{p.order_count} órdenes procesadas</Typography>
+                  </Box>
+                  <Chip label={`$${formatCompact(Number(p.total_fee_usdt))} USDT`}
+                    sx={{ fontWeight: 800, backgroundColor: '#FFF5E6', color: '#D97706', border: '1px solid rgba(217,119,6,0.3)', fontSize: '0.82rem' }} />
+                </Stack>
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+    </>
+  );
+}
+
+type IconComponent = React.ElementType<{ sx?: object }>;
 
 function KPICard({ title, value, subtitle, Icon, gradient, delay = 0 }: {
   title: string; value: string; subtitle?: string;
@@ -153,8 +255,8 @@ function KPICard({ title, value, subtitle, Icon, gradient, delay = 0 }: {
    Filters Bar
    ═══════════════════════════════════════════════════ */
 
-const COUNTRIES = ['','CHILE','COLOMBIA','VENEZUELA','PERU','ARGENTINA','MEXICO','BRASIL','BOLIVIA','PANAMA','USA'];
-const COUNTRY_LABELS: Record<string,string> = {'':'Todos los países','CHILE':'🇨🇱 Chile','COLOMBIA':'🇨🇴 Colombia','VENEZUELA':'🇻🇪 Venezuela','PERU':'🇵🇪 Perú','ARGENTINA':'🇦🇷 Argentina','MEXICO':'🇲🇽 México','BRASIL':'🇧🇷 Brasil','BOLIVIA':'🇧🇴 Bolivia','PANAMA':'🇵🇦 Panamá','USA':'🇺🇸 USA'};
+const COUNTRIES = ['', 'CHILE', 'COLOMBIA', 'VENEZUELA', 'PERU', 'ARGENTINA', 'MEXICO', 'BRASIL', 'BOLIVIA', 'PANAMA', 'USA'];
+const COUNTRY_LABELS: Record<string, string> = { '': 'Todos los países', 'CHILE': '🇨🇱 Chile', 'COLOMBIA': '🇨🇴 Colombia', 'VENEZUELA': '🇻🇪 Venezuela', 'PERU': '🇵🇪 Perú', 'ARGENTINA': '🇦🇷 Argentina', 'MEXICO': '🇲🇽 México', 'BRASIL': '🇧🇷 Brasil', 'BOLIVIA': '🇧🇴 Bolivia', 'PANAMA': '🇵🇦 Panamá', 'USA': '🇺🇸 USA' };
 
 function FiltersBar({ dateFrom, dateTo, country, onDateFrom, onDateTo, onCountry, onExportOrders, onExportWallets }: {
   dateFrom: string; dateTo: string; country: string;
@@ -219,7 +321,7 @@ function FiltersBar({ dateFrom, dateTo, country, onDateFrom, onDateTo, onCountry
    Status Colors
    ═══════════════════════════════════════════════════ */
 
-const STATUS_COLORS: Record<string,string> = {
+const STATUS_COLORS: Record<string, string> = {
   PAGADA: '#16A34A', CANCELADA: '#DC2626', CREADA: '#F59E0B',
   EN_PROCESO: '#2563EB', ORIGEN_VERIFICANDO: '#8B5CF6', COMPLETADA: '#16A34A',
 };
@@ -241,7 +343,7 @@ export default function DashboardPage() {
   const [companyOverview, setCompanyOverview] = useState<CompanyOverview | null>(null);
   const [alerts, setAlerts] = useState<StuckAlert[]>([]);
   const [profitDaily, setProfitDaily] = useState<ProfitDay[]>([]);
-  const [statusCounts, setStatusCounts] = useState<{name:string;value:number;color:string}[]>([]);
+  const [statusCounts, setStatusCounts] = useState<{ name: string; value: number; color: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState('');
@@ -522,6 +624,11 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           ) : null}
+
+          {/* ══════════════════════════════════════════
+              🔐 Radar de Bóvedas — Sendmax 2.0
+              ══════════════════════════════════════════ */}
+          <VaultRadarSection />
 
           {/* Alerts */}
           {alerts.length > 0 && (

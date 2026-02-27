@@ -152,6 +152,31 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
         (user_id,),
     )
 
+    # ── Top 5 clientes frecuentes (gamificación) ───────────────────────────
+    top_clients = fetch_all(
+        """
+        SELECT beneficiary_text,
+               COUNT(*) AS order_count,
+               COALESCE(SUM(amount_origin), 0) AS total_sent,
+               MAX(created_at) AS last_order_at
+        FROM orders
+        WHERE operator_user_id = %s
+          AND status IN ('PAGADA', 'COMPLETADA')
+          AND beneficiary_text IS NOT NULL
+          AND beneficiary_text != ''
+        GROUP BY beneficiary_text
+        ORDER BY order_count DESC, last_order_at DESC
+        LIMIT 5
+        """,
+        (user_id,),
+    )
+
+    # ── Meta mensual (configurable en settings) ────────────────────────────
+    goal_row = fetch_one(
+        "SELECT value FROM settings WHERE key = 'monthly_goal_usdt' LIMIT 1"
+    )
+    monthly_goal = float(goal_row["value"]) if goal_row and goal_row.get("value") else 500.0
+
     return {
         "ok": True,
         "user": _row(user),
@@ -162,6 +187,7 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
             "profit_total": _s(metrics.get("profit_total")) if metrics else "0.00",
             "referrals_month": _s(metrics.get("referrals_month")) if metrics else "0.00",
         },
+        "monthly_goal": monthly_goal,
         "profit_by_country": [
             {
                 "origin_country": r["origin_country"],
@@ -169,6 +195,15 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
                 "order_count": int(r["order_count"]),
             }
             for r in (profit_by_country or [])
+        ],
+        "top_clients": [
+            {
+                "name": r["beneficiary_text"],
+                "order_count": int(r["order_count"]),
+                "total_sent": _s(r["total_sent"]),
+                "last_order_at": _s(r["last_order_at"]),
+            }
+            for r in (top_clients or [])
         ],
         "recent_orders": _rows(recent_orders),
         "withdrawals": _rows(withdrawals),

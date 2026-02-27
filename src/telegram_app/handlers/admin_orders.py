@@ -535,7 +535,30 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         except Exception:
             sponsor_id = None
 
-        profit_para_distribuir = profit_real
+        # ── WATERFALL: provider_fee deducido antes del split ─────────────
+        # Lee provider_fee_pct desde la orden (columna nueva, default 0)
+        provider_fee_pct_val = Decimal("0")
+        provider_id_val: int | None = None
+        try:
+            async with get_async_conn() as pconn:
+                async with pconn.cursor() as pcur:
+                    await pcur.execute(
+                        "SELECT provider_id, provider_fee_pct FROM orders WHERE public_id=%s LIMIT 1;",
+                        (int(public_id),)
+                    )
+                    prow = await pcur.fetchone()
+                    if prow:
+                        provider_id_val = int(prow[0]) if prow[0] is not None else None
+                        provider_fee_pct_val = Decimal(str(prow[1] or "0"))
+        except Exception:
+            pass  # Si no existen aún (pre-migración), operamos con fee=0
+
+        # provider_fee = USDT comprados en origen × % del proveedor
+        #   provider_fee_usdt = (amount_origin / exec_buy) × provider_fee_pct
+        provider_fee_usdt = _q8(usdt_buy * provider_fee_pct_val)
+
+        # Utilidad Repartible = Profit_Bruto - Provider_Fee
+        profit_para_distribuir = _q8(profit_real - provider_fee_usdt)
         sp_pct = Decimal("0")
 
         # Leer split desde DB (configurable en tiempo real)
@@ -579,10 +602,13 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
                             execution_price_sell = %s,
                             profit_real_usdt = %s,
                             profit_usdt = %s,
+                            provider_fee_usdt = %s,
+                            distributable_profit = %s,
                             updated_at = now()
                         WHERE public_id = %s
                         """,
-                        (exec_buy, exec_sell, profit_real, profit_usdt, int(public_id))
+                        (exec_buy, exec_sell, profit_real, profit_usdt,
+                         provider_fee_usdt, profit_para_distribuir, int(public_id))
                     )
 
                     await cur.execute(
@@ -625,30 +651,58 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
                         idempotency=True,
                     )
 
+                if provider_id_val and provider_fee_usdt != 0:
+                    # Ledger entry para tracking de deuda al proveedor
+                    await add_ledger_entry_tx(
+                        conn,
+                        user_id=int(provider_id_val),
+                        amount_usdt=provider_fee_usdt,
+                        entry_type="PROVIDER_FEE",
+                        ref_order_public_id=int(public_id),
+                        memo=f"Fee proveedor cuenta orden #{public_id} ({float(provider_fee_pct_val)*100:.1f}%)",
+                        idempotency=True,
+                    )
+
                 await clear_awaiting_paid_proof_tx(conn, int(public_id))
 
         # Limpiar context
         if context.user_data.get("active_paid_order_id") == public_id:
             context.user_data.pop("active_paid_order_id", None)
 
-        # 5. Confirmacion
+        # ── Mensaje de confirmación admin con desglose financiero completo ──
         diff = profit_real - profit_usdt
         diff_icon = "📈" if diff >= 0 else "📉"
 
         lines = [
             f"✅ <b>ORDEN #{public_id} CERRADA</b>",
             "",
-            f"💰 Profit estimado: {profit_usdt:,.4f} USDT",
-            f"💰 Profit real: {profit_real:,.4f} USDT",
-            f"{diff_icon} Diferencia: {diff:,.4f} USDT",
+            f"💱 BUY: {amount_origin:,.2f} {origin_fiat} @ {exec_buy:,.2f} = {usdt_buy:,.4f} USDT",
+            f"💱 SELL: {payout_dest:,.2f} {dest_fiat} @ {exec_sell:,.2f} = {usdt_sell:,.4f} USDT",
             "",
-            f"💱 BUY: {amount_origin:,.2f} {origin_fiat} @ {exec_buy:,.2f} = {usdt_buy:,.2f} USDT",
-            f"💱 SELL: {payout_dest:,.2f} {dest_fiat} @ {exec_sell:,.2f} = {usdt_sell:,.2f} USDT",
+            f"📊 <b>Waterfall financiero:</b>",
+            f"   💰 Profit bruto:          {profit_real:>10,.4f} USDT",
+        ]
+
+        if provider_fee_usdt != 0:
+            lines += [
+                f"   💸 Provider fee ({float(provider_fee_pct_val)*100:.1f}%):  -{provider_fee_usdt:>10,.4f} USDT",
+                f"   ─────────────────────────────",
+                f"   📦 Utilidad repartible:   {profit_para_distribuir:>10,.4f} USDT",
+            ]
+        else:
+            lines.append(f"   📦 Utilidad repartible:   {profit_para_distribuir:>10,.4f} USDT")
+
+        lines += [
             "",
-            f"👤 Operador: {op_share:,.4f} USDT",
+            f"   👤 Operador: {op_share:,.4f} USDT  ({float(op_pct)*100:.0f}%)",
         ]
         if sponsor_id and sp_share != 0:
-            lines.append(f"🤝 Sponsor: {sp_share:,.4f} USDT")
+            lines.append(f"   🤝 Sponsor:   {sp_share:,.4f} USDT  ({float(sp_pct)*100:.0f}%)")
+
+        lines += [
+            "",
+            f"{diff_icon} Δ vs estimado: {diff:+,.4f} USDT",
+        ]
 
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
