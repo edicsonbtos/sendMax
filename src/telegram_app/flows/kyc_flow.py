@@ -46,6 +46,12 @@ ASK_SELFIE_PHOTO = 11
 ALIAS_REGEX = re.compile(r"^[a-zA-Z0-9_]{3,15}$")
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
+# ── KYC EXPRESS (temporal) ───────────────────────────────────────────────
+# Cuando esta variable es True, el bot aprueba al operador solo con el alias.
+# Se desactivará automáticamente el domingo a las 00:00 VET mediante el job
+# kyc_express_sunday_reset registrado en main.py.
+KYC_EXPRESS_MODE = True  # <-- togglear False para exigir KYC completo
+
 
 def parse_sponsor_alias_from_start_args(context: ContextTypes.DEFAULT_TYPE) -> str | None:
     if not getattr(context, "args", None):
@@ -183,13 +189,13 @@ async def receive_alias(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     context.user_data["pending_alias"] = alias
 
-    # FIX H-01: leer sponsor desde user_data (guardado en start_kyc)
-    sponsor_alias = context.user_data.pop("sponsor_from_link", None)
-    if sponsor_alias:
-        sponsor = await get_user_by_alias(sponsor_alias)
-        sponsor_id = sponsor.id if sponsor else None
-
-        # FIX M-01: try/except en create_user
+    # ── KYC Express: si está activo, crear + aprobar directo ───────────────
+    if KYC_EXPRESS_MODE:
+        sponsor_alias = context.user_data.pop("sponsor_from_link", None)
+        sponsor_id = None
+        if sponsor_alias:
+            sponsor = await get_user_by_alias(sponsor_alias)
+            sponsor_id = sponsor.id if sponsor else None
         try:
             await create_user(
                 telegram_user_id=int(update.effective_user.id),
@@ -197,18 +203,37 @@ async def receive_alias(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 sponsor_id=sponsor_id,
             )
         except Exception:
-            logger.exception("create_user failed (deep-link) alias=%s tg=%s", alias, update.effective_user.id)
-            await update.message.reply_text(
-                "❌ No se pudo crear tu cuenta. El alias puede estar tomado.\n"
-                "Intenta con otro alias:"
-            )
-            return ASK_ALIAS
+            logger.warning("KYC Express: create_user failed for alias=%s — may already exist", alias)
+
+        # Aprobar KYC automáticamente
+        try:
+            tg_id = int(update.effective_user.id)
+            ukyc = await get_user_kyc_by_telegram_id(tg_id)
+            if ukyc and ukyc.kyc_status != "APPROVED":
+                await submit_kyc(tg_id)
+                # Aprobar directamente
+                async with __import__("src.db.connection", fromlist=["get_async_conn"]).get_async_conn() as conn:
+                    async with conn.cursor() as cur:
+                        await cur.execute(
+                            "UPDATE user_kyc SET kyc_status='APPROVED', updated_at=now() "
+                            "WHERE telegram_user_id=%s;",
+                            (tg_id,)
+                        )
+                        await conn.commit()
+        except Exception:
+            logger.exception("KYC Express: auto-approve failed for %s", alias)
 
         context.user_data.pop("pending_alias", None)
-        await update.message.reply_text("✅ Alias creado. Ahora vamos con tu verificación 👇")
-        await _prompt_for_step(update, ASK_FULL_NAME)
-        return ASK_FULL_NAME
+        await update.message.reply_text(
+            f"✅ *¡Bienvenido, {alias}!* Tu cuenta está activa.\n\n"
+            "⏰ _Verificación express temporal (amigos y familia)._\n"
+            "El KYC completo será requerido próximamente.\n\n"
+            "Escribe /start para ver el menú.",
+            parse_mode="Markdown",
+        )
+        return ConversationHandler.END
 
+    # ── KYC normal: pedir padrino ────────────────────────────────────────────
     await update.message.reply_text(
         "🤝 Padrino (opcional)\n\n"
         "Si tienes padrino, escribe su alias.\n"

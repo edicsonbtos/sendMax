@@ -103,6 +103,36 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Alert Copilot (Sprint 4) scheduler registered")
 
+    # ── KYC Express: reset automático el domingo a las 00:00 VET ─────────
+    async def job_kyc_express_sunday_reset(context):
+        """Desactiva el KYC Express el domingo a las 00:00 — exige KYC completo desde entonces."""
+        import src.telegram_app.flows.kyc_flow as kyc_module
+        kyc_module.KYC_EXPRESS_MODE = False
+        logger.warning("KYC_EXPRESS_MODE desactivado automáticamente (reset de domingo).")
+        admin_id = getattr(settings, "ADMIN_TELEGRAM_USER_ID", None)
+        if admin_id:
+            try:
+                await context.bot.send_message(
+                    chat_id=int(admin_id),
+                    text=(
+                        "🔒 <b>KYC Express DESACTIVADO</b>\n\n"
+                        "El período de acceso rápido (amigos y familia) ha terminado.\n"
+                        "Desde ahora, los nuevos operadores deberán completar el KYC completo."
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+
+    from datetime import time as dt_time
+    bot_app.job_queue.run_daily(
+        job_kyc_express_sunday_reset,
+        time=dt_time(hour=0, minute=0, tzinfo=VET),
+        days=(6,),   # 6 = domingo
+        name="kyc_express_sunday_reset",
+    )
+    logger.info("KYC Express Sunday reset job registered")
+
     if settings.WEBHOOK_URL:
         webhook_url = settings.WEBHOOK_URL.rstrip("/")
         url = f"{webhook_url}/webhook"
