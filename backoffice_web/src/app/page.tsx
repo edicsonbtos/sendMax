@@ -1,7 +1,7 @@
-'use client';
+ï»¿'use client';
 
 /**
- * Admin Dashboard 10x — Dark Tech Premium
+ * Admin Dashboard 10x - Dark Tech Premium
  * Design: #050505 bg, glass cards, Electric Cyan (#00E5FF) accents
  * Features: Country Heatmap, Operator Leaderboard with VIP medal,
  *           Vault Radar with blinking alerts, KPI cards, Daily Profit chart
@@ -61,14 +61,14 @@ const compact = (n: number) => {
 };
 
 const COUNTRY_FLAG: Record<string, string> = {
-  PERU: '????', COLOMBIA: '????', VENEZUELA: '????', CHILE: '????',
-  ARGENTINA: '????', MEXICO: '????', USA: '????', BRASIL: '????',
+  PERU: 'PE', COLOMBIA: 'CO', VENEZUELA: 'VE', CHILE: 'CL',
+  ARGENTINA: 'AR', MEXICO: 'MX', USA: 'US', BRASIL: 'BR',
 };
 const HEATMAP_COUNTRIES = ['PERU', 'COLOMBIA', 'VENEZUELA', 'CHILE', 'ARGENTINA', 'MEXICO'];
 const CYAN = '#00E5FF';
 const PURPLE = '#7B2FBE';
 const CHART_COLORS = [CYAN, PURPLE, '#f9c74f', '#43aa8b', '#f8961e', '#ff6b6b'];
-const RANK_MEDALS = ['??', '??', '??'];
+const RANK_MEDALS = ['#1', '#2', '#3'];
 
 const STATUS_COLORS: Record<string, string> = {
   PAGADA: '#00c896', CANCELADA: '#ff6b6b', CREADA: '#f9c74f',
@@ -128,7 +128,6 @@ function KPICard({ icon, title, value, subtitle, accent = CYAN }: { icon: string
    ----------------------------------------------- */
 function CountryHeatmap({ data }: { data: { dest_currency: string; volume: number; count?: number }[] }) {
   const filtered = useMemo(() => {
-    // Map dest_currency to country codes for heatmap
     const currencyToCountry: Record<string, string> = { PEN: 'PERU', COP: 'COLOMBIA', VES: 'VENEZUELA', CLP: 'CHILE', ARS: 'ARGENTINA', MXN: 'MEXICO', USD: 'USA' };
     const aggregated: Record<string, number> = {};
     data.forEach(d => {
@@ -143,7 +142,7 @@ function CountryHeatmap({ data }: { data: { dest_currency: string; volume: numbe
 
   const total = filtered.reduce((s, d) => s + d.volume, 0);
 
-  if (!filtered.length) return <p style={{ color: '#333', textAlign: 'center', padding: '20px 0', fontSize: '12px' }}>Sin datos de volumen por país</p>;
+  if (!filtered.length) return <p style={{ color: '#555', textAlign: 'center', padding: '20px 0', fontSize: '12px' }}>Sin datos de volumen por pais</p>;
 
   return (
     <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -163,12 +162,12 @@ function CountryHeatmap({ data }: { data: { dest_currency: string; volume: numbe
         </ResponsiveContainer>
       </div>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {filtered.map((d, i) => {
+        {filtered.map((d) => {
           const pct = total > 0 ? (d.volume / total) * 100 : 0;
           return (
             <div key={d.country}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
-                <span style={{ fontWeight: 600 }}>{COUNTRY_FLAG[d.country] || '??'} {d.country}</span>
+                <span style={{ fontWeight: 600 }}>[{COUNTRY_FLAG[d.country] || '--'}] {d.country}</span>
                 <span style={{ color: d.color, fontWeight: 700 }}>{usd(d.volume)} <span style={{ color: '#444' }}>({pct.toFixed(0)}%)</span></span>
               </div>
               <div style={{ height: '5px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
@@ -186,12 +185,12 @@ function CountryHeatmap({ data }: { data: { dest_currency: string; volume: numbe
    Operator Leaderboard
    ----------------------------------------------- */
 function OperatorLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
-  if (!entries.length) return <p style={{ color: '#333', fontSize: '12px', textAlign: 'center', padding: '20px 0' }}>Sin datos de operadores</p>;
+  if (!entries.length) return <p style={{ color: '#555', fontSize: '12px', textAlign: 'center', padding: '20px 0' }}>Sin datos de operadores</p>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {entries.slice(0, 8).map((e, i) => {
         const isGold = i === 0;
-        const medal = RANK_MEDALS[i] || `${i + 1}`;
+        const medal = RANK_MEDALS[i] || `#${i + 1}`;
         const trustColor = e.trust_score >= 90 ? CYAN : e.trust_score >= 75 ? '#f9c74f' : '#43aa8b';
         return (
           <div key={e.alias} style={{
@@ -200,25 +199,22 @@ function OperatorLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
             background: isGold ? 'rgba(255,215,0,0.06)' : 'rgba(255,255,255,0.02)',
             border: isGold ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.04)',
           }}>
-            {/* Medal */}
             <div style={{
               width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: isGold ? '20px' : '13px', fontWeight: 800,
+              fontSize: isGold ? '14px' : '12px', fontWeight: 800,
               background: isGold ? 'linear-gradient(135deg, #FFD700, #FFA500)' : 'rgba(255,255,255,0.06)',
               color: isGold ? '#000' : '#666',
               boxShadow: isGold ? '0 0 24px rgba(255,215,0,0.5)' : 'none',
               animation: isGold ? 'vipPulse 2s ease-in-out infinite' : 'none',
             }}>{medal}</div>
-            {/* Info */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: isGold ? '#FFD700' : '#e0e0e0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {e.full_name || e.alias}
                 {isGold && <span style={{ marginLeft: '8px', fontSize: '10px', color: '#FFD700', letterSpacing: '1px' }}>VIP</span>}
               </p>
-              <p style={{ margin: 0, fontSize: '10px', color: '#444' }}>@{e.alias} · {e.orders_month} órdenes</p>
+              <p style={{ margin: 0, fontSize: '10px', color: '#444' }}>@{e.alias} | {e.orders_month} ordenes</p>
             </div>
-            {/* Stats */}
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <p style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#00c896' }}>{usd(Number(e.profit_month))}</p>
               <p style={{ margin: 0, fontSize: '10px', color: trustColor, fontWeight: 600 }}>score {e.trust_score}</p>
@@ -248,6 +244,7 @@ function VaultRadar() {
         const isLow = thr > 0 && bal < thr;
         const fillPct = thr > 0 ? Math.min(100, (bal / thr) * 100) : 100;
         const color = VAULT_COLORS[v.vault_type] || CYAN;
+        const vaultIcon = v.vault_type === 'Digital' ? '[D]' : v.vault_type === 'Physical' ? '[P]' : '[C]';
         return (
           <div key={v.id} style={{
             flex: '1 1 180px', maxWidth: '240px',
@@ -258,8 +255,8 @@ function VaultRadar() {
             animation: isLow ? 'vaultBlink 1.4s ease-in-out infinite' : 'none',
           }}>
             <p style={{ ...S.label, color: color + 'aa' }}>
-              {v.vault_type === 'Digital' ? '??' : v.vault_type === 'Physical' ? '??' : '?'} {v.currency}
-              {isLow && <span style={{ marginLeft: '6px', color: '#ff6b6b', fontWeight: 900 }}>??</span>}
+              {vaultIcon} {v.currency}
+              {isLow && <span style={{ marginLeft: '6px', color: '#ff6b6b', fontWeight: 900 }}>!</span>}
             </p>
             <p style={{ ...S.bigNum, fontSize: '28px', color: isLow ? '#ff6b6b' : '#fff', margin: '4px 0 2px' }}>
               {compact(bal)}
@@ -267,7 +264,7 @@ function VaultRadar() {
             <p style={{ margin: '0 0 10px', fontSize: '10px', color: '#444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</p>
             {thr > 0 && (
               <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#333', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#555', marginBottom: '4px' }}>
                   <span>Llenado</span><span>{Math.round(fillPct)}%</span>
                 </div>
                 <div style={{ height: '5px', background: 'rgba(255,255,255,0.04)', borderRadius: '3px', overflow: 'hidden' }}>
@@ -286,7 +283,7 @@ function VaultRadar() {
    Main Admin Dashboard
    ----------------------------------------------- */
 const COUNTRIES_FILTER = ['', 'CHILE', 'COLOMBIA', 'VENEZUELA', 'PERU', 'ARGENTINA', 'MEXICO', 'USA'];
-const COUNTRY_LABEL: Record<string, string> = { '': 'Todos', CHILE: '???? Chile', COLOMBIA: '???? Colombia', VENEZUELA: '???? Venezuela', PERU: '???? Perú', ARGENTINA: '???? Argentina', MEXICO: '???? México', USA: '???? USA' };
+const COUNTRY_LABEL: Record<string, string> = { '': 'Todos', CHILE: '[CL] Chile', COLOMBIA: '[CO] Colombia', VENEZUELA: '[VE] Venezuela', PERU: '[PE] Peru', ARGENTINA: '[AR] Argentina', MEXICO: '[MX] Mexico', USA: '[US] USA' };
 
 export default function DashboardPage() {
   const { token } = useAuth();
@@ -391,13 +388,13 @@ export default function DashboardPage() {
         ::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.25); border-radius: 3px; }
       `}</style>
 
-      {/* -- Header -- */}
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 style={S.h1}>Sendmax Command Center 1.1</h1>
-          <p style={{ color: '#333', fontSize: '12px', margin: '4px 0 0' }}>
-            Sendmax · Centro de decisiones
-            {lastUpdated && <span style={{ color: CYAN + '77', marginLeft: '8px' }}>· {lastUpdated}</span>}
+          <h1 style={S.h1}>Sendmax Command Center</h1>
+          <p style={{ color: '#555', fontSize: '12px', margin: '4px 0 0' }}>
+            Centro de decisiones en tiempo real
+            {lastUpdated && <span style={{ color: CYAN + '77', marginLeft: '8px' }}>[{lastUpdated}]</span>}
           </p>
         </div>
         <button
@@ -409,20 +406,20 @@ export default function DashboardPage() {
             transition: 'all 0.2s', opacity: loading ? 0.5 : 1,
           }}
         >
-          {loading ? '? Actualizando…' : '? Actualizar'}
+          {loading ? 'Actualizando...' : 'Actualizar'}
         </button>
       </div>
 
       {error && (
         <div style={{ ...S.glass('rgba(255,50,50,0.1)'), border: '1px solid rgba(255,50,50,0.3)', marginBottom: '20px', color: '#ff6b6b', fontSize: '13px' }}>
-          ?? {error}
+          [!] {error}
         </div>
       )}
 
-      {/* -- Filters -- */}
+      {/* Filters */}
       <div style={{ ...S.glass(), marginBottom: '24px', padding: '16px 20px' }}>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ ...S.label, margin: 0 }}>? Filtros</span>
+          <span style={{ ...S.label, margin: 0 }}>Filtros</span>
           {[
             { label: 'Desde', type: 'date', value: dateFrom, onChange: handleDateFrom },
             { label: 'Hasta', type: 'date', value: dateTo, onChange: handleDateTo },
@@ -436,7 +433,7 @@ export default function DashboardPage() {
             </div>
           ))}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <label style={{ ...S.label, fontSize: '9px' }}>País</label>
+            <label style={{ ...S.label, fontSize: '9px' }}>Pais</label>
             <select value={country} onChange={e => handleCountry(e.target.value)}
               style={{ background: '#0d0d0d', border: `1px solid ${CYAN}22`, borderRadius: '10px', color: '#e0e0e0', padding: '6px 12px', fontSize: '12px', outline: 'none' }}>
               {COUNTRIES_FILTER.map(c => <option key={c} value={c} style={{ background: '#111' }}>{COUNTRY_LABEL[c] || c}</option>)}
@@ -444,10 +441,10 @@ export default function DashboardPage() {
           </div>
           <div style={{ flex: 1 }} />
           <button onClick={exportOrders} style={{ background: `${CYAN}11`, border: `1px solid ${CYAN}33`, color: CYAN, borderRadius: '10px', padding: '7px 16px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
-            ? Órdenes CSV
+            Ordenes CSV
           </button>
           <button onClick={exportWallets} style={{ background: '#43aa8b11', border: '1px solid #43aa8b44', color: '#43aa8b', borderRadius: '10px', padding: '7px 16px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
-            ? Cierres CSV
+            Cierres CSV
           </button>
         </div>
       </div>
@@ -455,24 +452,24 @@ export default function DashboardPage() {
       {loading && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '48px 0' }}>
           <div style={{ width: 36, height: 36, border: `3px solid ${CYAN}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-          <span style={{ color: '#444', fontSize: '13px' }}>Cargando datos…</span>
+          <span style={{ color: '#444', fontSize: '13px' }}>Cargando datos...</span>
         </div>
       )}
 
       {metrics && !loading && (
         <>
-          {/* -- KPI Row -- */}
+          {/* KPI Row */}
           <div style={{ ...S.row, marginBottom: '24px' }}>
-            <KPICard icon="??" title="Volumen Total USD" value={`$${compact(volumeUSD)}`} subtitle={`${(co?.volume?.total_volume_origin || 0) > 0 ? compact(co!.volume.total_volume_origin!) + ' moneda origen' : ''}`} accent={CYAN} />
-            <KPICard icon="??" title="Utilidad Neta Real" value={`$${compact(profitReal)}`} subtitle={`Teórica: $${compact(co?.profit?.total_profit_usd || 0)}`} accent="#00c896" />
-            <KPICard icon="??" title="Órdenes Completadas" value={completedOrders.toLocaleString()} subtitle={`${metrics.pending_orders} pendientes · ${metrics.total_orders} total`} accent={PURPLE} />
-            <KPICard icon="??" title="Alertas Activas" value={String(alerts.length)} subtitle={alerts.length > 0 ? 'órdenes estancadas +30min' : 'Todo en orden ?'} accent={alerts.length > 0 ? '#ff6b6b' : '#43aa8b'} />
+            <KPICard icon="$" title="Volumen Total USD" value={`$${compact(volumeUSD)}`} subtitle={`${(co?.volume?.total_volume_origin || 0) > 0 ? compact(co!.volume.total_volume_origin!) + ' moneda origen' : ''}`} accent={CYAN} />
+            <KPICard icon="+" title="Utilidad Neta Real" value={`$${compact(profitReal)}`} subtitle={`Teorica: $${compact(co?.profit?.total_profit_usd || 0)}`} accent="#00c896" />
+            <KPICard icon="#" title="Ordenes Completadas" value={completedOrders.toLocaleString()} subtitle={`${metrics.pending_orders} pendientes | ${metrics.total_orders} total`} accent={PURPLE} />
+            <KPICard icon="!" title="Alertas Activas" value={String(alerts.length)} subtitle={alerts.length > 0 ? 'Ordenes estancadas +30min' : 'Todo en orden'} accent={alerts.length > 0 ? '#ff6b6b' : '#43aa8b'} />
           </div>
 
-          {/* -- Row: Daily Profit Chart + Status Distribution -- */}
+          {/* Row: Daily Profit Chart + Status Distribution */}
           <div style={{ ...S.row, marginBottom: '24px' }}>
             <div style={{ ...S.glass(), flex: 2, minWidth: 0 }}>
-              <p style={S.sectionTitle}>?? Ganancia Diaria — 7 días</p>
+              <p style={S.sectionTitle}>Ganancia Diaria - 7 dias</p>
               {profitDaily.length > 0 ? (
                 <ResponsiveContainer width="100%" height={240}>
                   <AreaChart data={profitDaily}>
@@ -494,7 +491,7 @@ export default function DashboardPage() {
                       labelStyle={{ color: CYAN }}
                       formatter={(value: any, name: any) => {
                         const n = typeof value === 'number' ? value : Number(value ?? 0);
-                        const label = name === 'profit' ? 'Teórico' : 'Neto Real';
+                        const label = name === 'profit' ? 'Teorico' : 'Neto Real';
                         return ['$' + n.toFixed(2), label];
                       }}
                     />
@@ -502,10 +499,10 @@ export default function DashboardPage() {
                     <Area type="monotone" dataKey="profit_real" stroke={CYAN} strokeWidth={2} fill="url(#gReal)" dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
-              ) : <p style={{ color: '#333', textAlign: 'center', padding: '40px 0', fontSize: '12px' }}>Sin datos de ganancias</p>}
+              ) : <p style={{ color: '#555', textAlign: 'center', padding: '40px 0', fontSize: '12px' }}>Sin datos de ganancias</p>}
             </div>
             <div style={{ ...S.glass(), flex: 1, minWidth: 260 }}>
-              <p style={S.sectionTitle}>?? Órdenes por Estado</p>
+              <p style={S.sectionTitle}>Ordenes por Estado</p>
               {statusCounts.length > 0 ? (
                 <>
                   <ResponsiveContainer width="100%" height={140}>
@@ -530,33 +527,33 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 </>
-              ) : <p style={{ color: '#333', textAlign: 'center', padding: '20px 0', fontSize: '12px' }}>Sin datos</p>}
+              ) : <p style={{ color: '#555', textAlign: 'center', padding: '20px 0', fontSize: '12px' }}>Sin datos</p>}
             </div>
           </div>
 
-          {/* -- Row: Country Heatmap + Operator Leaderboard -- */}
+          {/* Row: Country Heatmap + Operator Leaderboard */}
           <div style={{ ...S.row, marginBottom: '24px' }}>
             <div style={{ ...S.glass('rgba(0,229,255,0.04)'), flex: 1, minWidth: 280 }}>
-              <p style={S.sectionTitle}>?? Mapa de Rentabilidad por País</p>
+              <p style={S.sectionTitle}>Mapa de Rentabilidad por Pais</p>
               <CountryHeatmap data={heatmapData} />
             </div>
             <div style={{ ...S.glass('rgba(255,215,0,0.03)'), flex: 1, minWidth: 300, border: '1px solid rgba(255,215,0,0.12)' }}>
-              <p style={S.sectionTitle}>?? Ranking de Operadores</p>
+              <p style={S.sectionTitle}>Ranking de Operadores</p>
               <OperatorLeaderboard entries={leaderboard} />
-              {leaderboard.length === 0 && <p style={{ color: '#333', fontSize: '11px', textAlign: 'center', marginTop: '4px' }}>Endpoint /metrics/operator-leaderboard no disponible aún</p>}
+              {leaderboard.length === 0 && <p style={{ color: '#555', fontSize: '11px', textAlign: 'center', marginTop: '4px' }}>Endpoint /metrics/operator-leaderboard no disponible aun</p>}
             </div>
           </div>
 
-          {/* -- Vault Radar -- */}
+          {/* Vault Radar */}
           <div style={{ ...S.glass(), marginBottom: '24px' }}>
-            <p style={S.sectionTitle}>?? Radar de Bóvedas</p>
+            <p style={S.sectionTitle}>Radar de Bovedas</p>
             <VaultRadar />
           </div>
 
-          {/* -- Alerts -- */}
+          {/* Alerts */}
           {alerts.length > 0 && (
             <div style={{ ...S.glass('rgba(255,107,107,0.06)'), border: '1px solid rgba(255,107,107,0.3)', marginBottom: '24px' }}>
-              <p style={{ ...S.sectionTitle, color: '#ff6b6b' }}>?? Alertas Activas — {alerts.length} orden{alerts.length > 1 ? 'es' : ''} estancada{alerts.length > 1 ? 's' : ''}</p>
+              <p style={{ ...S.sectionTitle, color: '#ff6b6b' }}>[!] Alertas Activas - {alerts.length} orden{alerts.length > 1 ? 'es' : ''} estancada{alerts.length > 1 ? 's' : ''}</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {alerts.map(a => {
                   const min = Math.floor((Date.now() - new Date(a.updated_at).getTime()) / 60000);
@@ -564,8 +561,8 @@ export default function DashboardPage() {
                     <div key={a.public_id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', borderRadius: '12px', background: 'rgba(255,107,107,0.06)', border: '1px solid rgba(255,107,107,0.15)', fontSize: '12px' }}>
                       <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#ff6b6b' }}>#{a.public_id}</span>
                       <span style={{ ...S.badge('#ff6b6b') }}>{a.status}</span>
-                      <span style={{ color: '#666' }}>{COUNTRY_FLAG[a.origin_country] || ''}{a.origin_country} ? {COUNTRY_FLAG[a.dest_country] || ''}{a.dest_country}</span>
-                      <span style={{ marginLeft: 'auto', color: '#ff6b6b', fontWeight: 700 }}>? {min} min</span>
+                      <span style={{ color: '#666' }}>[{COUNTRY_FLAG[a.origin_country] || '--'}]{a.origin_country} &gt; [{COUNTRY_FLAG[a.dest_country] || '--'}]{a.dest_country}</span>
+                      <span style={{ marginLeft: 'auto', color: '#ff6b6b', fontWeight: 700 }}>{min} min</span>
                     </div>
                   );
                 })}
@@ -573,9 +570,9 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* -- Footer -- */}
-          <div style={{ textAlign: 'center', color: '#1a1a1a', fontSize: '11px', paddingTop: '16px' }}>
-            Sendmax Executive Dashboard · {new Date().toLocaleDateString('es-VE')}
+          {/* Footer */}
+          <div style={{ textAlign: 'center', color: '#333', fontSize: '11px', paddingTop: '16px' }}>
+            Sendmax Executive Dashboard | {new Date().toLocaleDateString('es-VE')}
           </div>
         </>
       )}
