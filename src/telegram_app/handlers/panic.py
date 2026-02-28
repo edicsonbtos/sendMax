@@ -18,8 +18,13 @@ from src.telegram_app.ui.labels import (
 
 logger = logging.getLogger(__name__)
 
-# Regex que captura cualquier botón del menú principal
-MENU_BUTTONS_REGEX = rf"^({BTN_RATES}|{BTN_WALLET}|{BTN_NEW_ORDER}|{BTN_SUMMARY}|{BTN_REFERRALS}|{BTN_PAYMENT_METHODS}|{BTN_HELP}|{BTN_ADMIN})$"
+# Regex que captura cualquier botón del menú (activos + legacy para safety)
+# Los legacy (Wallet, Resumen, Ayuda) se mantienen para interceptar clientes
+# con el teclado cacheado en versiones anteriores del bot.
+MENU_BUTTONS_REGEX = (
+    rf"^({BTN_RATES}|{BTN_NEW_ORDER}|{BTN_REFERRALS}|{BTN_PAYMENT_METHODS}"
+    rf"|{BTN_ADMIN}|{BTN_WALLET}|{BTN_SUMMARY}|{BTN_HELP})$"
+)
 
 async def panic_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """

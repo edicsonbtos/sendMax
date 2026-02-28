@@ -1,8 +1,7 @@
 """
-Handlers del menú principal (botones fijos).
-Regla: el menú de operador SOLO funciona si kyc_status == APPROVED.
-Usa labels.py como fuente única de textos (evita bugs de encoding).
-Incluye rate-limit anti-spam para taps de menú.
+menu.py — Menú principal v1.1 (Bot Ligero).
+Solo maneja: Tasas, Nuevo Envío, Métodos de Pago, Referidos.
+Resumen/Billetera eliminados del bot → solo disponibles en el User Office (web).
 """
 
 from __future__ import annotations
@@ -25,10 +24,7 @@ from src.telegram_app.handlers.payment_methods import (
     handle_payment_methods_country,
 )
 from src.telegram_app.handlers.rates import show_rates
-from src.telegram_app.handlers.referrals import enter_referrals, referrals_router
-from src.telegram_app.handlers.summary import enter_summary, summary_router
-from src.telegram_app.handlers.wallet import wallet_menu
-from src.telegram_app.ui.inline_buttons import support_whatsapp_button
+from src.telegram_app.handlers.referrals import enter_referrals
 from src.telegram_app.ui.keyboards import main_menu_keyboard
 from src.telegram_app.ui.labels import (
     BTN_ADMIN,
@@ -41,25 +37,20 @@ from src.telegram_app.ui.labels import (
     BTN_ADMIN_RESET_CANCEL,
     BTN_ADMIN_RESET_YES,
     BTN_ADMIN_WITHDRAWALS,
-    BTN_HELP,
     BTN_NEW_ORDER,
     BTN_PAYMENT_METHODS,
     BTN_RATES,
     BTN_REFERRALS,
-    BTN_SUMMARY,
-    BTN_WALLET,
 )
 
 logger = logging.getLogger(__name__)
 
+# Todos los botones que el rate-limiter y el gate KYC deben conocer
 MENU_BUTTONS = {
     BTN_RATES,
-    BTN_WALLET,
     BTN_NEW_ORDER,
-    BTN_SUMMARY,
     BTN_REFERRALS,
     BTN_PAYMENT_METHODS,
-    BTN_HELP,
     BTN_ADMIN,
     BTN_ADMIN_ORDERS,
     BTN_ADMIN_WITHDRAWALS,
@@ -102,18 +93,17 @@ async def show_home(update: Update, context: ContextTypes.DEFAULT_TYPE, alias: s
 async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (update.message.text or "").strip()
 
-    # MEJORA 5: Limpieza de mensajes efímeros
     await cleanup_ephemeral(update, context)
 
-    # No mostrar/operar menú en grupos (solo DM)
+    # Solo DM
     if update.effective_chat and update.effective_chat.type != "private":
         return
 
-    # No interceptar durante retiro/orden
+    # No interceptar durante flows activos
     if context.user_data.get("withdraw_mode") or context.user_data.get("order_mode"):
         return
 
-    # RATE LIMIT: solo para taps del menú (no texto libre en flows)
+    # Rate-limit anti-spam (1 s entre taps)
     if text in MENU_BUTTONS:
         now = time.time()
         last = float(context.user_data.get("menu_last_ts") or 0)
@@ -121,7 +111,7 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             return
         context.user_data["menu_last_ts"] = now
 
-    # Gate KYC: menú solo si APPROVED
+    # Gate KYC
     st = await _kyc_status(update)
     if st != "APPROVED":
         if text in MENU_BUTTONS:
@@ -132,78 +122,51 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             )
         return
 
-    def _clear_menu_modes() -> None:
-        for k in ("pm_mode", "summary_mode", "ref_mode"):
+    def _clear_modes() -> None:
+        for k in ("pm_mode", "ref_mode"):
             context.user_data.pop(k, None)
 
-    # Botones principales con limpieza de modos
+    # ── Botones del menú principal ──────────────────────────────────
     if text == BTN_ADMIN:
         if _is_admin(update):
-            _clear_menu_modes()
+            _clear_modes()
             await open_admin_panel(update, context)
         return
 
     if text == BTN_REFERRALS:
-        _clear_menu_modes()
+        _clear_modes()
         await enter_referrals(update, context)
         return
 
-    if text == BTN_SUMMARY:
-        _clear_menu_modes()
-        await enter_summary(update, context)
-        return
-
     if text == BTN_PAYMENT_METHODS:
-        _clear_menu_modes()
+        _clear_modes()
         await enter_payment_methods(update, context)
         return
 
     if text == BTN_RATES:
-        _clear_menu_modes()
+        _clear_modes()
         await show_rates(update, context)
-        return
-
-    if text == BTN_WALLET:
-        _clear_menu_modes()
-        await wallet_menu(update, context)
-        return
-
-    if text == BTN_HELP:
-        await update.message.reply_text(
-            "Soporte Sendmax\nPulsa el botón para abrir WhatsApp:",
-            reply_markup=support_whatsapp_button(settings.SUPPORT_WHATSAPP_NUMBER),
-        )
-        return
-
-    # Routers de estado
-    if context.user_data.get("ref_mode"):
-        await referrals_router(update, context)
-        return
-
-    if context.user_data.get("summary_mode"):
-        await summary_router(update, context)
         return
 
     if context.user_data.get("pm_mode"):
         await handle_payment_methods_country(update, context)
         return
 
-    # Admin panel router - incluye Broadcast y teclado de admin completo
+    # Admin panel router (broadcast, órdenes, etc.)
     if _is_admin(update):
         if text in {
             BTN_ADMIN_ORDERS, BTN_ADMIN_WITHDRAWALS, BTN_ADMIN_RATES_NOW,
             BTN_ADMIN_ALERT_TEST, BTN_ADMIN_BROADCAST,
             BTN_ADMIN_RESET, BTN_ADMIN_RESET_YES,
-            BTN_ADMIN_RESET_CANCEL, BTN_ADMIN_MENU
+            BTN_ADMIN_RESET_CANCEL, BTN_ADMIN_MENU,
         }:
             await admin_panel_router(update, context)
             return
-        # Texto libre durante flujo de confirmacion de reset
         if context.user_data.get("awaiting_reset_confirm"):
             await admin_panel_router(update, context)
             return
 
-    # Nuevo envío lo maneja el ConversationHandler por regex
+    # Nuevo envío lo maneja el ConversationHandler
     if text == BTN_NEW_ORDER:
         return
 
