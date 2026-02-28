@@ -1,7 +1,7 @@
 """
-menu.py — Menú principal v1.1 (Bot Ligero).
-Solo maneja: Tasas, Nuevo Envío, Métodos de Pago, Referidos.
-Resumen/Billetera eliminados del bot → solo disponibles en el User Office (web).
+menu.py — Menú principal v1.2.
+6 botones operador: Tasas · Nuevo envío · Métodos · Referidos · Billetera · Soporte.
+Las métricas detalladas siguen siendo exclusivas del User Office (web).
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ from src.telegram_app.handlers.payment_methods import (
 )
 from src.telegram_app.handlers.rates import show_rates
 from src.telegram_app.handlers.referrals import enter_referrals
+from src.telegram_app.handlers.wallet import wallet_menu
+from src.telegram_app.ui.inline_buttons import support_whatsapp_button
 from src.telegram_app.ui.keyboards import main_menu_keyboard
 from src.telegram_app.ui.labels import (
     BTN_ADMIN,
@@ -37,20 +39,23 @@ from src.telegram_app.ui.labels import (
     BTN_ADMIN_RESET_CANCEL,
     BTN_ADMIN_RESET_YES,
     BTN_ADMIN_WITHDRAWALS,
+    BTN_HELP,
     BTN_NEW_ORDER,
     BTN_PAYMENT_METHODS,
     BTN_RATES,
     BTN_REFERRALS,
+    BTN_WALLET,
 )
 
 logger = logging.getLogger(__name__)
 
-# Todos los botones que el rate-limiter y el gate KYC deben conocer
 MENU_BUTTONS = {
     BTN_RATES,
+    BTN_WALLET,
     BTN_NEW_ORDER,
     BTN_REFERRALS,
     BTN_PAYMENT_METHODS,
+    BTN_HELP,
     BTN_ADMIN,
     BTN_ADMIN_ORDERS,
     BTN_ADMIN_WITHDRAWALS,
@@ -73,17 +78,23 @@ async def _kyc_status(update: Update) -> str | None:
     return getattr(u, "kyc_status", None) if u else None
 
 
-async def show_home(update: Update, context: ContextTypes.DEFAULT_TYPE, alias: str | None = None, *, silent: bool = False) -> None:
+async def show_home(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    alias: str | None = None,
+    *,
+    silent: bool = False,
+) -> None:
     if silent:
         return
-    msg = (
+    msg_text = (
         f"{('Hola, ' + alias + '.') if alias else 'Hola.'}\n\n"
         "Bienvenido a *Sendmax*.\n"
         "Remesas rápidas y seguras con tasa competitiva.\n\n"
         "Elige una opción del menú 👇"
     )
     sent = await update.message.reply_text(
-        msg,
+        msg_text,
         reply_markup=main_menu_keyboard(is_admin=_is_admin(update)),
         parse_mode="Markdown",
     )
@@ -103,7 +114,7 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if context.user_data.get("withdraw_mode") or context.user_data.get("order_mode"):
         return
 
-    # Rate-limit anti-spam (1 s entre taps)
+    # Rate-limit anti-spam (1 s entre taps de menú)
     if text in MENU_BUTTONS:
         now = time.time()
         last = float(context.user_data.get("menu_last_ts") or 0)
@@ -148,11 +159,27 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await show_rates(update, context)
         return
 
+    if text == BTN_WALLET:
+        _clear_modes()
+        await wallet_menu(update, context)
+        return
+
+    if text == BTN_HELP:
+        _clear_modes()
+        await update.message.reply_text(
+            "🆘 *Soporte Sendmax*\n\n"
+            "¿Tienes algún problema o consulta? Nuestro equipo te atiende por WhatsApp.\n\n"
+            "Pulsa el botón para abrir el chat directamente 👇",
+            reply_markup=support_whatsapp_button(settings.SUPPORT_WHATSAPP_NUMBER),
+            parse_mode="Markdown",
+        )
+        return
+
     if context.user_data.get("pm_mode"):
         await handle_payment_methods_country(update, context)
         return
 
-    # Admin panel router (broadcast, órdenes, etc.)
+    # Admin panel router
     if _is_admin(update):
         if text in {
             BTN_ADMIN_ORDERS, BTN_ADMIN_WITHDRAWALS, BTN_ADMIN_RATES_NOW,
@@ -166,7 +193,7 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await admin_panel_router(update, context)
             return
 
-    # Nuevo envío lo maneja el ConversationHandler
+    # Nuevo envío lo maneja el ConversationHandler por regex
     if text == BTN_NEW_ORDER:
         return
 

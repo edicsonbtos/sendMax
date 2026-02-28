@@ -394,7 +394,7 @@ export default function DashboardPage() {
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 style={S.h1}>Dashboard Ejecutivo</h1>
+          <h1 style={S.h1}>Sendmax Command Center 1.1</h1>
           <p style={{ color: '#333', fontSize: '12px', margin: '4px 0 0' }}>
             Sendmax · Centro de decisiones
             {lastUpdated && <span style={{ color: CYAN + '77', marginLeft: '8px' }}>· {lastUpdated}</span>}
