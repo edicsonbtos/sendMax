@@ -31,6 +31,7 @@ def get_drive_service():
         creds_dict = json.loads(creds_json)
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         service = build('drive', 'v3', credentials=creds, cache_discovery=False)
+        logger.info("🔑 GOOGLE_CREDENTIALS_JSON detected and Drive service authenticated successfully.")
         return service
     except Exception as e:
         logger.error(f"Failed to authenticate Drive service: {e}")
