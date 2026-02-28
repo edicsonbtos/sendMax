@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 
 from telegram import (
     InlineKeyboardButton,
@@ -33,6 +35,26 @@ BTN_IMAGE = "🖼️ Imagen con texto"
 BTN_CONFIRM = "✅ Enviar"
 BTN_CANCEL = "❌ Cancelar"
 
+# ── Idempotency lock ──────────────────────────────────────────────────────────
+# Evita que el administrador lance dos difusiones simultáneas (re-entry).
+# Clave: admin telegram_id → timestamp UNIX del inicio de la difusión activa.
+_BROADCAST_LOCK: dict[int, float] = {}
+_BROADCAST_LOCK_TTL = 300  # 5 minutos máximo por difusión
+
+
+def _lock_broadcast(admin_id: int) -> bool:
+    """Intenta adquirir el lock. Retorna True si tiene éxito (no hay difusión activa)."""
+    now = time.time()
+    existing = _BROADCAST_LOCK.get(admin_id)
+    if existing and (now - existing) < _BROADCAST_LOCK_TTL:
+        return False  # Lock activo
+    _BROADCAST_LOCK[admin_id] = now
+    return True
+
+
+def _release_broadcast_lock(admin_id: int) -> None:
+    _BROADCAST_LOCK.pop(admin_id, None)
+
 
 def _is_admin(update: Update) -> bool:
     return settings.is_admin_id(getattr(update.effective_user, "id", None))
@@ -42,12 +64,26 @@ async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not _is_admin(update):
         return ConversationHandler.END
 
+    admin_id = int(update.effective_user.id)
+    if not _lock_broadcast(admin_id):
+        await update.message.reply_text(
+            "⚠️ Ya hay una difusión en curso. "
+            "Espera a que finalice antes de iniciar otra."
+        )
+        return ConversationHandler.END
+
+    context.user_data["broadcast_admin_id"] = admin_id
+
     kb = ReplyKeyboardMarkup(
         [[KeyboardButton(BTN_TEXT), KeyboardButton(BTN_IMAGE)], [KeyboardButton(BTN_CANCEL)]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
-    await update.message.reply_text("📢 **Difusión**\n\n¿Qué tipo de difusión deseas realizar?", reply_markup=kb, parse_mode="Markdown")
+    await update.message.reply_text(
+        "📢 **Difusión**\n\n¿Qué tipo de difusión deseas realizar?",
+        reply_markup=kb,
+        parse_mode="Markdown",
+    )
     return BROADCAST_TYPE
 
 
@@ -55,17 +91,24 @@ async def on_broadcast_type(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     text = (update.message.text or "").strip()
 
     if text == BTN_CANCEL:
+        _release_broadcast_lock(context.user_data.pop("broadcast_admin_id", 0))
         await update.message.reply_text("Difusión cancelada ✅", reply_markup=admin_panel_keyboard())
         return ConversationHandler.END
 
     if text == BTN_TEXT:
         context.user_data["broadcast_type"] = "text"
-        await update.message.reply_text("Escribe el mensaje que deseas enviar a todos los operadores:", reply_markup=ReplyKeyboardMarkup([[KeyboardButton(BTN_CANCEL)]], resize_keyboard=True))
+        await update.message.reply_text(
+            "Escribe el mensaje que deseas enviar a todos los operadores:",
+            reply_markup=ReplyKeyboardMarkup([[KeyboardButton(BTN_CANCEL)]], resize_keyboard=True),
+        )
         return BROADCAST_CONTENT
 
     if text == BTN_IMAGE:
         context.user_data["broadcast_type"] = "image"
-        await update.message.reply_text("Envía la imagen con el texto (caption) que deseas difundir:", reply_markup=ReplyKeyboardMarkup([[KeyboardButton(BTN_CANCEL)]], resize_keyboard=True))
+        await update.message.reply_text(
+            "Envía la imagen con el texto (caption) que deseas difundir:",
+            reply_markup=ReplyKeyboardMarkup([[KeyboardButton(BTN_CANCEL)]], resize_keyboard=True),
+        )
         return BROADCAST_CONTENT
 
     await update.message.reply_text("Por favor, elige una opción válida usando los botones.")
@@ -74,6 +117,7 @@ async def on_broadcast_type(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def on_broadcast_content(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message.text == BTN_CANCEL:
+        _release_broadcast_lock(context.user_data.pop("broadcast_admin_id", 0))
         await update.message.reply_text("Difusión cancelada ✅", reply_markup=admin_panel_keyboard())
         return ConversationHandler.END
 
@@ -100,7 +144,7 @@ async def on_broadcast_content(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         await update.message.reply_photo(
             photo=context.user_data["broadcast_photo"],
-            caption=context.user_data["broadcast_text"]
+            caption=context.user_data["broadcast_text"],
         )
 
     # Contar operadores
@@ -120,15 +164,17 @@ async def on_broadcast_content(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(
         f"Se enviará a **{count}** operadores registrados y activos.\n\n¿Confirmar envío?",
         reply_markup=kb,
-        parse_mode="Markdown"
+        parse_mode="Markdown",
     )
     return BROADCAST_CONFIRM
 
 
 async def on_broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = (update.message.text or "").strip()
+    admin_id = context.user_data.get("broadcast_admin_id", 0)
 
     if text == BTN_CANCEL:
+        _release_broadcast_lock(admin_id)
         await update.message.reply_text("Difusión cancelada ✅", reply_markup=admin_panel_keyboard())
         return ConversationHandler.END
 
@@ -141,47 +187,63 @@ async def on_broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
     b_photo = context.user_data.get("broadcast_photo")
 
     await update.message.reply_text("🚀 Iniciando difusión... esto puede tardar un poco.")
-    import asyncio
 
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SELECT telegram_user_id FROM users WHERE is_active = true;")
             rows = await cur.fetchall()
 
+    # Deduplicar IDs — evita enviar dos veces si hay duplicados en DB
+    seen_ids: set[int] = set()
     success_count = 0
     fail_count = 0
+    blocked_count = 0
 
     for row in rows:
         tg_id = row[0]
         if not tg_id:
             continue
+        tg_id_int = int(tg_id)
+        if tg_id_int in seen_ids:
+            logger.warning("[Broadcast] ID duplicado en DB omitido: %s", tg_id_int)
+            continue
+        seen_ids.add(tg_id_int)
+
         try:
             if b_type == "text":
-                await context.bot.send_message(chat_id=int(tg_id), text=b_text)
+                await context.bot.send_message(chat_id=tg_id_int, text=b_text)
             else:
-                await context.bot.send_photo(chat_id=int(tg_id), photo=b_photo, caption=b_text)
+                await context.bot.send_photo(chat_id=tg_id_int, photo=b_photo, caption=b_text)
             success_count += 1
-            # Rate limiting: 20 msg/sec max por bot policy, somos conservadores
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.05)  # Telegram: 20 req/sec máximo
         except Exception as e:
-            logger.warning(f"No pude enviar difusión a {tg_id}: {e}")
-            fail_count += 1
+            err_str = str(e).lower()
+            if "blocked" in err_str or "deactivated" in err_str or "forbidden" in err_str:
+                blocked_count += 1
+                logger.info("[Broadcast] Operador bloqueó el bot: %s", tg_id_int)
+            else:
+                logger.warning("[Broadcast] No pude enviar a %s: %s", tg_id_int, e)
+                fail_count += 1
 
-    await update.message.reply_text(
-        f"✅ Difusión finalizada.\n\n"
-        f"Sent: {success_count}\n"
-        f"Failed: {fail_count}",
-        reply_markup=admin_panel_keyboard()
+    report = (
+        f"✅ **Reporte de difusión finalizada**\n\n"
+        f"📬 Enviados: {success_count}\n"
+        f"🚫 Bloqueados/inactivos: {blocked_count}\n"
+        f"❌ Errores técnicos: {fail_count}\n"
+        f"👥 Total IDs únicos procesados: {len(seen_ids)}"
     )
+    await update.message.reply_text(report, reply_markup=admin_panel_keyboard(), parse_mode="Markdown")
 
-    # Limpiar
-    for k in ["broadcast_type", "broadcast_text", "broadcast_photo", "broadcast_count"]:
+    # Limpiar estado
+    for k in ["broadcast_type", "broadcast_text", "broadcast_photo", "broadcast_count", "broadcast_admin_id"]:
         context.user_data.pop(k, None)
+    _release_broadcast_lock(admin_id)
 
     return ConversationHandler.END
 
 
 async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    _release_broadcast_lock(context.user_data.pop("broadcast_admin_id", 0))
     await update.message.reply_text("Difusión cancelada ✅", reply_markup=admin_panel_keyboard())
     return ConversationHandler.END
 
@@ -206,5 +268,5 @@ def build_broadcast_handler() -> ConversationHandler:
             MessageHandler(filters.Regex(MENU_BUTTONS_REGEX), panic_handler),
             MessageHandler(filters.Regex(rf"^{BTN_CANCEL}$"), cancel_broadcast),
         ],
-        allow_reentry=True,
+        allow_reentry=False,  # ← idempotency: previene doble inicio por spam
     )

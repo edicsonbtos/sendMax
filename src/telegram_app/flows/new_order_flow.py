@@ -355,24 +355,25 @@ async def receive_dest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     context.user_data["order"]["dest"] = code
 
-    # ── Address Book: mostrar menú de contactos ────────────────────
+    # ── Liquid Agenda 2.0: Agenda de Contactos (sin filtro de ruta) ────────
     try:
         telegram_id = update.effective_user.id
         from src.db.repositories.users_repo import get_user_by_telegram_id
         db_user = await get_user_by_telegram_id(telegram_id)
         favorites = []
         if db_user:
-            favorites = await list_saved_beneficiaries(db_user.id, dest_country=code)
+            # Buscar en TODOS los países — el operador elige quién aplica
+            favorites = await list_saved_beneficiaries(db_user.id, dest_country=None)
     except Exception:
         favorites = []
 
     if favorites:
-        # Hay favoritos: mostrar menú completo con botones inline
+        # Hay favoritos: mostrar menú con país de origen del contacto
         rows = []
-        for fav in favorites[:5]:  # max 5 botones de favoritos
+        for fav in favorites[:7]:  # max 7 botones
             label = f"👤 {fav.alias}"
             if fav.dest_country:
-                label += f" (🏳️ {fav.dest_country})"
+                label += f" · {fav.dest_country}" if fav.dest_country == code else f" ⟳ {fav.dest_country}"
             rows.append([InlineKeyboardButton(label, callback_data=f"{CB_BENEF_PREFIX}{fav.id}")])
         rows.append([
             InlineKeyboardButton("➕ Nuevo contacto", callback_data=CB_BENEF_NEW),
@@ -382,9 +383,9 @@ async def receive_dest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         msg = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=(
-                f"📖 *Agenda de Contactos* — {code}\n\n"
-                "Selecciona un favorito para auto-completar,\n"
-                "o elige \"Nuevo\" / \"Manual\"."
+                f"📖 *Agenda Líquida* — destino: {COUNTRY_FLAGS.get(code,'🌍')} {code}\n\n"
+                "Elige un contacto *(⟳ = guardado en otro país)* o escoge Nuevo / Manual.\n"
+                "_Los datos se pre-cargarán y podrás editarlos antes de confirmar._"
             ),
             reply_markup=kb,
             parse_mode="Markdown",
@@ -392,7 +393,7 @@ async def receive_dest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         context.user_data["ab_menu_msg_id"] = msg.message_id
         return ASK_BENEF_MODE
     else:
-        # Sin favoritos: ir directo a monto (nuevo flujo manual)
+        # Sin favoritos: ir directo a monto (flujo manual)
         context.user_data["order"]["benef_mode"] = "manual"
         await _screen_send_or_edit(
             update, context,
@@ -400,6 +401,7 @@ async def receive_dest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             reply_markup=_cancel_keyboard(), parse_mode="Markdown",
         )
         return ASK_AMOUNT
+
 
 
 async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -806,7 +808,7 @@ async def _try_auto_approve(
             async with conn.cursor() as cur:
                 await cur.execute(
                     """
-                    SELECT key, value FROM settings
+                    SELECT key, value_json FROM settings
                     WHERE key IN (
                         'auto_approve_enabled',
                         'auto_approve_min_trust',
@@ -816,7 +818,13 @@ async def _try_auto_approve(
                 )
                 rows = await cur.fetchall()
 
-        cfg = {r[0]: r[1] for r in rows}
+        def _cfg_str(v) -> str:
+            """Normalize value_json (JSONB: may be dict, str, bool, int, float) → str."""
+            if isinstance(v, dict):
+                return v.get("value", str(v))
+            return str(v) if v is not None else ""
+
+        cfg = {r[0]: _cfg_str(r[1]) for r in rows}
         if cfg.get("auto_approve_enabled", "false").lower() != "true":
             return False  # Feature flag OFF → flujo normal
 

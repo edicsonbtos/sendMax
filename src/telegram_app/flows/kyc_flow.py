@@ -50,7 +50,7 @@ EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 # Cuando esta variable es True, el bot aprueba al operador solo con el alias.
 # Se desactivará automáticamente el domingo a las 00:00 VET mediante el job
 # kyc_express_sunday_reset registrado en main.py.
-KYC_EXPRESS_MODE = True  # <-- togglear False para exigir KYC completo
+KYC_EXPRESS_MODE = False  # KYC completo requerido — flujo profesional con documentos y selfie
 
 
 def parse_sponsor_alias_from_start_args(context: ContextTypes.DEFAULT_TYPE) -> str | None:

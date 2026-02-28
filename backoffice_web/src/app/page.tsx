@@ -1,76 +1,24 @@
 ﻿'use client';
 
+/**
+ * Admin Dashboard 10x — Dark Tech Premium
+ * Design: #050505 bg, glass cards, Electric Cyan (#00E5FF) accents
+ * Features: Country Heatmap, Operator Leaderboard with VIP medal,
+ *           Vault Radar with blinking alerts, KPI cards, Daily Profit chart
+ */
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import {
-  Box, Typography, Card, CardContent, Alert, CircularProgress,
-  Chip, Stack, Divider, IconButton, Tooltip, TextField, MenuItem,
-  Button, Fade,
-} from '@mui/material';
-import {
-  TrendingUp as TrendingUpIcon, Receipt as ReceiptIcon,
-  AttachMoney as MoneyIcon, Warning as WarningIcon,
-  Refresh as RefreshIcon, Schedule as ClockIcon,
-  Verified as VerifiedIcon, AccountBalance as VaultIcon,
-  Download as DownloadIcon, FilterList as FilterIcon,
-} from '@mui/icons-material';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
-  BarChart, Bar, Cell, PieChart, Pie,
+  PieChart, Pie, Cell, BarChart, Bar,
 } from 'recharts';
-import { useAuth } from '@/components/AuthProvider';
 import { apiRequest, API_BASE, getToken, getApiKey } from '@/lib/api';
+import { useAuth } from '@/components/AuthProvider';
 
-/* ═══════════════════════════════════════════════════
-   Helpers
-   ═══════════════════════════════════════════════════ */
-
-const currencyDecimals = (c: string) => ['COP', 'VES', 'CLP'].includes(c) ? 0 : 2;
-const formatMoney = (a: number, c: string) => {
-  const d = currencyDecimals(c);
-  return a.toLocaleString('es-VE', { minimumFractionDigits: d, maximumFractionDigits: d });
-};
-const formatCompact = (n: number): string => {
-  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toFixed(2);
-};
-const getCurrencySymbol = (c: string) => {
-  const m: Record<string, string> = { USD: '$', USDT: '$', COP: 'COL$', VES: 'Bs.', CLP: 'CLP$', PEN: 'S/', ARS: 'AR$', BRL: 'R$', MXN: 'MX$', BOB: 'Bs' };
-  return m[c] || c;
-};
-
-function downloadCSV(endpoint: string, filename: string, params: Record<string, string>) {
-  const qs = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => { if (v) qs.set(k, v); });
-  const url = `${API_BASE}${endpoint}?${qs.toString()}`;
-  const token = getToken();
-  const apiKey = getApiKey();
-
-  fetch(url, {
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(apiKey ? { 'X-API-KEY': apiKey } : {}),
-    },
-  })
-    .then(res => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.blob();
-    })
-    .then(blob => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    })
-    .catch(err => alert('Error descargando: ' + err.message));
-}
-
-/* ═══════════════════════════════════════════════════
-   Interfaces
-   ═══════════════════════════════════════════════════ */
-
+/* ═══════════════════════════════════════════════
+   Types
+   ═══════════════════════════════════════════════ */
 interface CompanyOverview {
   ok: boolean;
   orders: { total_orders: number; pending_orders: number; completed_orders: number };
@@ -95,285 +43,265 @@ interface AlertsResponse { ok: boolean; cutoff_utc: string; origin_verificando_s
 interface ProfitDayRaw { day: string; total_orders: number; total_profit: number; total_profit_real?: number; total_volume: number }
 interface ProfitDailyResponse { days: number; profit_by_day: ProfitDayRaw[] }
 interface ProfitDay { day: string; profit: number; profit_real: number; orders: number; volume: number }
-
-/* ═══════════════════════════════════════════════════
-   KPI Card Component
-   ═══════════════════════════════════════════════════ */
-
-/* ═══════════════════════════════════════════════════
-   VaultRadarSection — Radar de Bóvedas
-   ═══════════════════════════════════════════════════ */
-
 interface VaultRowData { id: number; name: string; vault_type: string; currency: string; balance: string; alert_threshold: string; is_active: boolean }
-interface ProviderRowData { provider_id: number; provider_name: string; order_count: number; total_fee_usdt: string }
+interface LeaderboardEntry {
+  alias: string; full_name: string; trust_score: number;
+  profit_month: string; orders_month: number; kyc_status: string;
+}
 
-const VAULT_GRADIENT: Record<string, string> = {
-  Digital: 'linear-gradient(135deg, #4B2E83 0%, #7C3AED 100%)',
-  Physical: 'linear-gradient(135deg, #059669 0%, #16A34A 100%)',
-  Crypto: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
+/* ═══════════════════════════════════════════════
+   Helpers
+   ═══════════════════════════════════════════════ */
+const fmt = (n: number, d = 2) => n.toLocaleString('es-VE', { minimumFractionDigits: d, maximumFractionDigits: d });
+const usd = (n: number) => `$${fmt(n)}`;
+const compact = (n: number) => {
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toFixed(2);
 };
-const VAULT_ICON: Record<string, string> = { Digital: '🏦', Physical: '💵', Crypto: '₿' };
 
-function VaultRadarSection() {
-  const [vaults, setVaults] = React.useState<VaultRowData[]>([]);
-  const [providers, setProviders] = React.useState<ProviderRowData[]>([]);
-  const [loaded, setLoaded] = React.useState(false);
-
-  React.useEffect(() => {
-    let mounted = true;
-    Promise.all([
-      apiRequest('/vaults').catch(() => ({ vaults: [] })),
-      apiRequest('/vaults/provider-liquidation').catch(() => ({ providers: [] })),
-    ]).then(([vRes, pRes]) => {
-      if (!mounted) return;
-      setVaults(vRes?.vaults || []);
-      setProviders(pRes?.providers || []);
-      setLoaded(true);
-    });
-    return () => { mounted = false; };
-  }, []);
-
-  if (!loaded || !vaults.length) return null;
-
-  const activeVaults = vaults.filter(v => v.is_active);
-
-  return (
-    <>
-      <Card sx={{ mb: 3, borderRadius: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.05)', border: '1px solid rgba(75,46,131,0.18)' }}>
-        <CardContent sx={{ p: 3 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
-            <VaultIcon sx={{ color: '#4B2E83' }} />
-            <Typography variant="h6" sx={{ fontWeight: 800 }}>🔐 Radar de Bóvedas</Typography>
-            <Chip label={`${activeVaults.length} activas`} size="small" sx={{ backgroundColor: '#EFEAFF', color: '#4B2E83', fontWeight: 700 }} />
-          </Stack>
-          <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', gap: 2 }}>
-            {activeVaults.map(v => {
-              const bal = Number(v.balance);
-              const thr = Number(v.alert_threshold || '0');
-              const fillPct = thr > 0 ? Math.min(100, (bal / thr) * 100) : 100;
-              const isLow = thr > 0 && bal < thr;
-              return (
-                <Card key={v.id} sx={{
-                  flex: '1 1 calc(20% - 16px)', minWidth: 175, maxWidth: 260,
-                  background: VAULT_GRADIENT[v.vault_type] || VAULT_GRADIENT.Digital,
-                  borderRadius: '16px', border: isLow ? '2px solid #ff6b6b' : 'none',
-                  boxShadow: isLow ? '0 4px 16px rgba(255,60,60,0.25)' : '0 4px 16px rgba(0,0,0,0.12)',
-                  transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-2px)' },
-                }}>
-                  <CardContent sx={{ p: 2 }}>
-                    <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.05em', mb: 0.5 }}>
-                      {VAULT_ICON[v.vault_type] || '🏦'} {v.vault_type.toUpperCase()}
-                      {isLow && <span style={{ marginLeft: 6, color: '#ff6b6b', fontWeight: 900, animation: 'pulse 1.5s infinite' }}>⚠️ BAJO</span>}
-                    </Typography>
-                    <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '1.4rem', fontFamily: 'monospace', lineHeight: 1.1 }}>
-                      {formatCompact(bal)} <span style={{ fontSize: '0.8rem', opacity: 0.75 }}>{v.currency}</span>
-                    </Typography>
-                    <Typography sx={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.73rem', mt: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {v.name}
-                    </Typography>
-                    {thr > 0 && (
-                      <Box sx={{ mt: 1 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'rgba(255,255,255,0.5)', mb: 0.3 }}>
-                          <span>Llenado</span>
-                          <span>{Math.round(fillPct)}%</span>
-                        </Box>
-                        <Box sx={{ height: 6, borderRadius: 3, bgcolor: 'rgba(0,0,0,0.3)', overflow: 'hidden' }}>
-                          <Box sx={{
-                            height: '100%', borderRadius: 3,
-                            width: `${fillPct}%`,
-                            bgcolor: isLow ? '#ff6b6b' : '#00E5FF',
-                            transition: 'width 0.8s ease, background-color 0.3s',
-                          }} />
-                        </Box>
-                        <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.6rem', mt: 0.2 }}>
-                          Mínimo: {formatCompact(Number(v.alert_threshold))} {v.currency}
-                        </Typography>
-                      </Box>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-          </Stack>
-        </CardContent>
-      </Card>
-
-      {providers.length > 0 && (
-        <Card sx={{ mb: 3, borderRadius: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.05)', border: '1px solid rgba(217,119,6,0.25)' }}>
-          <CardContent sx={{ p: 3 }}>
-            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1.5 }}>
-              <MoneyIcon sx={{ color: '#D97706' }} />
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>💳 Liquidación de Proveedores</Typography>
-            </Stack>
-            <Typography variant="body2" sx={{ color: '#64748B', mb: 2, fontSize: '0.82rem' }}>
-              Fees acumulados por uso de cuentas de terceros. Lo que debe Sendmax a cada proveedor.
-            </Typography>
-            <Stack spacing={1}>
-              {providers.map(p => (
-                <Stack key={p.provider_id} direction="row" alignItems="center" justifyContent="space-between"
-                  sx={{ p: 1.5, background: '#FFFBF0', borderRadius: '12px', border: '1px solid rgba(217,119,6,0.15)' }}>
-                  <Box>
-                    <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>{p.provider_name}</Typography>
-                    <Typography sx={{ color: '#64748B', fontSize: '0.75rem' }}>{p.order_count} órdenes procesadas</Typography>
-                  </Box>
-                  <Chip label={`$${formatCompact(Number(p.total_fee_usdt))} USDT`}
-                    sx={{ fontWeight: 800, backgroundColor: '#FFF5E6', color: '#D97706', border: '1px solid rgba(217,119,6,0.3)', fontSize: '0.82rem' }} />
-                </Stack>
-              ))}
-            </Stack>
-          </CardContent>
-        </Card>
-      )}
-    </>
-  );
-}
-
-type IconComponent = React.ElementType<{ sx?: object }>;
-
-function KPICard({ title, value, subtitle, Icon, gradient, delay = 0 }: {
-  title: string; value: string; subtitle?: string;
-  Icon: IconComponent; gradient: string; delay?: number;
-}) {
-  return (
-    <Fade in timeout={600} style={{ transitionDelay: `${delay}ms` }}>
-      <Card sx={{
-        flex: '1 1 calc(25% - 18px)', minWidth: 220, position: 'relative', overflow: 'hidden',
-        background: gradient,
-        borderRadius: '20px', border: 'none',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
-        transition: 'transform 0.2s, box-shadow 0.2s',
-        '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 16px 48px rgba(0,0,0,0.12)' },
-      }}>
-        <CardContent sx={{ p: 3, position: 'relative', zIndex: 1 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-            <Box>
-              <Typography sx={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.78rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', mb: 0.5 }}>
-                {title}
-              </Typography>
-              <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '1.85rem', lineHeight: 1.1, mb: 0.5 }}>
-                {value}
-              </Typography>
-              {subtitle && (
-                <Typography sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem', fontWeight: 500 }}>
-                  {subtitle}
-                </Typography>
-              )}
-            </Box>
-            <Box sx={{
-              backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: '16px',
-              p: 1.5, display: 'flex', backdropFilter: 'blur(8px)',
-            }}>
-              <Icon sx={{ color: '#fff', fontSize: 28 }} />
-            </Box>
-          </Stack>
-        </CardContent>
-        {/* Decorative circle */}
-        <Box sx={{
-          position: 'absolute', top: -30, right: -30, width: 120, height: 120,
-          borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.06)',
-        }} />
-      </Card>
-    </Fade>
-  );
-}
-
-/* ═══════════════════════════════════════════════════
-   Filters Bar
-   ═══════════════════════════════════════════════════ */
-
-const COUNTRIES = ['', 'CHILE', 'COLOMBIA', 'VENEZUELA', 'PERU', 'ARGENTINA', 'MEXICO', 'BRASIL', 'BOLIVIA', 'PANAMA', 'USA'];
-const COUNTRY_LABELS: Record<string, string> = { '': 'Todos los países', 'CHILE': '🇨🇱 Chile', 'COLOMBIA': '🇨🇴 Colombia', 'VENEZUELA': '🇻🇪 Venezuela', 'PERU': '🇵🇪 Perú', 'ARGENTINA': '🇦🇷 Argentina', 'MEXICO': '🇲🇽 México', 'BRASIL': '🇧🇷 Brasil', 'BOLIVIA': '🇧🇴 Bolivia', 'PANAMA': '🇵🇦 Panamá', 'USA': '🇺🇸 USA' };
-
-function FiltersBar({ dateFrom, dateTo, country, onDateFrom, onDateTo, onCountry, onExportOrders, onExportWallets }: {
-  dateFrom: string; dateTo: string; country: string;
-  onDateFrom: (v: string) => void; onDateTo: (v: string) => void; onCountry: (v: string) => void;
-  onExportOrders: () => void; onExportWallets: () => void;
-}) {
-  return (
-    <Card sx={{ mb: 3, borderRadius: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.04)' }}>
-      <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ flexWrap: 'wrap', gap: 1.5 }}>
-          <Stack direction="row" alignItems="center" spacing={0.5}>
-            <FilterIcon sx={{ color: '#64748B', fontSize: 20 }} />
-            <Typography sx={{ color: '#64748B', fontSize: '0.8rem', fontWeight: 700 }}>Filtros</Typography>
-          </Stack>
-          <TextField
-            type="date" size="small" label="Desde" value={dateFrom}
-            onChange={e => onDateFrom(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            sx={{ width: 160, '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
-          />
-          <TextField
-            type="date" size="small" label="Hasta" value={dateTo}
-            onChange={e => onDateTo(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            sx={{ width: 160, '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
-          />
-          <TextField
-            select size="small" label="País origen" value={country}
-            onChange={e => onCountry(e.target.value)}
-            sx={{ width: 180, '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
-          >
-            {COUNTRIES.map(c => (
-              <MenuItem key={c} value={c}>{COUNTRY_LABELS[c] || c}</MenuItem>
-            ))}
-          </TextField>
-          <Box sx={{ flex: 1 }} />
-          <Tooltip title="Exportar órdenes CSV">
-            <Button
-              size="small" variant="outlined" startIcon={<DownloadIcon />}
-              onClick={onExportOrders}
-              sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 600, borderColor: '#4B2E83', color: '#4B2E83' }}
-            >
-              Órdenes
-            </Button>
-          </Tooltip>
-          <Tooltip title="Exportar cierres billetera CSV">
-            <Button
-              size="small" variant="outlined" startIcon={<DownloadIcon />}
-              onClick={onExportWallets}
-              sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 600, borderColor: '#16A34A', color: '#16A34A' }}
-            >
-              Cierres
-            </Button>
-          </Tooltip>
-        </Stack>
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ═══════════════════════════════════════════════════
-   Status Colors
-   ═══════════════════════════════════════════════════ */
+const COUNTRY_FLAG: Record<string, string> = {
+  PERU: '🇵🇪', COLOMBIA: '🇨🇴', VENEZUELA: '🇻🇪', CHILE: '🇨🇱',
+  ARGENTINA: '🇦🇷', MEXICO: '🇲🇽', USA: '🇺🇸', BRASIL: '🇧🇷',
+};
+const HEATMAP_COUNTRIES = ['PERU', 'COLOMBIA', 'VENEZUELA', 'CHILE', 'ARGENTINA', 'MEXICO'];
+const CYAN = '#00E5FF';
+const PURPLE = '#7B2FBE';
+const CHART_COLORS = [CYAN, PURPLE, '#f9c74f', '#43aa8b', '#f8961e', '#ff6b6b'];
+const RANK_MEDALS = ['🥇', '🥈', '🥉'];
 
 const STATUS_COLORS: Record<string, string> = {
-  PAGADA: '#16A34A', CANCELADA: '#DC2626', CREADA: '#F59E0B',
-  EN_PROCESO: '#2563EB', ORIGEN_VERIFICANDO: '#8B5CF6', COMPLETADA: '#16A34A',
+  PAGADA: '#00c896', CANCELADA: '#ff6b6b', CREADA: '#f9c74f',
+  EN_PROCESO: CYAN, ORIGEN_VERIFICANDO: PURPLE, COMPLETADA: '#00c896',
 };
 
-/* ═══════════════════════════════════════════════════
-   MAIN PAGE
-   ═══════════════════════════════════════════════════ */
+function downloadCSV(endpoint: string, filename: string, params: Record<string, string>) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v) qs.set(k, v); });
+  const url = `${API_BASE}${endpoint}?${qs.toString()}`;
+  const token = getToken(); const apiKey = getApiKey();
+  fetch(url, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(apiKey ? { 'X-API-KEY': apiKey } : {}) } })
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob(); })
+    .then(blob => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); URL.revokeObjectURL(a.href); })
+    .catch(err => alert('Error descargando: ' + err.message));
+}
+
+/* ═══════════════════════════════════════════════
+   Shared Styles
+   ═══════════════════════════════════════════════ */
+const S = {
+  page: { minHeight: '100vh', background: '#050505', color: '#e0e0e0', fontFamily: "'Inter','Segoe UI',sans-serif", padding: '28px', boxSizing: 'border-box' as const },
+  glass: (accent = 'rgba(0,229,255,0.06)') => ({
+    background: `linear-gradient(135deg, rgba(255,255,255,0.03), ${accent})`,
+    backdropFilter: 'blur(20px)',
+    border: `1px solid rgba(0,229,255,0.12)`,
+    borderRadius: '20px',
+    padding: '24px',
+  }),
+  h1: { fontSize: '30px', fontWeight: 900, background: 'linear-gradient(135deg, #00E5FF, #7B2FBE)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0, letterSpacing: '-0.5px' },
+  label: { fontSize: '10px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase' as const, color: 'rgba(0,229,255,0.5)', marginBottom: '4px' },
+  bigNum: { fontSize: '38px', fontWeight: 900, fontFamily: 'monospace', color: '#fff', lineHeight: 1.1 },
+  kpiVal: { fontSize: '24px', fontWeight: 800, fontFamily: 'monospace', color: CYAN },
+  row: { display: 'flex', gap: '20px', flexWrap: 'wrap' as const },
+  sectionTitle: { fontSize: '14px', fontWeight: 700, color: '#fff', margin: '0 0 16px 0', display: 'flex' as const, alignItems: 'center', gap: '8px' },
+  badge: (color: string) => ({ display: 'inline-block', padding: '3px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, background: color + '22', color, border: `1px solid ${color}55` }),
+  th: { color: 'rgba(0,229,255,0.5)', fontWeight: 600, textAlign: 'left' as const, padding: '7px 10px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '11px', letterSpacing: '0.5px' },
+  td: { padding: '9px 10px', borderBottom: '1px solid rgba(255,255,255,0.03)', verticalAlign: 'middle' as const, fontSize: '12px' },
+};
+
+/* ═══════════════════════════════════════════════
+   KPI Card
+   ═══════════════════════════════════════════════ */
+function KPICard({ icon, title, value, subtitle, accent = CYAN }: { icon: string; title: string; value: string; subtitle?: string; accent?: string }) {
+  return (
+    <div style={{ ...S.glass(`${accent}12`), flex: '1', minWidth: '200px', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: '50%', background: `radial-gradient(circle, ${accent}22, transparent 65%)` }} />
+      <p style={S.label}>{icon} {title}</p>
+      <p style={{ ...S.bigNum, color: accent }}>{value}</p>
+      {subtitle && <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#555' }}>{subtitle}</p>}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   Country Heatmap PieChart
+   ═══════════════════════════════════════════════ */
+function CountryHeatmap({ data }: { data: { dest_currency: string; volume: number; count?: number }[] }) {
+  const filtered = useMemo(() => {
+    // Map dest_currency to country codes for heatmap
+    const currencyToCountry: Record<string, string> = { PEN: 'PERU', COP: 'COLOMBIA', VES: 'VENEZUELA', CLP: 'CHILE', ARS: 'ARGENTINA', MXN: 'MEXICO', USD: 'USA' };
+    const aggregated: Record<string, number> = {};
+    data.forEach(d => {
+      const country = currencyToCountry[d.dest_currency] || d.dest_currency;
+      aggregated[country] = (aggregated[country] || 0) + d.volume;
+    });
+    return Object.entries(aggregated)
+      .filter(([c]) => HEATMAP_COUNTRIES.includes(c))
+      .sort((a, b) => b[1] - a[1])
+      .map(([country, volume], i) => ({ country, volume, color: CHART_COLORS[i % CHART_COLORS.length] }));
+  }, [data]);
+
+  const total = filtered.reduce((s, d) => s + d.volume, 0);
+
+  if (!filtered.length) return <p style={{ color: '#333', textAlign: 'center', padding: '20px 0', fontSize: '12px' }}>Sin datos de volumen por país</p>;
+
+  return (
+    <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ width: 160, height: 160, flexShrink: 0 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={filtered.map(d => ({ name: d.country, value: d.volume, color: d.color }))}
+              cx="50%" cy="50%" innerRadius={45} outerRadius={75}
+              dataKey="value" strokeWidth={0}>
+              {filtered.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+            </Pie>
+            <RechartsTooltip
+              contentStyle={{ background: '#111', border: `1px solid ${CYAN}33`, borderRadius: '10px', fontSize: '12px' }}
+              formatter={(v: number) => [`$${compact(v)}`, '']}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {filtered.map((d, i) => {
+          const pct = total > 0 ? (d.volume / total) * 100 : 0;
+          return (
+            <div key={d.country}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                <span style={{ fontWeight: 600 }}>{COUNTRY_FLAG[d.country] || '🌍'} {d.country}</span>
+                <span style={{ color: d.color, fontWeight: 700 }}>{usd(d.volume)} <span style={{ color: '#444' }}>({pct.toFixed(0)}%)</span></span>
+              </div>
+              <div style={{ height: '5px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: d.color, borderRadius: '3px', transition: 'width 1s ease', boxShadow: `0 0 8px ${d.color}88` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   Operator Leaderboard
+   ═══════════════════════════════════════════════ */
+function OperatorLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
+  if (!entries.length) return <p style={{ color: '#333', fontSize: '12px', textAlign: 'center', padding: '20px 0' }}>Sin datos de operadores</p>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {entries.slice(0, 8).map((e, i) => {
+        const isGold = i === 0;
+        const medal = RANK_MEDALS[i] || `${i + 1}`;
+        const trustColor = e.trust_score >= 90 ? CYAN : e.trust_score >= 75 ? '#f9c74f' : '#43aa8b';
+        return (
+          <div key={e.alias} style={{
+            display: 'flex', alignItems: 'center', gap: '12px',
+            padding: '10px 14px', borderRadius: '14px',
+            background: isGold ? 'rgba(255,215,0,0.06)' : 'rgba(255,255,255,0.02)',
+            border: isGold ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.04)',
+          }}>
+            {/* Medal */}
+            <div style={{
+              width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: isGold ? '20px' : '13px', fontWeight: 800,
+              background: isGold ? 'linear-gradient(135deg, #FFD700, #FFA500)' : 'rgba(255,255,255,0.06)',
+              color: isGold ? '#000' : '#666',
+              boxShadow: isGold ? '0 0 24px rgba(255,215,0,0.5)' : 'none',
+              animation: isGold ? 'vipPulse 2s ease-in-out infinite' : 'none',
+            }}>{medal}</div>
+            {/* Info */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: isGold ? '#FFD700' : '#e0e0e0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {e.full_name || e.alias}
+                {isGold && <span style={{ marginLeft: '8px', fontSize: '10px', color: '#FFD700', letterSpacing: '1px' }}>VIP</span>}
+              </p>
+              <p style={{ margin: 0, fontSize: '10px', color: '#444' }}>@{e.alias} · {e.orders_month} órdenes</p>
+            </div>
+            {/* Stats */}
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <p style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#00c896' }}>{usd(Number(e.profit_month))}</p>
+              <p style={{ margin: 0, fontSize: '10px', color: trustColor, fontWeight: 600 }}>score {e.trust_score}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   Vault Radar (blinking if low)
+   ═══════════════════════════════════════════════ */
+function VaultRadar() {
+  const [vaults, setVaults] = useState<VaultRowData[]>([]);
+  useEffect(() => {
+    apiRequest('/vaults').then(r => setVaults(r?.vaults || [])).catch(() => { });
+  }, []);
+  const active = vaults.filter(v => v.is_active);
+  if (!active.length) return null;
+  const VAULT_COLORS: Record<string, string> = { Digital: PURPLE, Physical: '#43aa8b', Crypto: '#f9c74f' };
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
+      {active.map(v => {
+        const bal = Number(v.balance), thr = Number(v.alert_threshold || '0');
+        const isLow = thr > 0 && bal < thr;
+        const fillPct = thr > 0 ? Math.min(100, (bal / thr) * 100) : 100;
+        const color = VAULT_COLORS[v.vault_type] || CYAN;
+        return (
+          <div key={v.id} style={{
+            flex: '1 1 180px', maxWidth: '240px',
+            background: `linear-gradient(135deg, rgba(255,255,255,0.03), ${color}14)`,
+            border: isLow ? `1px solid ${color}` : `1px solid ${color}33`,
+            borderRadius: '16px', padding: '18px',
+            boxShadow: isLow ? `0 0 20px ${color}44, inset 0 0 30px ${color}08` : 'none',
+            animation: isLow ? 'vaultBlink 1.4s ease-in-out infinite' : 'none',
+          }}>
+            <p style={{ ...S.label, color: color + 'aa' }}>
+              {v.vault_type === 'Digital' ? '🏦' : v.vault_type === 'Physical' ? '💵' : '₿'} {v.currency}
+              {isLow && <span style={{ marginLeft: '6px', color: '#ff6b6b', fontWeight: 900 }}>⚠️</span>}
+            </p>
+            <p style={{ ...S.bigNum, fontSize: '28px', color: isLow ? '#ff6b6b' : '#fff', margin: '4px 0 2px' }}>
+              {compact(bal)}
+            </p>
+            <p style={{ margin: '0 0 10px', fontSize: '10px', color: '#444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</p>
+            {thr > 0 && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#333', marginBottom: '4px' }}>
+                  <span>Llenado</span><span>{Math.round(fillPct)}%</span>
+                </div>
+                <div style={{ height: '5px', background: 'rgba(255,255,255,0.04)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${fillPct}%`, background: isLow ? '#ff6b6b' : color, borderRadius: '3px', transition: 'width 0.8s ease' }} />
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   Main Admin Dashboard
+   ═══════════════════════════════════════════════ */
+const COUNTRIES_FILTER = ['', 'CHILE', 'COLOMBIA', 'VENEZUELA', 'PERU', 'ARGENTINA', 'MEXICO', 'USA'];
+const COUNTRY_LABEL: Record<string, string> = { '': 'Todos', CHILE: '🇨🇱 Chile', COLOMBIA: '🇨🇴 Colombia', VENEZUELA: '🇻🇪 Venezuela', PERU: '🇵🇪 Perú', ARGENTINA: '🇦🇷 Argentina', MEXICO: '🇲🇽 México', USA: '🇺🇸 USA' };
 
 export default function DashboardPage() {
   const { token } = useAuth();
-
-  // -- Filters (stable refs to avoid re-renders) --
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [country, setCountry] = useState('');
-
-  // -- Data --
   const [metrics, setMetrics] = useState<MetricsOverview | null>(null);
   const [companyOverview, setCompanyOverview] = useState<CompanyOverview | null>(null);
   const [alerts, setAlerts] = useState<StuckAlert[]>([]);
   const [profitDaily, setProfitDaily] = useState<ProfitDay[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [statusCounts, setStatusCounts] = useState<{ name: string; value: number; color: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState('');
-
-  // Debounce filter changes
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchData = useCallback(async (df = dateFrom, dt = dateTo, oc = country) => {
@@ -385,15 +313,17 @@ export default function DashboardPage() {
       if (oc) qp.set('origin_country', oc);
       const qs = qp.toString() ? `?${qp.toString()}` : '';
 
-      const [metricsData, companyData, alertsData, profitData] = await Promise.all([
+      const [metricsData, companyData, alertsData, profitData, lbData] = await Promise.all([
         apiRequest<MetricsOverview>('/metrics/overview'),
         apiRequest<CompanyOverview>(`/metrics/company-overview${qs}`).catch(() => null),
         apiRequest<AlertsResponse>('/alerts/stuck-30m').catch(() => null),
         apiRequest<ProfitDailyResponse>('/metrics/profit_daily?days=7').catch(() => null),
+        apiRequest<{ leaderboard: LeaderboardEntry[] }>('/metrics/operator-leaderboard?limit=8').catch(() => null),
       ]);
 
       setMetrics(metricsData);
       setCompanyOverview(companyData);
+      setLeaderboard(lbData?.leaderboard || []);
 
       const allAlerts: StuckAlert[] = [];
       if (alertsData) {
@@ -415,7 +345,7 @@ export default function DashboardPage() {
         setStatusCounts(
           Object.entries(metricsData.status_counts)
             .filter(([, v]) => (v || 0) > 0)
-            .map(([name, value]) => ({ name, value: Number(value || 0), color: STATUS_COLORS[name] || '#6B7280' }))
+            .map(([name, value]) => ({ name, value: Number(value || 0), color: STATUS_COLORS[name] || '#444' }))
         );
       }
       setLastUpdated(new Date().toLocaleTimeString('es-VE'));
@@ -426,10 +356,8 @@ export default function DashboardPage() {
     }
   }, [dateFrom, dateTo, country]);
 
-  // Initial load
   useEffect(() => { if (token) fetchData(); }, [token, fetchData]);
 
-  // Debounced filter effect
   const onFilterChange = useCallback((df: string, dt: string, oc: string) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => fetchData(df, dt, oc), 400);
@@ -439,254 +367,218 @@ export default function DashboardPage() {
   const handleDateTo = (v: string) => { setDateTo(v); onFilterChange(dateFrom, v, country); };
   const handleCountry = (v: string) => { setCountry(v); onFilterChange(dateFrom, dateTo, v); };
 
-  // Export handlers
-  const exportOrders = () => downloadCSV('/metrics/export-orders', `ordenes_${dateFrom || 'all'}_${dateTo || 'today'}.csv`, { date_from: dateFrom, date_to: dateTo, origin_country: country });
-  const exportWallets = () => downloadCSV('/origin-wallets/export', `cierres_${dateFrom || 'all'}_${dateTo || 'today'}.csv`, { date_from: dateFrom, date_to: dateTo, origin_country: country });
+  const exportOrders = () => downloadCSV('/metrics/export-orders', `ordenes_${dateFrom || 'all'}.csv`, { date_from: dateFrom, date_to: dateTo, origin_country: country });
+  const exportWallets = () => downloadCSV('/origin-wallets/export', `cierres_${dateFrom || 'all'}.csv`, { date_from: dateFrom, date_to: dateTo, origin_country: country });
 
-  // Derived KPIs
   const co = companyOverview;
   const volumeUSD = co?.volume?.paid_usd_usdt || 0;
   const profitReal = co?.profit?.total_profit_real_usd || metrics?.total_profit_real_usd || 0;
   const completedOrders = co?.orders?.completed_orders || metrics?.completed_orders || 0;
-  const vaultBalance = useMemo(() => {
-    if (!co?.origin_wallets?.pending_by_currency) return 0;
-    return Object.values(co.origin_wallets.pending_by_currency).reduce((s, v) => s + v, 0);
-  }, [co]);
-
-  const pendingByCurrency = useMemo(() => {
-    const m = co?.origin_wallets?.pending_by_currency || {};
-    return Object.entries(m).sort((a, b) => b[1] - a[1]);
-  }, [co]);
+  const heatmapData = co?.volume?.paid_by_dest_currency || [];
 
   if (!token) return null;
 
   return (
-    <Box className="fade-in">
-      {/* Header */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 900, color: '#111827', letterSpacing: '-0.02em' }}>
-            Dashboard Ejecutivo
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#64748B', mt: 0.25 }}>
-            {'Centro de decisiones SendMax' + (lastUpdated ? ` · ${lastUpdated}` : '')}
-          </Typography>
-        </Box>
-        <Tooltip title="Actualizar datos">
-          <IconButton onClick={() => fetchData()} disabled={loading} sx={{ color: '#4B2E83', backgroundColor: '#EFEAFF', '&:hover': { backgroundColor: '#D8CCFF' } }}>
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
-      </Stack>
+    <div style={S.page}>
+      {/* Keyframes */}
+      <style>{`
+        @keyframes vipPulse { 0%,100%{transform:scale(1);box-shadow:0 0 24px rgba(255,215,0,0.5)} 50%{transform:scale(1.1);box-shadow:0 0 40px rgba(255,215,0,0.8)} }
+        @keyframes vaultBlink { 0%,100%{border-color:rgba(255,107,107,0.6)} 50%{border-color:rgba(255,107,107,1);box-shadow:0 0 30px rgba(255,107,107,0.4)} }
+        @keyframes spin { to{transform:rotate(360deg)} }
+        * { box-sizing: border-box; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; }
+        ::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.25); border-radius: 3px; }
+      `}</style>
 
-      {error && <Alert severity="error" sx={{ mb: 3, borderRadius: '12px' }}>{error}</Alert>}
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 style={S.h1}>Dashboard Ejecutivo</h1>
+          <p style={{ color: '#333', fontSize: '12px', margin: '4px 0 0' }}>
+            Sendmax · Centro de decisiones
+            {lastUpdated && <span style={{ color: CYAN + '77', marginLeft: '8px' }}>· {lastUpdated}</span>}
+          </p>
+        </div>
+        <button
+          onClick={() => fetchData()}
+          disabled={loading}
+          style={{
+            background: 'none', border: `1px solid ${CYAN}44`, color: CYAN, borderRadius: '12px',
+            padding: '8px 18px', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+            transition: 'all 0.2s', opacity: loading ? 0.5 : 1,
+          }}
+        >
+          {loading ? '⟳ Actualizando…' : '⟳ Actualizar'}
+        </button>
+      </div>
 
-      {/* Filters Bar */}
-      <FiltersBar
-        dateFrom={dateFrom} dateTo={dateTo} country={country}
-        onDateFrom={handleDateFrom} onDateTo={handleDateTo} onCountry={handleCountry}
-        onExportOrders={exportOrders} onExportWallets={exportWallets}
-      />
+      {error && (
+        <div style={{ ...S.glass('rgba(255,50,50,0.1)'), border: '1px solid rgba(255,50,50,0.3)', marginBottom: '20px', color: '#ff6b6b', fontSize: '13px' }}>
+          ⚠️ {error}
+        </div>
+      )}
 
-      {loading && <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress sx={{ color: '#4B2E83' }} /></Box>}
+      {/* ── Filters ── */}
+      <div style={{ ...S.glass(), marginBottom: '24px', padding: '16px 20px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ ...S.label, margin: 0 }}>⚙ Filtros</span>
+          {[
+            { label: 'Desde', type: 'date', value: dateFrom, onChange: handleDateFrom },
+            { label: 'Hasta', type: 'date', value: dateTo, onChange: handleDateTo },
+          ].map(f => (
+            <div key={f.label} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <label style={{ ...S.label, fontSize: '9px' }}>{f.label}</label>
+              <input type="date" value={f.value}
+                onChange={e => f.onChange(e.target.value)}
+                style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${CYAN}22`, borderRadius: '10px', color: '#e0e0e0', padding: '6px 12px', fontSize: '12px', outline: 'none' }}
+              />
+            </div>
+          ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <label style={{ ...S.label, fontSize: '9px' }}>País</label>
+            <select value={country} onChange={e => handleCountry(e.target.value)}
+              style={{ background: '#0d0d0d', border: `1px solid ${CYAN}22`, borderRadius: '10px', color: '#e0e0e0', padding: '6px 12px', fontSize: '12px', outline: 'none' }}>
+              {COUNTRIES_FILTER.map(c => <option key={c} value={c} style={{ background: '#111' }}>{COUNTRY_LABEL[c] || c}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1 }} />
+          <button onClick={exportOrders} style={{ background: `${CYAN}11`, border: `1px solid ${CYAN}33`, color: CYAN, borderRadius: '10px', padding: '7px 16px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
+            ⬇ Órdenes CSV
+          </button>
+          <button onClick={exportWallets} style={{ background: '#43aa8b11', border: '1px solid #43aa8b44', color: '#43aa8b', borderRadius: '10px', padding: '7px 16px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
+            ⬇ Cierres CSV
+          </button>
+        </div>
+      </div>
+
+      {loading && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '48px 0' }}>
+          <div style={{ width: 36, height: 36, border: `3px solid ${CYAN}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <span style={{ color: '#444', fontSize: '13px' }}>Cargando datos…</span>
+        </div>
+      )}
 
       {metrics && !loading && (
         <>
-          {/* 4 KPI Cards */}
-          <Stack direction="row" spacing={2.5} sx={{ mb: 4, flexWrap: 'wrap', gap: 2 }}>
-            <KPICard
-              title="Volumen Total (USD)"
-              value={`$${formatCompact(volumeUSD)}`}
-              subtitle={co?.volume?.total_volume_origin ? `${formatCompact(co.volume.total_volume_origin)} moneda origen` : undefined}
-              Icon={TrendingUpIcon}
-              gradient="linear-gradient(135deg, #4B2E83 0%, #7C3AED 100%)"
-              delay={0}
-            />
-            <KPICard
-              title="Utilidad Neta Real"
-              value={`$${formatCompact(profitReal)}`}
-              subtitle={`Teórica: $${formatCompact(co?.profit?.total_profit_usd || 0)}`}
-              Icon={VerifiedIcon}
-              gradient="linear-gradient(135deg, #059669 0%, #16A34A 100%)"
-              delay={80}
-            />
-            <KPICard
-              title="Órdenes Completadas"
-              value={completedOrders.toLocaleString()}
-              subtitle={`${metrics.pending_orders} pendientes · ${metrics.total_orders} total`}
-              Icon={ReceiptIcon}
-              gradient="linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)"
-              delay={160}
-            />
-            <KPICard
-              title="Balance Total Bóveda"
-              value={pendingByCurrency.length > 0 ? `${pendingByCurrency.length} monedas` : '$0'}
-              subtitle={vaultBalance > 0 ? `Total equiv. ${formatCompact(vaultBalance)}` : 'Sin fondos pendientes'}
-              Icon={VaultIcon}
-              gradient="linear-gradient(135deg, #D97706 0%, #F59E0B 100%)"
-              delay={240}
-            />
-          </Stack>
+          {/* ── KPI Row ── */}
+          <div style={{ ...S.row, marginBottom: '24px' }}>
+            <KPICard icon="📈" title="Volumen Total USD" value={`$${compact(volumeUSD)}`} subtitle={`${(co?.volume?.total_volume_origin || 0) > 0 ? compact(co!.volume.total_volume_origin!) + ' moneda origen' : ''}`} accent={CYAN} />
+            <KPICard icon="💰" title="Utilidad Neta Real" value={`$${compact(profitReal)}`} subtitle={`Teórica: $${compact(co?.profit?.total_profit_usd || 0)}`} accent="#00c896" />
+            <KPICard icon="📦" title="Órdenes Completadas" value={completedOrders.toLocaleString()} subtitle={`${metrics.pending_orders} pendientes · ${metrics.total_orders} total`} accent={PURPLE} />
+            <KPICard icon="🚨" title="Alertas Activas" value={String(alerts.length)} subtitle={alerts.length > 0 ? 'órdenes estancadas +30min' : 'Todo en orden ✓'} accent={alerts.length > 0 ? '#ff6b6b' : '#43aa8b'} />
+          </div>
 
-          {/* Charts Row */}
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2.5} sx={{ mb: 4 }}>
-            {/* Profit Chart */}
-            <Card sx={{ flex: 2, minWidth: 0, borderRadius: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.05)' }}>
-              <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 800, mb: 0.5 }}>Ganancia Diaria (7 días)</Typography>
-                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>
-                  Teórica vs Utilidad Neta Real
-                </Typography>
-                {profitDaily.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <AreaChart data={profitDaily}>
-                      <defs>
-                        <linearGradient id="gTheo" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#16A34A" stopOpacity={0.22} />
-                          <stop offset="100%" stopColor="#16A34A" stopOpacity={0.02} />
-                        </linearGradient>
-                        <linearGradient id="gReal" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#2563EB" stopOpacity={0.22} />
-                          <stop offset="100%" stopColor="#2563EB" stopOpacity={0.02} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E9E3F7" vertical={false} />
-                      <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={{ stroke: '#E9E3F7' }} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => '$' + v} />
-                      <RechartsTooltip
-                        contentStyle={{ borderRadius: 12, border: '1px solid #E9E3F7', boxShadow: '0 8px 24px rgba(17,24,39,.06)', fontSize: 13 }}
-                        formatter={(value?: unknown, name?: string) => {
-                          const n = typeof value === 'number' ? value : Number(value ?? 0);
-                          const label = name === 'profit' ? 'Profit teórico' : name === 'profit_real' ? 'Utilidad Neta' : (name || '');
-                          return ['$' + n.toFixed(2), label];
-                        }}
-                      />
-                      <Area type="monotone" dataKey="profit" stroke="#16A34A" strokeWidth={2.5} fill="url(#gTheo)" dot={false} />
-                      <Area type="monotone" dataKey="profit_real" stroke="#2563EB" strokeWidth={2.5} fill="url(#gReal)" dot={false} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <Box sx={{ py: 6, textAlign: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">No hay datos</Typography>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Status Distribution */}
-            <Card sx={{ flex: 1, minWidth: 280, borderRadius: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.05)' }}>
-              <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 800, mb: 0.5 }}>Órdenes por Status</Typography>
-                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>Distribución actual</Typography>
-                {statusCounts.length > 0 ? (
-                  <>
-                    <ResponsiveContainer width="100%" height={160}>
-                      <BarChart data={statusCounts} layout="vertical">
-                        <XAxis type="number" hide />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#475569' }} axisLine={false} tickLine={false} width={140} />
-                        <RechartsTooltip contentStyle={{ borderRadius: 12, border: '1px solid #E9E3F7', fontSize: 13 }} />
-                        <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={20}>
-                          {statusCounts.map((entry, index) => (<Cell key={index} fill={entry.color} />))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                    <Divider sx={{ my: 1.5 }} />
-                    <Stack spacing={1}>
-                      {statusCounts.map(s => (
-                        <Stack key={s.name} direction="row" justifyContent="space-between" alignItems="center">
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: s.color }} />
-                            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{s.name}</Typography>
-                          </Stack>
-                          <Chip label={s.value} size="small" sx={{ backgroundColor: s.color + '15', color: s.color, fontWeight: 700, fontSize: '0.75rem', height: 22 }} />
-                        </Stack>
-                      ))}
-                    </Stack>
-                  </>
-                ) : (
-                  <Box sx={{ py: 6, textAlign: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">Sin datos</Typography>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-          </Stack>
-
-          {/* Vault Balance Cards */}
-          {pendingByCurrency.length > 0 && (
-            <Card sx={{ mb: 4, borderRadius: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.05)' }}>
-              <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" sx={{ mb: 2, fontWeight: 800 }}>Saldos Pendientes (por moneda)</Typography>
-                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-                  {pendingByCurrency.map(([cur, amt]) => (
-                    <Chip key={cur} label={`${getCurrencySymbol(cur)} ${cur}: ${formatMoney(amt, cur)}`}
-                      sx={{ fontWeight: 800, backgroundColor: '#EFEAFF', color: '#4B2E83', borderRadius: '12px', height: 32, fontSize: '0.82rem' }}
+          {/* ── Row: Daily Profit Chart + Status Distribution ── */}
+          <div style={{ ...S.row, marginBottom: '24px' }}>
+            <div style={{ ...S.glass(), flex: 2, minWidth: 0 }}>
+              <p style={S.sectionTitle}>📊 Ganancia Diaria — 7 días</p>
+              {profitDaily.length > 0 ? (
+                <ResponsiveContainer width="100%" height={240}>
+                  <AreaChart data={profitDaily}>
+                    <defs>
+                      <linearGradient id="gTheo" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#00c896" stopOpacity={0.25} />
+                        <stop offset="100%" stopColor="#00c896" stopOpacity={0.01} />
+                      </linearGradient>
+                      <linearGradient id="gReal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={CYAN} stopOpacity={0.25} />
+                        <stop offset="100%" stopColor={CYAN} stopOpacity={0.01} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                    <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#444' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: '#444' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => '$' + compact(v)} />
+                    <RechartsTooltip
+                      contentStyle={{ background: '#111', border: `1px solid ${CYAN}33`, borderRadius: '10px', fontSize: '12px' }}
+                      labelStyle={{ color: CYAN }}
+                      formatter={(value?: unknown, name?: string) => {
+                        const n = typeof value === 'number' ? value : Number(value ?? 0);
+                        const label = name === 'profit' ? 'Teórico' : 'Neto Real';
+                        return ['$' + n.toFixed(2), label];
+                      }}
                     />
-                  ))}
-                </Stack>
-              </CardContent>
-            </Card>
-          )}
+                    <Area type="monotone" dataKey="profit" stroke="#00c896" strokeWidth={2} fill="url(#gTheo)" dot={false} />
+                    <Area type="monotone" dataKey="profit_real" stroke={CYAN} strokeWidth={2} fill="url(#gReal)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : <p style={{ color: '#333', textAlign: 'center', padding: '40px 0', fontSize: '12px' }}>Sin datos de ganancias</p>}
+            </div>
+            <div style={{ ...S.glass(), flex: 1, minWidth: 260 }}>
+              <p style={S.sectionTitle}>🔵 Órdenes por Estado</p>
+              {statusCounts.length > 0 ? (
+                <>
+                  <ResponsiveContainer width="100%" height={140}>
+                    <BarChart data={statusCounts} layout="vertical">
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: '#444' }} axisLine={false} tickLine={false} width={130} />
+                      <RechartsTooltip contentStyle={{ background: '#111', border: `1px solid ${CYAN}33`, borderRadius: '10px', fontSize: '12px' }} />
+                      <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={16}>
+                        {statusCounts.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {statusCounts.map(s => (
+                      <div key={s.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: s.color }} />
+                          <span style={{ color: '#888' }}>{s.name}</span>
+                        </div>
+                        <span style={{ fontWeight: 700, color: s.color }}>{s.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : <p style={{ color: '#333', textAlign: 'center', padding: '20px 0', fontSize: '12px' }}>Sin datos</p>}
+            </div>
+          </div>
 
-          {/* Top Pending Wallets */}
-          {co?.origin_wallets?.top_pending?.length ? (
-            <Card sx={{ mb: 4, borderRadius: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.05)' }}>
-              <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" sx={{ mb: 2, fontWeight: 800 }}>Top Billeteras con Saldo Pendiente</Typography>
-                <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', gap: 1 }}>
-                  {co.origin_wallets.top_pending.map((w, i) => (
-                    <Card key={i} variant="outlined" sx={{ minWidth: 200, flex: '1 1 calc(25% - 16px)', borderRadius: '14px' }}>
-                      <CardContent sx={{ p: 2 }}>
-                        <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.8rem' }}>{w.origin_country}</Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 800, color: '#111827', mt: 0.5 }}>
-                          {getCurrencySymbol(w.fiat_currency) + ' ' + formatMoney(w.current_balance, w.fiat_currency)}
-                        </Typography>
-                        <Chip label={w.fiat_currency} size="small" sx={{ mt: 0.5, fontWeight: 800 }} />
-                      </CardContent>
-                    </Card>
-                  ))}
-                </Stack>
-              </CardContent>
-            </Card>
-          ) : null}
+          {/* ── Row: Country Heatmap + Operator Leaderboard ── */}
+          <div style={{ ...S.row, marginBottom: '24px' }}>
+            <div style={{ ...S.glass('rgba(0,229,255,0.04)'), flex: 1, minWidth: 280 }}>
+              <p style={S.sectionTitle}>🌎 Mapa de Rentabilidad por País</p>
+              <CountryHeatmap data={heatmapData} />
+            </div>
+            <div style={{ ...S.glass('rgba(255,215,0,0.03)'), flex: 1, minWidth: 300, border: '1px solid rgba(255,215,0,0.12)' }}>
+              <p style={S.sectionTitle}>🏆 Ranking de Operadores</p>
+              <OperatorLeaderboard entries={leaderboard} />
+              {leaderboard.length === 0 && <p style={{ color: '#333', fontSize: '11px', textAlign: 'center', marginTop: '4px' }}>Endpoint /metrics/operator-leaderboard no disponible aún</p>}
+            </div>
+          </div>
 
-          {/* ══════════════════════════════════════════
-              🔐 Radar de Bóvedas — Sendmax 2.0
-              ══════════════════════════════════════════ */}
-          <VaultRadarSection />
+          {/* ── Vault Radar ── */}
+          <div style={{ ...S.glass(), marginBottom: '24px' }}>
+            <p style={S.sectionTitle}>🔐 Radar de Bóvedas</p>
+            <VaultRadar />
+          </div>
 
-          {/* Alerts */}
+          {/* ── Alerts ── */}
           {alerts.length > 0 && (
-            <Card sx={{ border: '1px solid #F59E0B', backgroundColor: '#FFFBF0', borderRadius: '20px' }}>
-              <CardContent sx={{ p: 3 }}>
-                <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
-                  <WarningIcon sx={{ color: '#F59E0B' }} />
-                  <Typography variant="h6" sx={{ fontWeight: 800 }}>Alertas Activas</Typography>
-                  <Chip label={`${alerts.length} orden${alerts.length > 1 ? 'es' : ''}`} size="small"
-                    sx={{ backgroundColor: '#FFF5E6', color: '#F59E0B', fontWeight: 800, border: '1px solid #F59E0B' }}
-                  />
-                </Stack>
-                <Typography variant="body2" sx={{ color: '#64748B', mb: 2 }}>Órdenes estancadas por más de 30 minutos</Typography>
-                <Stack spacing={1.5}>
-                  {alerts.map(a => {
-                    const min = Math.floor((Date.now() - new Date(a.updated_at).getTime()) / 60000);
-                    return (
-                      <Alert severity="warning" key={a.public_id} sx={{ backgroundColor: '#FFF5E6', border: '1px solid #FBBF24', borderRadius: '12px' }}>
-                        <Stack direction="row" spacing={2} alignItems="center" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                          <Chip label={`#${a.public_id}`} size="small" sx={{ fontWeight: 800, fontFamily: 'monospace' }} />
-                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{a.status}</Typography>
-                          <Typography variant="body2" sx={{ color: '#64748B' }}>{a.origin_country} › {a.dest_country}</Typography>
-                          <Chip icon={<ClockIcon sx={{ fontSize: 14 }} />} label={`${min} min`} size="small" color="warning" variant="outlined" sx={{ fontWeight: 700 }} />
-                        </Stack>
-                      </Alert>
-                    );
-                  })}
-                </Stack>
-              </CardContent>
-            </Card>
+            <div style={{ ...S.glass('rgba(255,107,107,0.06)'), border: '1px solid rgba(255,107,107,0.3)', marginBottom: '24px' }}>
+              <p style={{ ...S.sectionTitle, color: '#ff6b6b' }}>⚠️ Alertas Activas — {alerts.length} orden{alerts.length > 1 ? 'es' : ''} estancada{alerts.length > 1 ? 's' : ''}</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {alerts.map(a => {
+                  const min = Math.floor((Date.now() - new Date(a.updated_at).getTime()) / 60000);
+                  return (
+                    <div key={a.public_id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', borderRadius: '12px', background: 'rgba(255,107,107,0.06)', border: '1px solid rgba(255,107,107,0.15)', fontSize: '12px' }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#ff6b6b' }}>#{a.public_id}</span>
+                      <span style={{ ...S.badge('#ff6b6b') }}>{a.status}</span>
+                      <span style={{ color: '#666' }}>{COUNTRY_FLAG[a.origin_country] || ''}{a.origin_country} → {COUNTRY_FLAG[a.dest_country] || ''}{a.dest_country}</span>
+                      <span style={{ marginLeft: 'auto', color: '#ff6b6b', fontWeight: 700 }}>⏱ {min} min</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
+
+          {/* ── Footer ── */}
+          <div style={{ textAlign: 'center', color: '#1a1a1a', fontSize: '11px', paddingTop: '16px' }}>
+            Sendmax Executive Dashboard · {new Date().toLocaleDateString('es-VE')}
+          </div>
         </>
       )}
-    </Box>
+    </div>
   );
 }
