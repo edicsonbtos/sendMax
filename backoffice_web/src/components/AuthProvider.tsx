@@ -107,10 +107,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           justifyContent: 'center',
           alignItems: 'center',
           height: '100vh',
-          backgroundColor: '#FAF8FF',
+          backgroundColor: '#050505',
         }}
       >
-        <CircularProgress />
+        <CircularProgress sx={{ color: '#00E5FF' }} />
       </Box>
     );
   }

@@ -3,28 +3,28 @@ import { createTheme, type Shadows } from '@mui/material/styles';
 
 const baseShadows = [
   'none',
-  '0 1px 3px rgba(17,24,39,.04)',
-  '0 2px 6px rgba(17,24,39,.05)',
-  '0 4px 12px rgba(17,24,39,.06)',
-  '0 8px 24px rgba(17,24,39,.06)',
-  '0 12px 32px rgba(17,24,39,.08)',
-  '0 16px 40px rgba(17,24,39,.10)',
-  '0 20px 48px rgba(17,24,39,.12)',
-  '0 24px 56px rgba(17,24,39,.14)',
-  ...Array(16).fill('0 24px 56px rgba(17,24,39,.14)'),
+  '0 1px 3px rgba(0,0,0,.2)',
+  '0 2px 6px rgba(0,0,0,.25)',
+  '0 4px 12px rgba(0,0,0,.3)',
+  '0 8px 24px rgba(0,0,0,.35)',
+  '0 12px 32px rgba(0,0,0,.4)',
+  '0 16px 40px rgba(0,0,0,.45)',
+  '0 20px 48px rgba(0,0,0,.5)',
+  '0 24px 56px rgba(0,0,0,.55)',
+  ...Array(16).fill('0 24px 56px rgba(0,0,0,.55)'),
 ] as Shadows;
 
 const theme = createTheme({
   palette: {
     mode: 'dark',
     primary: {
-      main: '#00E5FF', // Cyan
+      main: '#00E5FF',
       light: '#33E9FF',
       dark: '#00B2CC',
       contrastText: '#050505',
     },
     secondary: {
-      main: '#7B2FBE', // Purple
+      main: '#7B2FBE',
       light: '#9558CB',
       dark: '#562185',
     },
@@ -78,10 +78,10 @@ const theme = createTheme({
           backdropFilter: 'blur(10px)',
           borderRadius: 16,
           boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-          border: '1px solid rgba(255,255,255,0.05)',
+          border: '1px solid rgba(0,229,255,0.1)',
           transition: 'box-shadow 0.2s ease, transform 0.2s ease',
           '&:hover': {
-            boxShadow: '0 8px 32px rgba(0, 229, 255, 0.1)',
+            boxShadow: '0 8px 32px rgba(0, 229, 255, 0.15)',
           },
         },
       },
@@ -95,17 +95,17 @@ const theme = createTheme({
           fontSize: '0.875rem',
         },
         contained: {
-          boxShadow: '0 2px 8px rgba(75,46,131,.25)',
+          boxShadow: '0 2px 8px rgba(0,229,255,.25)',
           '&:hover': {
-            boxShadow: '0 4px 16px rgba(75,46,131,.35)',
+            boxShadow: '0 4px 16px rgba(0,229,255,.35)',
           },
         },
         outlined: {
-          borderColor: '#D8CCFF',
-          color: '#4B2E83',
+          borderColor: 'rgba(0,229,255,0.3)',
+          color: '#00E5FF',
           '&:hover': {
-            borderColor: '#4B2E83',
-            backgroundColor: '#EFEAFF',
+            borderColor: '#00E5FF',
+            backgroundColor: 'rgba(0,229,255,0.08)',
           },
         },
       },
@@ -116,13 +116,13 @@ const theme = createTheme({
           '& .MuiOutlinedInput-root': {
             borderRadius: 12,
             '& fieldset': {
-              borderColor: '#E9E3F7',
+              borderColor: 'rgba(0,229,255,0.2)',
             },
             '&:hover fieldset': {
-              borderColor: '#D8CCFF',
+              borderColor: 'rgba(0,229,255,0.4)',
             },
             '&.Mui-focused fieldset': {
-              borderColor: '#4B2E83',
+              borderColor: '#00E5FF',
             },
           },
         },
@@ -141,11 +141,11 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           '& .MuiTableCell-head': {
-            backgroundColor: '#FAF8FF',
+            backgroundColor: '#0a0a0a',
             fontWeight: 600,
             fontSize: '0.8125rem',
-            color: '#475569',
-            borderBottom: '2px solid #E9E3F7',
+            color: 'rgba(0,229,255,0.7)',
+            borderBottom: '1px solid rgba(0,229,255,0.15)',
           },
         },
       },
@@ -153,7 +153,7 @@ const theme = createTheme({
     MuiTableCell: {
       styleOverrides: {
         root: {
-          borderBottom: '1px solid #F3F0FF',
+          borderBottom: '1px solid rgba(255,255,255,0.05)',
           padding: '14px 16px',
           fontSize: '0.8125rem',
         },
@@ -163,7 +163,7 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           '&:hover': {
-            backgroundColor: '#FAF8FF',
+            backgroundColor: 'rgba(0,229,255,0.04)',
           },
         },
       },
@@ -172,7 +172,9 @@ const theme = createTheme({
       styleOverrides: {
         paper: {
           borderRadius: 20,
-          boxShadow: '0 16px 40px rgba(17,24,39,.10)',
+          backgroundColor: '#0a0a0a',
+          boxShadow: '0 16px 40px rgba(0,0,0,.6)',
+          border: '1px solid rgba(0,229,255,0.1)',
         },
       },
     },
@@ -186,7 +188,8 @@ const theme = createTheme({
     MuiDrawer: {
       styleOverrides: {
         paper: {
-          borderRight: '1px solid #E9E3F7',
+          borderRight: '1px solid rgba(0,229,255,0.1)',
+          backgroundColor: '#0a0a0a',
         },
       },
     },
@@ -195,6 +198,8 @@ const theme = createTheme({
         tooltip: {
           borderRadius: 8,
           fontSize: '0.75rem',
+          backgroundColor: '#111',
+          border: '1px solid rgba(0,229,255,0.2)',
         },
       },
     },
