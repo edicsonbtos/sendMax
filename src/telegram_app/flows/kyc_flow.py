@@ -142,7 +142,7 @@ async def start_kyc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 await show_home(update, context, alias=ukyc.alias)
                 return ConversationHandler.END
 
-            if ukyc.kyc_status == "SUBMITTED":
+            if ukyc.kyc_status == "PENDING_APPROVAL":
                 await update.message.reply_text("📨 Tu verificación ya fue enviada. ⏳ Está en revisión.")
                 return ConversationHandler.END
 

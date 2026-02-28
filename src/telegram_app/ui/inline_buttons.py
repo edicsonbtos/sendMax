@@ -13,6 +13,7 @@ def whatsapp_url(number: str, text: str) -> str:
 
 
 def support_whatsapp_button(number: str) -> InlineKeyboardMarkup:
-    url = whatsapp_url(number, "Hola, necesito ayuda con una remesa en Sendmax.")
-    keyboard = [[InlineKeyboardButton("Abrir WhatsApp Soporte", url=url)]]
+    # Usamos Telegram como soporte en vez de WA para conectar con Admin
+    url = "https://t.me/edicsonbtos"
+    keyboard = [[InlineKeyboardButton("Abrir Soporte (Telegram)", url=url)]]
     return InlineKeyboardMarkup(keyboard)

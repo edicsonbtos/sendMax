@@ -41,6 +41,9 @@ BTN_CANCEL = "❌ Cancelar"
 _BROADCAST_LOCK: dict[int, float] = {}
 _BROADCAST_LOCK_TTL = 300  # 5 minutos máximo por difusión
 
+# Bloqueo por ID de mensaje de confirmación
+_PROCESSED_BROADCAST_MSGS: set[int] = set()
+
 
 def _lock_broadcast(admin_id: int) -> bool:
     """Intenta adquirir el lock. Retorna True si tiene éxito (no hay difusión activa)."""
@@ -172,6 +175,13 @@ async def on_broadcast_content(update: Update, context: ContextTypes.DEFAULT_TYP
 async def on_broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = (update.message.text or "").strip()
     admin_id = context.user_data.get("broadcast_admin_id", 0)
+
+    msg_id = update.effective_message.message_id if update.effective_message else 0
+    if msg_id and msg_id in _PROCESSED_BROADCAST_MSGS:
+        logger.warning("[Broadcast] Ignorando doble confirmación de mensaje ID: %s", msg_id)
+        return ConversationHandler.END
+    if msg_id:
+        _PROCESSED_BROADCAST_MSGS.add(msg_id)
 
     if text == BTN_CANCEL:
         _release_broadcast_lock(admin_id)

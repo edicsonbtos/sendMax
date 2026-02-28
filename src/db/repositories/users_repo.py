@@ -252,7 +252,7 @@ async def submit_kyc(
             kyc_selfie_file_id=%s,
             email=%s,
             hashed_password=%s,
-            kyc_status='SUBMITTED',
+            kyc_status='PENDING_APPROVAL',
             kyc_submitted_at=now(),
             updated_at=now()
         WHERE telegram_user_id=%s;
