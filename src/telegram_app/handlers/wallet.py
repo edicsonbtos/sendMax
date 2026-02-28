@@ -36,10 +36,11 @@ async def wallet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     balance = await get_balance(db_user.id)
-    backoffice_url = getattr(settings, "BACKOFFICE_URL", "https://office.sendmax.app")
+    backoffice_url = getattr(settings, "BACKOFFICE_URL", "https://office.sendmax.app").rstrip('/')
+    target_url = f"{backoffice_url}/operator-office"
 
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🌐 Ver Movimientos en la Web", url=backoffice_url)
+        InlineKeyboardButton("🌐 Ver Movimientos en la Web", url=target_url)
     ]])
 
     msg = await update.message.reply_text(

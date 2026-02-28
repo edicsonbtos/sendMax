@@ -323,16 +323,26 @@ async def entry_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except Exception:
         favorites = []
 
+    if not favorites:
+        context.user_data["order"]["benef_mode"] = "manual"
+        await _screen_send_or_edit(
+            update, context,
+            "📤 Nuevo envío\n\nElige el país de *origen*:",
+            reply_markup=_origin_keyboard(),
+            parse_mode="Markdown",
+        )
+        return ASK_ORIGIN
+
     rows = []
     for fav in favorites[:7]:
         label = f"👤 {fav.alias} ({COUNTRY_FLAGS.get(fav.dest_country,'🌍')} {fav.dest_country})"
         rows.append([InlineKeyboardButton(label, callback_data=f"{CB_BENEF_PREFIX}{fav.id}")])
-    rows.append([InlineKeyboardButton("➕ Nuevo contacto", callback_data=CB_BENEF_NEW)])
+    rows.append([InlineKeyboardButton("➡️ Continuar Manual", callback_data=CB_BENEF_MANUAL)])
     kb = InlineKeyboardMarkup(rows)
 
     await _screen_send_or_edit(
         update, context,
-        "📤 Nuevo envío\n\n📖 *Agenda Líquida* — Tus contactos guardados\n\nElige un contacto o toca Nuevo contacto:",
+        "📤 Nuevo envío\n\n📖 *Agenda Líquida* — Tus contactos guardados\n\nElige un contacto o toca Continuar Manual:",
         reply_markup=kb,
         parse_mode="Markdown",
     )
@@ -410,6 +420,17 @@ async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _screen_send_or_edit(update, context, "Listo ✅ ¿Quieres seguir editando o continuar?", reply_markup=_after_edit_keyboard())
         return ASK_EDIT_FIELD
 
+    # Si viene de agenda líquida ("saved"), saltamos directo a pedir foto (ASK_PROOF)
+    if context.user_data["order"].get("benef_mode") == "saved":
+        await _screen_send_or_edit(
+            update, context,
+            "Perfecto ✅ Ya seleccionaste tu beneficiario guardado.\n\n"
+            "Ahora envía el *comprobante de pago* en foto.",
+            reply_markup=_cancel_keyboard(), parse_mode="Markdown",
+        )
+        return ASK_PROOF
+
+    # Si es manual o no tiene contactos, seguimos el flujo natural
     await _screen_send_or_edit(
         update, context,
         "Perfecto ✅ Ahora pega los *datos del beneficiario* (como lo enviarás por WhatsApp).\n\n"
@@ -483,19 +504,16 @@ async def receive_benef_mode(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return ASK_ORIGIN
 
-    elif data == CB_BENEF_NEW:
+    elif data == CB_BENEF_MANUAL:
         order["benef_mode"] = "manual"
         _close_menu()
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=(
-                "Ingresa *Nombre y WhatsApp* del beneficiario.\n\n"
-                "⚠️ _Protocolo de Seguridad: WhatsApp solicitado solo para ID de cliente. No se enviarán mensajes._"
-            ),
-            reply_markup=_cancel_keyboard(),
+            text="📤 Nuevo envío\n\nElige el país de *origen*:",
+            reply_markup=_origin_keyboard(),
             parse_mode="Markdown",
         )
-        return ASK_BENEF
+        return ASK_ORIGIN
 
     return ASK_BENEF_MODE
 

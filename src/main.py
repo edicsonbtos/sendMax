@@ -42,6 +42,15 @@ async def lifespan(app: FastAPI):
         logger.info("Waiting for database connection...")
         await asyncio.wait_for(wait_db_ready(), timeout=30.0)
         logger.info("Database connected successfully")
+
+        # FIX DB: Asegurar base para sprint 4
+        from src.db.connection import get_async_conn
+        async with get_async_conn() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("ALTER TABLE vaults ADD COLUMN IF NOT EXISTS type VARCHAR(50);")
+                await cur.execute("ALTER TABLE vaults ADD COLUMN IF NOT EXISTS tipo VARCHAR(50);")
+        logger.info("Migración automática de tabla vaults ejecutada correctamente.")
+
     except asyncio.TimeoutError:
         logger.warning("Database connection timeout - bot will start anyway")
     except Exception as e:

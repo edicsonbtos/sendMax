@@ -27,7 +27,12 @@ export default function LoginPage() {
       }>('/auth/login', { email, password });
 
       login(data.access_token, data.role, data.full_name);
-      router.push('/');
+
+      if (data.role === 'admin' || data.role === 'superadmin') {
+        router.push('/admin');
+      } else {
+        router.push('/operator-office');
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error de conexion');
     } finally {
