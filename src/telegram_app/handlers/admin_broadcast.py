@@ -192,6 +192,12 @@ async def on_broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("Por favor, usa los botones para confirmar o cancelar.")
         return BROADCAST_CONFIRM
 
+    # Idempotency Lock: prevents double click messages
+    if context.user_data.get("is_broadcasting"):
+        logger.warning("[Broadcast] Ignorando doble clic, difusión ya en progreso.")
+        return ConversationHandler.END
+    context.user_data["is_broadcasting"] = True
+
     b_type = context.user_data.get("broadcast_type")
     b_text = context.user_data.get("broadcast_text")
     b_photo = context.user_data.get("broadcast_photo")
@@ -245,7 +251,7 @@ async def on_broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(report, reply_markup=admin_panel_keyboard(), parse_mode="Markdown")
 
     # Limpiar estado
-    for k in ["broadcast_type", "broadcast_text", "broadcast_photo", "broadcast_count", "broadcast_admin_id"]:
+    for k in ["broadcast_type", "broadcast_text", "broadcast_photo", "broadcast_count", "broadcast_admin_id", "is_broadcasting"]:
         context.user_data.pop(k, None)
     _release_broadcast_lock(admin_id)
 
