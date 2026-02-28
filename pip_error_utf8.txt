@@ -1,0 +1,96 @@
+﻿python : Traceback 
+(most recent call 
+last):
+En línea: 1 Carácter: 
+68
++ ... ive\Escritorio\s
+endmax-bot" ; python 
+src/main.py > 
+pip_error.txt 2>&1
++                     
+              ~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (Traceback    
+ (most recent call    
+ last)::String) [    
+], RemoteExceptio    n
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+  File "C:\Users\edics
+\OneDrive\Escritorio\s
+endmax-bot\src\main.py
+", line 17, in 
+<module>
+    from 
+src.config.settings 
+import settings
+  File "c:\Users\edics
+\OneDrive\Escritorio\s
+endmax-bot\src\config\
+settings.py", line 
+124, in <module>
+    settings = 
+Settings()
+  File "C:\Users\edics
+\AppData\Local\Package
+s\PythonSoftwareFounda
+tion.Python.3.13_qbz5n
+2kfra8p0\LocalCache\lo
+cal-packages\Python313
+\site-packages\pydanti
+c_settings\main.py", 
+line 176, in __init__
+    super().__init__(
+    ~~~~~~~~~~~~~~~~^
+        **__pydantic_s
+elf__._settings_build_
+values(
+        ^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^
+    ...<26 lines>...
+        )
+        ^
+    )
+    ^
+  File "C:\Users\edics
+\AppData\Local\Package
+s\PythonSoftwareFounda
+tion.Python.3.13_qbz5n
+2kfra8p0\LocalCache\lo
+cal-packages\Python313
+\site-packages\pydanti
+c\main.py", line 214, 
+in __init__
+    validated_self = s
+elf.__pydantic_validat
+or__.validate_python(d
+ata, 
+self_instance=self)
+pydantic_core._pydanti
+c_core.ValidationError
+: 2 validation errors 
+for Settings
+TELEGRAM_BOT_TOKEN
+  Field required 
+[type=missing, 
+input_value={}, 
+input_type=dict]
+    For further 
+information visit http
+s://errors.pydantic.de
+v/2.10/v/missing
+DATABASE_URL
+  Field required 
+[type=missing, 
+input_value={}, 
+input_type=dict]
+    For further 
+information visit http
+s://errors.pydantic.de
+v/2.10/v/missing

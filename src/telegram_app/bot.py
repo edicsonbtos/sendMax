@@ -86,8 +86,11 @@ async def universal_sniffer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def build_bot() -> Application:
     # Persistencia de sesiÃ³n (Fase 2)
     persistence = PicklePersistence(filepath="bot_persistence.pickle")
-
+    
     request = HTTPXRequest(connect_timeout=20.0, read_timeout=30.0, write_timeout=30.0, pool_timeout=30.0)
+
+    # PTB v21.10 adaptation - defaulting to ContextTypes class handles it properly
+
     app = (
         Application.builder()
         .token(settings.TELEGRAM_BOT_TOKEN)
