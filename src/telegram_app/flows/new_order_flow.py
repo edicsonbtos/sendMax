@@ -35,6 +35,8 @@ from src.db.repositories.rates_repo import (
     get_country_price_for_version,
 )
 from src.db.repositories.users_repo import get_user_by_telegram_id
+from src.utils.google_drive import upload_image_to_drive
+import io
 from src.telegram_app.utils.templates import format_origin_group_message
 from src.telegram_app.handlers.panic import MENU_BUTTONS_REGEX, panic_handler
 from src.telegram_app.ui.labels import BTN_NEW_ORDER
@@ -957,6 +959,22 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         rate_client=rate_client,
         context=context,
     )
+
+    # Subir comprobante a Google Drive (Vault Fase 3)
+    if file_id:
+        try:
+            tg_file = await context.bot.get_file(file_id)
+            file_bytes = await tg_file.download_as_bytearray()
+            stream = io.BytesIO(file_bytes)
+            drive_file_id = upload_image_to_drive(
+                stream, 
+                folder_name="Origen", 
+                file_name=f"ORIGEN_ORDEN_{order.public_id}.jpg"
+            )
+            if drive_file_id:
+                logger.info("Comprobante subido al Vault (Origen). Order_ID: %s, Drive_ID: %s", order.public_id, drive_file_id)
+        except Exception as e:
+            logger.error("Error subiendo comprobante Origen de orden %s al Vault: %s", order.public_id, e)
 
     try:
         if not auto_approved:

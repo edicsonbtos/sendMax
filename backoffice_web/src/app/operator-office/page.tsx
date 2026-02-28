@@ -115,7 +115,7 @@ export default function OperatorOfficePage() {
                                 <LinearProgress
                                     variant="determinate"
                                     value={op.score}
-                                    style={{
+                                    sx={{
                                         height: 8,
                                         borderRadius: 4,
                                         backgroundColor: '#F3F4F6',

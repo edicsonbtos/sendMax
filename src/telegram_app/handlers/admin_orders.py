@@ -31,6 +31,8 @@ from src.integrations.binance_p2p import BinanceP2PClient
 from src.db.repositories.trust_repo import update_trust_score, DELTA_ORDER_COMPLETED, DELTA_ORDER_CANCELLED
 from src.integrations.p2p_config import COUNTRIES
 from src.telegram_app.ui.routes_popular import format_rate_no_noise
+from src.utils.google_drive import upload_image_to_drive
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -489,6 +491,21 @@ async def process_paid_proof_photo(update: Update, context: ContextTypes.DEFAULT
         if order.status != "EN_PROCESO":
             await update.message.reply_text("ℹ️ Esta orden ya fue gestionada previamente por otro administrador o su estado cambió.")
             return
+
+        # Subida asíncrona a Drive (Vault Fase 3)
+        try:
+            tg_file = await context.bot.get_file(proof_file_id)
+            file_bytes = await tg_file.download_as_bytearray()
+            stream = io.BytesIO(file_bytes)
+            drive_file_id = upload_image_to_drive(
+                stream, 
+                folder_name="Pagos", 
+                file_name=f"PAGO_ORDEN_{order.public_id}.jpg"
+            )
+            if drive_file_id:
+                logger.info("Comprobante subido al Vault (Pagos). Order_ID: %s, Drive_ID: %s", order.public_id, drive_file_id)
+        except Exception as e:
+            logger.error("Error subiendo comprobante Pagos de orden %s al Vault: %s", order.public_id, e)
 
         # 1. Profit TEORICO
         rr = await rates_repo.get_route_rate(

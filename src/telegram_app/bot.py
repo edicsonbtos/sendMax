@@ -46,6 +46,7 @@ from src.telegram_app.handlers.menu import menu_router
 from src.telegram_app.handlers.panic import panic_handler
 from src.telegram_app.handlers.rates_more import handle_rates_more
 from src.telegram_app.handlers.summary import build_summary_callback_handler
+from src.utils.google_drive import init_folders
 
 logger = logging.getLogger(__name__)
 
@@ -140,5 +141,11 @@ def build_bot() -> Application:
     # MenÃº (solo APPROVED)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router), group=6)
 
+    # Initialize Google Drive Vault Folders
+    try:
+        init_folders()
+    except Exception as e:
+        logger.error("Failed to initialize Google Drive folders: %s", e)
+    
     logger.info("Bot listo: KYC + Ã³rdenes + retiros + admin (Persistence: ON)")
     return app
