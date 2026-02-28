@@ -22,8 +22,8 @@ export default function OperatorOfficePage() {
     ];
 
     const workQueue = [
-        { id: 'ORD-991', client: 'Maria C.', amount: '$150.00', dest: 'Venezuela', status: 'Pending' },
-        { id: 'ORD-992', client: 'Jose R.', amount: '$45.00', dest: 'Colombia', status: 'Pending' }
+        { id: 'ORD-991', client: 'Maria C.', amount: '$150.00', dest: 'Venezuela', status: 'Pending', beneficiary: 'Juan Perez - Banesco' },
+        { id: 'ORD-992', client: 'Jose R.', amount: '$45.00', dest: 'Colombia', status: 'Pending', beneficiary: 'Carlos M - Bancolombia' }
     ];
 
     return (
@@ -81,6 +81,7 @@ export default function OperatorOfficePage() {
                                         <div>
                                             <Typography variant="subtitle2" style={{ fontWeight: 800, color: '#1A1A1A' }}>{order.id}</Typography>
                                             <Typography variant="body2" color="textSecondary">{order.client} • {order.dest}</Typography>
+                                            <Typography variant="caption" color="textSecondary" style={{ display: 'block', marginTop: '4px' }}>Beneficiario: {order.beneficiary}</Typography>
                                         </div>
                                         <div style={{ textAlign: 'right' }}>
                                             <Typography variant="subtitle1" style={{ fontWeight: 700, color: '#00BA88' }}>{order.amount}</Typography>

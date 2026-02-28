@@ -308,23 +308,35 @@ async def _notify_admin_new_order(context: ContextTypes.DEFAULT_TYPE, order) -> 
 
 async def entry_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    # Lock: evita doble inicio por spam
     if context.user_data.get("order_mode"):
         await update.message.reply_text("⏳ Ya tienes un envío en curso. Si deseas salir, escribe Cancelar.")
-        return ASK_ORIGIN
+        return ASK_BENEF_MODE
     context.user_data["order_mode"] = True
     context.user_data["order"] = {}
     context.user_data.pop("edit_target", None)
     context.user_data.pop("screen_message_id", None)
 
+    try:
+        telegram_id = update.effective_user.id
+        db_user = await get_user_by_telegram_id(telegram_id)
+        favorites = await list_saved_beneficiaries(db_user.id, dest_country=None) if db_user else []
+    except Exception:
+        favorites = []
+
+    rows = []
+    for fav in favorites[:7]:
+        label = f"👤 {fav.alias} ({COUNTRY_FLAGS.get(fav.dest_country,'🌍')} {fav.dest_country})"
+        rows.append([InlineKeyboardButton(label, callback_data=f"{CB_BENEF_PREFIX}{fav.id}")])
+    rows.append([InlineKeyboardButton("➕ Nuevo contacto", callback_data=CB_BENEF_NEW)])
+    kb = InlineKeyboardMarkup(rows)
+
     await _screen_send_or_edit(
-        update,
-        context,
-        "📤 Nuevo envío\n\nElige el país de *origen*:",
-        reply_markup=_origin_keyboard(),
+        update, context,
+        "📤 Nuevo envío\n\n📖 *Agenda Líquida* — Tus contactos guardados\n\nElige un contacto o toca Nuevo contacto:",
+        reply_markup=kb,
         parse_mode="Markdown",
     )
-    return ASK_ORIGIN
+    return ASK_BENEF_MODE
 
 
 async def receive_origin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -333,15 +345,22 @@ async def receive_origin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _screen_send_or_edit(update, context, "Selecciona un país usando los botones 👇", reply_markup=_origin_keyboard())
         return ASK_ORIGIN
 
-    context.user_data["order"]["origin"] = code  # save first
-    await _screen_send_or_edit(
-        update,
-        context,
-        "Perfecto ✅ Ahora elige el país/método de *destino*:",
-        reply_markup=_dest_keyboard(code),
-        parse_mode="Markdown",
-    )
-    return ASK_DEST
+    context.user_data["order"]["origin"] = code
+    
+    if context.user_data["order"].get("dest"):
+        await _screen_send_or_edit(
+            update, context,
+            f"Escribe el *monto exacto* en {code} (ej: 10000):",
+            reply_markup=_cancel_keyboard(), parse_mode="Markdown"
+        )
+        return ASK_AMOUNT
+    else:
+        await _screen_send_or_edit(
+            update, context,
+            "Perfecto ✅ Ahora elige el país/método de *destino*:",
+            reply_markup=_dest_keyboard(code), parse_mode="Markdown"
+        )
+        return ASK_DEST
 
 
 async def receive_dest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -356,53 +375,12 @@ async def receive_dest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return ASK_DEST
 
     context.user_data["order"]["dest"] = code
-
-    # ── Liquid Agenda 2.0: Agenda de Contactos (sin filtro de ruta) ────────
-    try:
-        telegram_id = update.effective_user.id
-        from src.db.repositories.users_repo import get_user_by_telegram_id
-        db_user = await get_user_by_telegram_id(telegram_id)
-        favorites = []
-        if db_user:
-            # Buscar en TODOS los países — el operador elige quién aplica
-            favorites = await list_saved_beneficiaries(db_user.id, dest_country=None)
-    except Exception:
-        favorites = []
-
-    if favorites:
-        # Hay favoritos: mostrar menú con país de origen del contacto
-        rows = []
-        for fav in favorites[:7]:  # max 7 botones
-            label = f"👤 {fav.alias}"
-            if fav.dest_country:
-                label += f" · {fav.dest_country}" if fav.dest_country == code else f" ⟳ {fav.dest_country}"
-            rows.append([InlineKeyboardButton(label, callback_data=f"{CB_BENEF_PREFIX}{fav.id}")])
-        rows.append([
-            InlineKeyboardButton("➕ Nuevo contacto", callback_data=CB_BENEF_NEW),
-            InlineKeyboardButton("⌨️ Manual", callback_data=CB_BENEF_MANUAL),
-        ])
-        kb = InlineKeyboardMarkup(rows)
-        msg = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=(
-                f"📖 *Agenda Líquida* — destino: {COUNTRY_FLAGS.get(code,'🌍')} {code}\n\n"
-                "Elige un contacto *(⟳ = guardado en otro país)* o escoge Nuevo / Manual.\n"
-                "_Los datos se pre-cargarán y podrás editarlos antes de confirmar._"
-            ),
-            reply_markup=kb,
-            parse_mode="Markdown",
-        )
-        context.user_data["ab_menu_msg_id"] = msg.message_id
-        return ASK_BENEF_MODE
-    else:
-        # Sin favoritos: ir directo a monto (flujo manual)
-        context.user_data["order"]["benef_mode"] = "manual"
-        await _screen_send_or_edit(
-            update, context,
-            f"Escribe el *monto exacto* en {origin} (ej: 10000):",
-            reply_markup=_cancel_keyboard(), parse_mode="Markdown",
-        )
-        return ASK_AMOUNT
+    await _screen_send_or_edit(
+        update, context,
+        f"Escribe el *monto exacto* en {origin} (ej: 10000):",
+        reply_markup=_cancel_keyboard(), parse_mode="Markdown",
+    )
+    return ASK_AMOUNT
 
 
 
@@ -449,12 +427,6 @@ async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # ── Address Book handlers ──────────────────────────────────────────────────
 
 async def receive_benef_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    Handler para el menú de Address Book (callback_query inline).
-    - ab:fav:<id>  → auto-fill + saltar a monto
-    - ab:new       → ir directo a monto (guardará después)
-    - ab:manual    → flujo manual clásico
-    """
     q = update.callback_query
     if not q:
         return ASK_BENEF_MODE
@@ -466,19 +438,14 @@ async def receive_benef_mode(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     data = q.data or ""
     order = context.user_data.setdefault("order", {})
-    origin = order.get("origin", "?")
 
     def _close_menu():
-        """Elimina el menú inline del chat de forma best-effort."""
         try:
-            context.application.create_task(
-                q.message.delete()
-            )
+            context.application.create_task(q.message.delete())
         except Exception:
             pass
 
     if data.startswith(CB_BENEF_PREFIX):
-        # — Usuario eligió un favorito —
         try:
             fav_id = int(data[len(CB_BENEF_PREFIX):])
             beneficiary = await get_saved_beneficiary(fav_id)
@@ -487,12 +454,11 @@ async def receive_benef_mode(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         if not beneficiary:
             try:
-                await q.edit_message_text("⚠️ Contacto no encontrado. Usa la opción Manual.")
+                await q.edit_message_text("⚠️ Contacto no encontrado. Usa la opción Nuevo contacto.")
             except Exception:
                 pass
             return ASK_BENEF_MODE
 
-        # Construir el beneficiary_text como snapshot inmutable
         parts = []
         if beneficiary.full_name:    parts.append(f"Nombre: {beneficiary.full_name}")
         if beneficiary.id_number:    parts.append(f"Cédula: {beneficiary.id_number}")
@@ -504,35 +470,32 @@ async def receive_benef_mode(update: Update, context: ContextTypes.DEFAULT_TYPE)
         snapshot = "\n".join(parts) if parts else beneficiary.alias
 
         order["beneficiary_text"] = snapshot
-        order["beneficiary_id"] = fav_id    # snapshot FK
+        order["beneficiary_id"] = fav_id
+        order["dest"] = beneficiary.dest_country
         order["benef_mode"] = "saved"
         _close_menu()
 
-        # Saltar directo al monto
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=(
-                f"✅ *{beneficiary.alias}* seleccionado.\n\n"
-                f"Escribe el *monto exacto* en {origin} (ej: 10000):"
-            ),
-            reply_markup=_cancel_keyboard(),
+            text=f"✅ *{beneficiary.alias}* seleccionado.\n\nAhora elige el país de *origen*:",
+            reply_markup=_origin_keyboard(),
             parse_mode="Markdown",
         )
-        return ASK_AMOUNT
+        return ASK_ORIGIN
 
-    elif data == CB_BENEF_NEW or data == CB_BENEF_MANUAL:
-        # — Nuevo o Manual —
+    elif data == CB_BENEF_NEW:
         order["benef_mode"] = "manual"
         _close_menu()
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=(
-                f"Escribe el *monto exacto* en {origin} (ej: 10000):"
+                "Ingresa *Nombre y WhatsApp* del beneficiario.\n\n"
+                "⚠️ _Protocolo de Seguridad: WhatsApp solicitado solo para ID de cliente. No se enviarán mensajes._"
             ),
             reply_markup=_cancel_keyboard(),
             parse_mode="Markdown",
         )
-        return ASK_AMOUNT
+        return ASK_BENEF
 
     return ASK_BENEF_MODE
 
@@ -983,52 +946,20 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.exception(f"Error al notificar admin de nueva orden #{order.public_id}")
 
     # ── Snapshot de beneficiario guardado ──────────────────────────────────
-    benef_mode = order_data.get("benef_mode", "manual")
     saved_benef_id = order_data.get("beneficiary_id")
 
-    if benef_mode == "saved" and saved_benef_id:
+    if saved_benef_id:
         # Usó un favorito → vincular orden + incrementar contador
         try:
             await link_order_to_beneficiary(int(order.public_id), saved_benef_id)
             await increment_uses(saved_benef_id)
         except Exception as e:
             logger.warning("link_beneficiary failed: %s", e)
-    elif benef_mode == "manual":
-        # Smart-Save: ofrecer guardar el contacto
-        try:
-            await mark_smart_save_pending(int(order.public_id))
-            # Guardar datos para el handler de alias
-            context.user_data["smart_save_data"] = {
-                "user_id": user.id,
-                "dest_country": dest,
-                "beneficiary_text": beneficiary_text,
-                "public_id": int(order.public_id),
-            }
-            kb_save = InlineKeyboardMarkup([[
-                InlineKeyboardButton("💾 Sí, guardar contacto", callback_data=CB_SAVE_YES),
-                InlineKeyboardButton("❌ No, gracias", callback_data=CB_SAVE_NO),
-            ]])
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=(
-                    f"✅ ¡Listo! Orden #{_fmt_public_id(order.public_id)} registrada.\n"
-                    "En breve Pagos la procesa.\n\n"
-                    "📍 ¿Deseas guardar este beneficiario en tu agenda para la próxima vez?"
-                ),
-                reply_markup=kb_save,
-                parse_mode="Markdown",
-            )
-        except Exception as e:
-            logger.warning("smart_save_pending failed: %s", e)
-            await update.message.reply_text(
-                f"✅ ¡Listo! Orden #{_fmt_public_id(order.public_id)} registrada.\n"
-                "En breve Pagos la procesa. Puedes ver tus operaciones en 📊 Resumen."
-            )
-    else:
-        await update.message.reply_text(
-            f"✅ ¡Listo! Orden #{_fmt_public_id(order.public_id)} registrada.\n"
-            "En breve Pagos la procesa. Puedes ver tus operaciones en 📊 Resumen."
-        )
+
+    await update.message.reply_text(
+        f"✅ ¡Listo! Orden #{_fmt_public_id(order.public_id)} registrada.\n"
+        "En breve Pagos la procesa. Puedes ver tus operaciones en 📊 Resumen."
+    )
 
     _reset_flow_memory(context)
     return ConversationHandler.END
@@ -1100,11 +1031,6 @@ def build_new_order_conversation() -> ConversationHandler:
             ASK_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_confirm)],
             ASK_EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_edit)],
             ASK_EDIT_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_after_edit)],
-            # Smart-Save alias
-            ASK_SAVE_ALIAS: [
-                CallbackQueryHandler(receive_save_alias, pattern=r"^ab:(save_yes|save_no)$"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_save_alias),
-            ],
         },
         fallbacks=[
             CommandHandler(["cancel", "panic"], panic_handler),
