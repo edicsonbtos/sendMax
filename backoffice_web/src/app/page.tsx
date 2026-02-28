@@ -157,7 +157,7 @@ function CountryHeatmap({ data }: { data: { dest_currency: string; volume: numbe
             </Pie>
             <RechartsTooltip
               contentStyle={{ background: '#111', border: `1px solid ${CYAN}33`, borderRadius: '10px', fontSize: '12px' }}
-              formatter={(v: number) => [`$${compact(v)}`, '']}
+              formatter={(v: any) => [`$${compact(Number(v))}`, '']}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -492,7 +492,7 @@ export default function DashboardPage() {
                     <RechartsTooltip
                       contentStyle={{ background: '#111', border: `1px solid ${CYAN}33`, borderRadius: '10px', fontSize: '12px' }}
                       labelStyle={{ color: CYAN }}
-                      formatter={(value?: unknown, name?: string) => {
+                      formatter={(value: any, name: any) => {
                         const n = typeof value === 'number' ? value : Number(value ?? 0);
                         const label = name === 'profit' ? 'Teórico' : 'Neto Real';
                         return ['$' + n.toFixed(2), label];
