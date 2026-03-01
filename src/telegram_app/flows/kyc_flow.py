@@ -26,6 +26,7 @@ from src.db.repositories.users_repo import (
 )
 from src.telegram_app.handlers.menu import show_home
 from src.telegram_app.handlers.panic import MENU_BUTTONS_REGEX, panic_handler
+from src.telegram_app.utils.text_escape import esc_html
 from src.utils.crypto import get_password_hash
 
 logger = logging.getLogger(__name__)
@@ -225,11 +226,11 @@ async def receive_alias(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
         context.user_data.pop("pending_alias", None)
         await update.message.reply_text(
-            f"✅ *¡Bienvenido, {alias}!* Tu cuenta está activa.\n\n"
-            "⏰ _Verificación express temporal (amigos y familia)._\n"
+            f"✅ <b>¡Bienvenido, {esc_html(alias)}!</b> Tu cuenta está activa.\n\n"
+            "⏰ <i>Verificación express temporal (amigos y familia).</i>\n"
             "El KYC completo será requerido próximamente.\n\n"
             "Escribe /start para ver el menú.",
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
         return ConversationHandler.END
 

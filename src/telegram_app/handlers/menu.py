@@ -28,6 +28,7 @@ from src.telegram_app.handlers.referrals import enter_referrals
 from src.telegram_app.handlers.wallet import wallet_menu
 from src.telegram_app.ui.inline_buttons import support_whatsapp_button
 from src.telegram_app.ui.keyboards import main_menu_keyboard
+from src.telegram_app.utils.text_escape import esc_html
 from src.telegram_app.ui.labels import (
     BTN_ADMIN,
     BTN_ADMIN_ALERT_TEST,
@@ -88,15 +89,15 @@ async def show_home(
     if silent:
         return
     msg_text = (
-        f"{('Hola, ' + alias + '.') if alias else 'Hola.'}\n\n"
-        "Bienvenido a *Sendmax*.\n"
+        f"{('Hola, <b>' + esc_html(alias) + '</b>.') if alias else 'Hola.'}\n\n"
+        "Bienvenido a <b>Sendmax</b>.\n"
         "Remesas rápidas y seguras con tasa competitiva.\n\n"
         "Elige una opción del menú 👇"
     )
     sent = await update.message.reply_text(
         msg_text,
         reply_markup=main_menu_keyboard(is_admin=_is_admin(update)),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     await track_message(sent, context)
 
