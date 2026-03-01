@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 import uvicorn
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from telegram import Update
 from telegram.warnings import PTBUserWarning
 
@@ -19,6 +20,7 @@ from src.db.connection import close_pool, wait_db_ready, is_pool_open
 from src.rates_scheduler import RatesScheduler
 from src.telegram_app.bot import build_bot
 from src.api import internal_rates
+from src.api import operators_router, ranking_router, rates_live_router
 
 # === SETUP LOGGING AL IMPORTAR (NO dentro de main()) ===
 setup_logging()
@@ -166,7 +168,24 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+# Configuración CORS para permitir requests desde el panel web
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "https://*.up.railway.app",
+        "https://operator-web-production.up.railway.app",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(internal_rates.router)
+app.include_router(operators_router)
+app.include_router(ranking_router)
+app.include_router(rates_live_router)
 
 
 @app.get("/")
