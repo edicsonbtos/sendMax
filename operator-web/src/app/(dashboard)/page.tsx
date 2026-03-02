@@ -103,7 +103,7 @@ export default function Dashboard() {
         try {
             const res = await fetch(`${apiUrl}/api/rates/current`);
             const data = await res.json();
-            setRates(data.rates?.slice(0, 8) || []);
+            setRates(Array.isArray(data.rates) ? data.rates.slice(0, 8) : []);
         } catch (err) {
             console.error('Error fetching rates:', err);
         }
@@ -113,7 +113,7 @@ export default function Dashboard() {
         try {
             const res = await fetch(`${apiUrl}/api/operators/dashboard/top-clients?limit=5`);
             const data = await res.json();
-            setTopClients(data || []);
+            setTopClients(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error('Error fetching top clients:', err);
         }
@@ -123,7 +123,7 @@ export default function Dashboard() {
         try {
             const res = await fetch(`${apiUrl}/api/operators/orders/queue`);
             const data = await res.json();
-            setOrderQueue(data?.slice(0, 5) || []);
+            setOrderQueue(Array.isArray(data) ? data.slice(0, 5) : []);
         } catch (err) {
             console.error('Error fetching orders:', err);
         }
@@ -143,7 +143,7 @@ export default function Dashboard() {
         try {
             const res = await fetch(`${apiUrl}/api/ranking/operators?limit=10`);
             const data = await res.json();
-            setRanking(data || []);
+            setRanking(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error('Error fetching ranking:', err);
         }
@@ -314,7 +314,7 @@ export default function Dashboard() {
                                 </div>
                                 <div className="text-right">
                                     <p className="text-sm font-bold text-white">{entry.trust_score ? Number(entry.trust_score).toFixed(0) : '0'}%</p>
-                                    <p className="text-xs text-green-400">{formatCurrency(entry.monthly_volume_usdt)}</p>
+                                    <p className="text-xs text-green-400">{formatCurrency(entry.monthly_volume_usdt || 0)}</p>
                                 </div>
                             </div>
                         ))}
@@ -348,7 +348,7 @@ export default function Dashboard() {
                                         <p className="text-sm text-gray-400">{client.total_orders} órdenes</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-bold text-green-400">{formatCurrency(client.total_volume_usdt)}</p>
+                                        <p className="font-bold text-green-400">{formatCurrency(client.total_volume_usdt || 0)}</p>
                                     </div>
                                 </div>
                             ))
@@ -383,7 +383,7 @@ export default function Dashboard() {
                                         <p className="text-sm text-gray-400">#{order.public_id}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-bold text-white">{formatCurrency(order.amount_origin)}</p>
+                                        <p className="font-bold text-white">{formatCurrency(order.amount_origin || 0)}</p>
                                         <span className={`badge ${getStatusColor(order.status)}`}>
                                             {order.status}
                                         </span>

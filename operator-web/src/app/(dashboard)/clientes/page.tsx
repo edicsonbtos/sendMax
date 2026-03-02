@@ -66,7 +66,7 @@ export default function ClientesPage() {
             const res = await fetch(`${apiUrl}/api/operators/beneficiaries`);
             const data = await res.json();
             // Agrupar por cliente
-            const grouped = groupByClient(data);
+            const grouped = groupByClient(Array.isArray(data) ? data : []);
             setClients(grouped);
         } catch (err) {
             console.error('Error:', err);
@@ -349,8 +349,8 @@ export default function ClientesPage() {
                                             key={country.code}
                                             onClick={() => setNewPayment({ ...newPayment, country: country.code })}
                                             className={`p-3 rounded-xl flex items-center gap-3 transition-all ${newPayment.country === country.code
-                                                    ? 'bg-blue-500/30 border-2 border-blue-500'
-                                                    : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                                ? 'bg-blue-500/30 border-2 border-blue-500'
+                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
                                                 }`}
                                         >
                                             <span className="text-2xl">{country.flag}</span>

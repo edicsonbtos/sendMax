@@ -52,7 +52,8 @@ export default function BilleteraPage() {
                 if (!resSummary.ok || !resLedger.ok) throw new Error("Error obteniendo datos de la billetera");
 
                 setSummary(await resSummary.json());
-                setLedger(await resLedger.json());
+                const ledgerData = await resLedger.json();
+                setLedger(Array.isArray(ledgerData) ? ledgerData : []);
             } catch (err: any) {
                 setError(err.message);
             } finally {
