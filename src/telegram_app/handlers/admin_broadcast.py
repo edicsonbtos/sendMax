@@ -226,7 +226,7 @@ async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 def build_broadcast_handler() -> ConversationHandler:
-    from telegram.ext import MessageHandler, filters, CommandHandler
+    from telegram.ext import MessageHandler, filters, CommandHandler, CallbackQueryHandler
     return ConversationHandler(
         entry_points=[
             CommandHandler("broadcast", start_broadcast),
