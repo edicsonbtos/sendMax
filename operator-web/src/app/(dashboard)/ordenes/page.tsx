@@ -44,7 +44,7 @@ export default function OrdenesPage() {
                     ...(search && { q: search }),
                 });
 
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://sendmax11-production.up.railway.app";
                 const res = await fetch(`${apiUrl}/api/operators/orders?${queryParams}`, {
                     headers: {
                         "Authorization": `Bearer ${token}`

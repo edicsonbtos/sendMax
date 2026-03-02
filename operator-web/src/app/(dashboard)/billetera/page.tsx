@@ -34,7 +34,7 @@ export default function BilleteraPage() {
                     return;
                 }
 
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://sendmax11-production.up.railway.app";
                 const headers = { "Authorization": `Bearer ${token}` };
 
                 const [resSummary, resLedger] = await Promise.all([
@@ -66,7 +66,7 @@ export default function BilleteraPage() {
     const handleWithdraw = async () => {
         try {
             const token = localStorage.getItem("auth_token") || localStorage.getItem("operator_token");
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://sendmax11-production.up.railway.app";
             const res = await fetch(`${apiUrl}/api/operators/wallet/withdraw`, {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${token}` }
@@ -186,8 +186,8 @@ export default function BilleteraPage() {
                                         </td>
                                         <td className="py-4 px-6 text-center">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${item.type === 'EARNING' ? 'bg-green-100 text-green-800' :
-                                                    item.type.includes('WITHDRAWAL') ? 'bg-orange-100 text-orange-800' :
-                                                        'bg-gray-100 text-gray-800'
+                                                item.type.includes('WITHDRAWAL') ? 'bg-orange-100 text-orange-800' :
+                                                    'bg-gray-100 text-gray-800'
                                                 }`}>
                                                 {item.type}
                                             </span>
