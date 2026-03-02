@@ -285,4 +285,6 @@ def build_broadcast_handler() -> ConversationHandler:
             MessageHandler(filters.Regex(rf"^{BTN_CANCEL}$"), cancel_broadcast),
         ],
         allow_reentry=False,  # ← idempotency: previene doble inicio por spam
+        name="admin_broadcast",
+        persistent=True,
     )

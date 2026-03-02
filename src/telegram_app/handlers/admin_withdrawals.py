@@ -69,7 +69,7 @@ def build_admin_withdrawals_conversation_handler() -> ConversationHandler:
             MessageHandler(filters.Regex(MENU_BUTTONS_REGEX), panic_handler),
         ],
         name="admin_withdrawals",
-        persistent=False,
+        persistent=True,
         per_chat=True,
         per_user=True,
         per_message=False,
