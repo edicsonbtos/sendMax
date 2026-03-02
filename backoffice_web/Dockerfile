@@ -21,6 +21,6 @@ COPY --from=builder /app/public ./public
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npm start -- -p ${PORT:-3000}"]
+CMD ["npm", "start"]
 
 # Force rebuild 20260227-221330
