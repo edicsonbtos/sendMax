@@ -20,7 +20,7 @@ from src.db.connection import close_pool, wait_db_ready, is_pool_open
 from src.rates_scheduler import RatesScheduler
 from src.telegram_app.bot import build_bot
 from src.api import internal_rates
-from src.api import operators_router, ranking_router, rates_live_router
+from src.api import operators_router, ranking_router, rates_live_router, auth_router
 
 # === SETUP LOGGING AL IMPORTAR (NO dentro de main()) ===
 setup_logging()
@@ -175,6 +175,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "https://sendmax-web-production.up.railway.app",
+        "https://admin-web-production-442a.up.railway.app",
         "https://*.up.railway.app",
     ],
     allow_credentials=True,
@@ -183,6 +184,7 @@ app.add_middleware(
 )
 
 app.include_router(internal_rates.router)
+app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 app.include_router(operators_router)
 app.include_router(ranking_router)
 app.include_router(rates_live_router)
