@@ -2,26 +2,243 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==================== VARIABLES CSS ==================== */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --primary-900: #0a1628;
+  --primary-800: #0f2341;
+  --primary-700: #1a365d;
+  --primary-600: #2563eb;
+  --primary-500: #3b82f6;
+  --primary-400: #60a5fa;
+  --white: #ffffff;
+  --gray-100: #f1f5f9;
+  --gray-200: #e2e8f0;
+  --gray-300: #cbd5e1;
+  --gray-400: #94a3b8;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #06b6d4;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ==================== BASE ==================== */
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background: linear-gradient(180deg, #0a1628 0%, #1a365d 100%);
+  min-height: 100vh;
+  color: var(--gray-100);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+/* ==================== CARDS GLASSMORPHISM ==================== */
+.card-glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.card-glass:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* ==================== BOTONES ==================== */
+.btn-primary {
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ==================== INPUTS ==================== */
+.input-glass {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: white;
+  font-size: 15px;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.input-glass:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.input-glass::placeholder {
+  color: var(--gray-400);
+}
+
+/* ==================== SIDEBAR ==================== */
+.sidebar {
+  background: linear-gradient(180deg, #0f2341 0%, #0a1628 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  color: var(--gray-300);
+  transition: all 0.3s ease;
+  margin: 4px 12px;
+}
+
+.sidebar-item:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: white;
+}
+
+.sidebar-item.active {
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
+}
+
+/* ==================== TABLAS ==================== */
+.table-glass {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table-glass th {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--gray-200);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.table-glass td {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--gray-100);
+}
+
+.table-glass tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ==================== BADGES/TAGS ==================== */
+.badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-success {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.badge-warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-error {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-info {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+/* ==================== ANIMACIONES ==================== */
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
   }
+
+  50% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.8);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s ease-out;
+}
+
+/* ==================== SCROLLBAR ==================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.7);
 }
