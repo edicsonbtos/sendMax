@@ -185,6 +185,10 @@ app.add_middleware(
 
 app.include_router(internal_rates.router)
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
+
+# Auth de operadores
+from src.api.auth_operators import router as operator_auth_router
+app.include_router(operator_auth_router)
 app.include_router(operators_router)
 app.include_router(ranking_router)
 app.include_router(rates_live_router)

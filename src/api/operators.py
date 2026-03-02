@@ -37,13 +37,55 @@ class EarningsByCountry(BaseModel):
     earnings_usdt: Decimal
     order_count: int
 
-async def get_current_operator(authorization: str = Header(None)):
+from src.utils.jwt import decode_access_token
+from fastapi import status
+
+async def get_current_operator(authorization: str = Header(None)) -> int:
     """
-    TEMPORAL: Devuelve user_id 1 para pruebas.
-    TODO: Implementar JWT real.
+    Extrae y valida el JWT del header Authorization.
+    Retorna el user_id del operador autenticado.
+    
+    Raises:
+        HTTPException: Si no hay token, es inválido, o no es de operador
     """
-    # Por ahora retorna un ID fijo para testing
-    return 1
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No se proporcionó token de autenticación",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Extraer token del formato "Bearer <token>"
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Esquema de autenticación inválido. Use Bearer token."
+            )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Formato de Authorization header inválido"
+        )
+    
+    # Decodificar y validar JWT
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido o expirado"
+        )
+    
+    # Verificar que sea token de operador
+    if payload.get("type") != "operator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Este endpoint es solo para operadores"
+        )
+    
+    user_id = int(payload.get("sub"))
+    return user_id
 
 @router.get("/dashboard/stats", response_model=OperatorStatsResponse)
 async def get_dashboard_stats(user_id: int = Depends(get_current_operator)):
