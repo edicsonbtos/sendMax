@@ -96,8 +96,9 @@ async def admin_panel_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     if text == BTN_ADMIN_BROADCAST:
-        from src.telegram_app.handlers.admin_broadcast import start_broadcast
-        return await start_broadcast(update, context)
+        # DELEGAMOS LA RESPONSABILIDAD AL CONVERSATION HANDLER EN bot.py
+        # Si respondemos aquí, no se activa el estado de la FSM.
+        return
 
     if text == BTN_ADMIN_RESET:
         context.user_data["awaiting_reset_confirm"] = True
