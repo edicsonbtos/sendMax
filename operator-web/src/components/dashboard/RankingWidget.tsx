@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import api from "@/lib/api";
+import { apiGet } from "@/lib/api";
 
 type RankingEntry = {
     position: number;
@@ -18,14 +18,14 @@ export default function RankingWidget() {
     const [error, setError] = useState<string | null>(null);
 
     const fetchRanking = () => {
-        api.get("/api/ranking/operators?limit=10")
-            .then(res => {
-                setRanking(res.data || []);
+        apiGet("/api/ranking/operators?limit=10")
+            .then(data => {
+                setRanking(Array.isArray(data) ? data : []);
                 setError(null);
             })
             .catch(err => {
                 console.error("Error fetching ranking:", err);
-                setError("Error al cargar ranking");
+                setError(err.message || "Error al cargar ranking");
             })
             .finally(() => setLoading(false));
     };

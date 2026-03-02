@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import api from "@/lib/api";
+import { apiGet } from "@/lib/api";
 
 type Client = {
     name: string;
@@ -15,16 +15,17 @@ export default function TopClientsWidget() {
     const [error, setError] = useState<string | null>(null);
 
     const fetchClients = () => {
-        api.get("/api/operators/dashboard/top-clients?limit=5")
-            .then(res => {
-                setClients(res.data || []);
+        apiGet("/api/operators/dashboard/top-clients?limit=5")
+            .then(data => {
+                setClients(Array.isArray(data) ? data : []);
                 setError(null);
+                setLoading(false);
             })
             .catch(err => {
                 console.error("Error fetching top clients:", err);
-                setError("Error al cargar favoritos");
-            })
-            .finally(() => setLoading(false));
+                setError(err.message || "Error al cargar clientes Top");
+                setLoading(false);
+            });
     };
 
     useEffect(() => {

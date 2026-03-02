@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import api from "@/lib/api";
+import { apiPost } from "@/lib/api";
 import Link from "next/link";
 
 export default function NuevoClientePage() {
@@ -31,14 +31,10 @@ export default function NuevoClientePage() {
         setLoading(true);
 
         try {
-            await api.post("/api/operators/beneficiaries", form);
+            await apiPost("/api/operators/beneficiaries", form);
             router.push("/clientes"); // Redirige al success
         } catch (err: any) {
-            if (err.response?.status === 401) {
-                setError("Tu sesión expiró. Por favor, vuelve a iniciar sesión.");
-            } else {
-                setError(err.response?.data?.detail || "Error al crear beneficiario");
-            }
+            setError(err.message || "Error al crear beneficiario");
             setLoading(false);
         }
     };

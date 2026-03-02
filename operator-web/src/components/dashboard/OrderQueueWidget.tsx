@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import api from "@/lib/api";
+import { apiGet } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -21,14 +21,14 @@ export default function OrderQueueWidget() {
     const [error, setError] = useState<string | null>(null);
 
     const fetchOrders = () => {
-        api.get("/api/operators/orders/queue")
-            .then(res => {
-                setOrders(res.data || []);
+        apiGet("/api/operators/orders/queue")
+            .then(data => {
+                setOrders(Array.isArray(data) ? data : []);
                 setError(null);
             })
             .catch(err => {
                 console.error("Error fetching orders:", err);
-                setError("Error al cargar cola de trabajo");
+                setError(err.message || "Error cargando cola");
             })
             .finally(() => setLoading(false));
     };

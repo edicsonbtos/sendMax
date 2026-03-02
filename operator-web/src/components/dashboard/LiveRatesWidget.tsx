@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import api from "@/lib/api";
+import { apiGet } from "@/lib/api";
 
 type Rate = {
     origin: string;
@@ -16,16 +16,15 @@ export default function LiveRatesWidget() {
     const [error, setError] = useState<string | null>(null);
 
     const fetchRates = () => {
-        api.get("/api/rates/current")
-            .then(res => {
-                setRates(res.data.rates || []);
-                setError(null);
+        apiGet("/api/rates/current")
+            .then(data => {
+                setRates(Array.isArray(data) ? data : []);
+                setLoading(false);
             })
             .catch(err => {
-                console.error("Error fetching rates:", err);
-                setError("Error al cargar tasas");
-            })
-            .finally(() => setLoading(false));
+                setError(err.message || "Error al cargar tasas");
+                setLoading(false);
+            });
     };
 
     useEffect(() => {
