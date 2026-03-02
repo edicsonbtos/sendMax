@@ -130,10 +130,12 @@ function CountryHeatmap({ data }: { data: { dest_currency: string; volume: numbe
   const filtered = useMemo(() => {
     const currencyToCountry: Record<string, string> = { PEN: 'PERU', COP: 'COLOMBIA', VES: 'VENEZUELA', CLP: 'CHILE', ARS: 'ARGENTINA', MXN: 'MEXICO', USD: 'USA' };
     const aggregated: Record<string, number> = {};
-    data.forEach(d => {
-      const country = currencyToCountry[d.dest_currency] || d.dest_currency;
-      aggregated[country] = (aggregated[country] || 0) + d.volume;
-    });
+    if (Array.isArray(data)) {
+      data.forEach(d => {
+        const country = currencyToCountry[d.dest_currency] || d.dest_currency;
+        aggregated[country] = (aggregated[country] || 0) + d.volume;
+      });
+    }
     return Object.entries(aggregated)
       .filter(([c]) => HEATMAP_COUNTRIES.includes(c))
       .sort((a, b) => b[1] - a[1])
@@ -232,7 +234,7 @@ function OperatorLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
 function VaultRadar() {
   const [vaults, setVaults] = useState<VaultRowData[]>([]);
   useEffect(() => {
-    apiRequest<{ vaults: VaultRowData[] }>('/vaults').then(r => setVaults(r?.vaults || [])).catch(() => { });
+    apiRequest<{ vaults: VaultRowData[] }>('/vaults').then(r => setVaults(Array.isArray(r?.vaults) ? r.vaults : [])).catch(() => { });
   }, []);
   const active = vaults.filter(v => v.is_active);
   if (!active.length) return null;
@@ -320,16 +322,16 @@ export default function DashboardPage() {
 
       setMetrics(metricsData);
       setCompanyOverview(companyData);
-      setLeaderboard(lbData?.leaderboard || []);
+      setLeaderboard(Array.isArray(lbData?.leaderboard) ? lbData.leaderboard : []);
 
       const allAlerts: StuckAlert[] = [];
       if (alertsData) {
-        if (alertsData.origin_verificando_stuck) allAlerts.push(...alertsData.origin_verificando_stuck);
-        if (alertsData.awaiting_paid_proof_stuck) allAlerts.push(...alertsData.awaiting_paid_proof_stuck);
+        if (Array.isArray(alertsData.origin_verificando_stuck)) allAlerts.push(...alertsData.origin_verificando_stuck);
+        if (Array.isArray(alertsData.awaiting_paid_proof_stuck)) allAlerts.push(...alertsData.awaiting_paid_proof_stuck);
       }
       setAlerts(allAlerts);
 
-      if (profitData?.profit_by_day) {
+      if (profitData && Array.isArray(profitData.profit_by_day)) {
         setProfitDaily(profitData.profit_by_day.map(d => ({
           day: new Date(d.day).toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric' }),
           profit: d.total_profit || 0,
@@ -338,7 +340,7 @@ export default function DashboardPage() {
           volume: d.total_volume || 0,
         })));
       }
-      if (metricsData?.status_counts) {
+      if (metricsData?.status_counts && typeof metricsData.status_counts === 'object') {
         setStatusCounts(
           Object.entries(metricsData.status_counts)
             .filter(([, v]) => (v || 0) > 0)

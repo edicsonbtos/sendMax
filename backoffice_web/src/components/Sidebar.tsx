@@ -44,7 +44,7 @@ export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { logout, fullName, role, token } = useAuth();
 
-  const menuItems = role === "admin" ? adminMenu : operatorMenu;
+  const menuItems = (role === "admin" || role === "superadmin") ? adminMenu : operatorMenu;
 
   const handleNav = (path: string) => {
     router.push(path);
@@ -76,36 +76,36 @@ export default function Sidebar() {
           const isActive = item.path === "/" ? pathname === "/" : pathname.startsWith(item.path);
           return (
             <ListItem key={item.path} disablePadding sx={{ mb: 0.5 }}>
-              <ListItemButton 
-                onClick={() => handleNav(item.path)} 
-                sx={{ 
-                  borderRadius: "12px", 
-                  py: 1.25, 
-                  px: 1.5, 
-                  backgroundColor: isActive ? "rgba(0,229,255,0.08)" : "transparent", 
-                  border: isActive ? "1px solid rgba(0,229,255,0.2)" : "1px solid transparent", 
-                  "&:hover": { 
-                    backgroundColor: isActive ? "rgba(0,229,255,0.12)" : "rgba(255,255,255,0.03)", 
-                    border: "1px solid rgba(0,229,255,0.15)" 
-                  }, 
-                  transition: "all 0.2s ease" 
+              <ListItemButton
+                onClick={() => handleNav(item.path)}
+                sx={{
+                  borderRadius: "12px",
+                  py: 1.25,
+                  px: 1.5,
+                  backgroundColor: isActive ? "rgba(0,229,255,0.08)" : "transparent",
+                  border: isActive ? "1px solid rgba(0,229,255,0.2)" : "1px solid transparent",
+                  "&:hover": {
+                    backgroundColor: isActive ? "rgba(0,229,255,0.12)" : "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(0,229,255,0.15)"
+                  },
+                  transition: "all 0.2s ease"
                 }}>
                 <ListItemIcon sx={{ color: isActive ? "#00E5FF" : "#888", minWidth: 36, "& .MuiSvgIcon-root": { fontSize: 20 } }}>{item.icon}</ListItemIcon>
-                <ListItemText 
-                  primary={item.text} 
-                  secondary={!isActive ? item.description : undefined} 
-                  primaryTypographyProps={{ 
-                    fontSize: "0.875rem", 
-                    fontWeight: isActive ? 700 : 500, 
-                    color: isActive ? "#00E5FF" : "#e0e0e0", 
-                    lineHeight: 1.3 
-                  }} 
-                  secondaryTypographyProps={{ 
-                    fontSize: "0.65rem", 
-                    color: "#555", 
-                    lineHeight: 1.2, 
-                    mt: 0.25 
-                  }} 
+                <ListItemText
+                  primary={item.text}
+                  secondary={!isActive ? item.description : undefined}
+                  primaryTypographyProps={{
+                    fontSize: "0.875rem",
+                    fontWeight: isActive ? 700 : 500,
+                    color: isActive ? "#00E5FF" : "#e0e0e0",
+                    lineHeight: 1.3
+                  }}
+                  secondaryTypographyProps={{
+                    fontSize: "0.65rem",
+                    color: "#555",
+                    lineHeight: 1.2,
+                    mt: 0.25
+                  }}
                 />
                 {isActive && (<Box sx={{ width: 4, height: 24, borderRadius: 2, backgroundColor: "#00E5FF", ml: 1, boxShadow: "0 0 8px rgba(0,229,255,0.5)" }} />)}
               </ListItemButton>
@@ -119,32 +119,32 @@ export default function Sidebar() {
       {/* User Profile Footer */}
       <Box sx={{ p: 2, pb: 2.5 }}>
         {token && (
-          <Button 
-            fullWidth 
-            variant="outlined" 
-            startIcon={<LogoutIcon />} 
-            onClick={logout} 
-            sx={{ 
-              mb: 1.5, 
-              borderColor: "rgba(255,107,107,0.3)", 
-              color: "#ff6b6b", 
-              fontSize: "0.8rem", 
-              "&:hover": { 
-                borderColor: "#ff6b6b", 
-                backgroundColor: "rgba(255,107,107,0.08)" 
-              } 
+          <Button
+            fullWidth
+            variant="outlined"
+            startIcon={<LogoutIcon />}
+            onClick={logout}
+            sx={{
+              mb: 1.5,
+              borderColor: "rgba(255,107,107,0.3)",
+              color: "#ff6b6b",
+              fontSize: "0.8rem",
+              "&:hover": {
+                borderColor: "#ff6b6b",
+                backgroundColor: "rgba(255,107,107,0.08)"
+              }
             }}
           >
             Cerrar Sesion
           </Button>
         )}
         <Stack direction="row" alignItems="center" spacing={1.5}>
-          <Avatar sx={{ 
-            width: 32, 
-            height: 32, 
-            backgroundColor: "rgba(0,229,255,0.15)", 
-            color: "#00E5FF", 
-            fontSize: "0.75rem", 
+          <Avatar sx={{
+            width: 32,
+            height: 32,
+            backgroundColor: "rgba(0,229,255,0.15)",
+            color: "#00E5FF",
+            fontSize: "0.75rem",
             fontWeight: 700,
             border: "1px solid rgba(0,229,255,0.3)"
           }}>
@@ -155,18 +155,18 @@ export default function Sidebar() {
             <Typography variant="caption" sx={{ color: "#7B2FBE", fontSize: "0.65rem", lineHeight: 1.2 }}>{role === "admin" ? "Administrador" : "Operador"}</Typography>
           </Stack>
         </Stack>
-        <Chip 
-          label="v1.3.0" 
-          size="small" 
-          sx={{ 
-            mt: 1.5, 
-            backgroundColor: "rgba(123,47,190,0.15)", 
-            color: "#7B2FBE", 
-            fontWeight: 600, 
-            fontSize: "0.65rem", 
+        <Chip
+          label="v1.3.0"
+          size="small"
+          sx={{
+            mt: 1.5,
+            backgroundColor: "rgba(123,47,190,0.15)",
+            color: "#7B2FBE",
+            fontWeight: 600,
+            fontSize: "0.65rem",
             height: 20,
             border: "1px solid rgba(123,47,190,0.3)"
-          }} 
+          }}
         />
       </Box>
     </Box>
@@ -175,56 +175,56 @@ export default function Sidebar() {
   return (
     <>
       {isMobile && (
-        <IconButton 
-          onClick={() => setMobileOpen(true)} 
-          sx={{ 
-            position: "fixed", 
-            top: 12, 
-            left: 12, 
-            zIndex: 1300, 
-            backgroundColor: "#0a0a0a", 
-            border: "1px solid rgba(0,229,255,0.2)", 
-            boxShadow: "0 4px 16px rgba(0,0,0,0.5)", 
-            "&:hover": { 
-              backgroundColor: "#111", 
-              borderColor: "#00E5FF" 
-            } 
+        <IconButton
+          onClick={() => setMobileOpen(true)}
+          sx={{
+            position: "fixed",
+            top: 12,
+            left: 12,
+            zIndex: 1300,
+            backgroundColor: "#0a0a0a",
+            border: "1px solid rgba(0,229,255,0.2)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+            "&:hover": {
+              backgroundColor: "#111",
+              borderColor: "#00E5FF"
+            }
           }}
         >
           <MenuIcon sx={{ color: "#00E5FF" }} />
         </IconButton>
       )}
       {isMobile ? (
-        <Drawer 
-          variant="temporary" 
-          open={mobileOpen} 
-          onClose={() => setMobileOpen(false)} 
-          ModalProps={{ keepMounted: true }} 
-          sx={{ 
-            "& .MuiDrawer-paper": { 
-              width: drawerWidth, 
-              boxSizing: "border-box", 
-              background: "linear-gradient(180deg, #0a0a0a 0%, #050505 100%)", 
-              borderRight: "1px solid rgba(0,229,255,0.1)" 
-            } 
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            "& .MuiDrawer-paper": {
+              width: drawerWidth,
+              boxSizing: "border-box",
+              background: "linear-gradient(180deg, #0a0a0a 0%, #050505 100%)",
+              borderRight: "1px solid rgba(0,229,255,0.1)"
+            }
           }}
         >
           {drawerContent}
         </Drawer>
       ) : (
-        <Drawer 
-          variant="permanent" 
-          sx={{ 
-            width: drawerWidth, 
-            flexShrink: 0, 
-            "& .MuiDrawer-paper": { 
-              width: drawerWidth, 
-              boxSizing: "border-box", 
-              background: "linear-gradient(180deg, #0a0a0a 0%, #050505 100%)", 
-              borderRight: "1px solid rgba(0,229,255,0.1)", 
-              display: "flex", 
-              flexDirection: "column" 
-            } 
+        <Drawer
+          variant="permanent"
+          sx={{
+            width: drawerWidth,
+            flexShrink: 0,
+            "& .MuiDrawer-paper": {
+              width: drawerWidth,
+              boxSizing: "border-box",
+              background: "linear-gradient(180deg, #0a0a0a 0%, #050505 100%)",
+              borderRight: "1px solid rgba(0,229,255,0.1)",
+              display: "flex",
+              flexDirection: "column"
+            }
           }}
         >
           {drawerContent}
