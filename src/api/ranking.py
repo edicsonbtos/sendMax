@@ -21,12 +21,12 @@ async def get_operator_ranking(limit: int = 10):
         async with conn.cursor() as cur:
             await cur.execute("""
                 WITH monthly_stats AS (
-                    SELECT operator_id, COUNT(*) as orders_count,
+                    SELECT operator_user_id, COUNT(*) as orders_count,
                     COALESCE(SUM(profit_real_usdt), 0) as volume
                     FROM orders
                     WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
                     AND status IN ('COMPLETADA', 'ORIGEN_CONFIRMADO')
-                    GROUP BY operator_id
+                    GROUP BY operator_user_id
                 ),
                 ranked AS (
                     SELECT u.id, u.alias, u.trust_score,
@@ -34,7 +34,7 @@ async def get_operator_ranking(limit: int = 10):
                     COALESCE(ms.volume, 0) as monthly_volume,
                     ROW_NUMBER() OVER (ORDER BY u.trust_score DESC, ms.volume DESC) as position
                     FROM users u
-                    LEFT JOIN monthly_stats ms ON u.id = ms.operator_id
+                    LEFT JOIN monthly_stats ms ON u.id = ms.operator_user_id
                     WHERE u.kyc_status = 'APPROVED'
                 )
                 SELECT * FROM ranked ORDER BY position LIMIT %s

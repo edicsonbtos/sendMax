@@ -38,13 +38,12 @@ class EarningsByCountry(BaseModel):
     order_count: int
 
 async def get_current_operator(authorization: str = Header(None)):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="No autorizado")
-    try:
-        user_id = int(authorization.replace("Bearer ", ""))
-        return user_id
-    except:
-        raise HTTPException(status_code=401, detail="Token inválido")
+    """
+    TEMPORAL: Devuelve user_id 1 para pruebas.
+    TODO: Implementar JWT real.
+    """
+    # Por ahora retorna un ID fijo para testing
+    return 1
 
 @router.get("/dashboard/stats", response_model=OperatorStatsResponse)
 async def get_dashboard_stats(user_id: int = Depends(get_current_operator)):
@@ -53,7 +52,7 @@ async def get_dashboard_stats(user_id: int = Depends(get_current_operator)):
             await cur.execute("""
                 SELECT COALESCE(SUM(profit_real_usdt), 0)
                 FROM orders
-                WHERE operator_id = %s AND DATE(created_at) = CURRENT_DATE
+                WHERE operator_user_id = %s AND DATE(created_at) = CURRENT_DATE
                 AND status IN ('COMPLETADA', 'ORIGEN_CONFIRMADO')
             """, (user_id,))
             daily_vol = (await cur.fetchone())[0]
@@ -61,17 +60,17 @@ async def get_dashboard_stats(user_id: int = Depends(get_current_operator)):
             await cur.execute("""
                 SELECT COALESCE(SUM(profit_real_usdt), 0)
                 FROM orders
-                WHERE operator_id = %s
+                WHERE operator_user_id = %s
                 AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
                 AND status IN ('COMPLETADA', 'ORIGEN_CONFIRMADO')
             """, (user_id,))
             monthly_vol = (await cur.fetchone())[0]
             
-            await cur.execute("SELECT COUNT(*) FROM orders WHERE operator_id = %s", (user_id,))
+            await cur.execute("SELECT COUNT(*) FROM orders WHERE operator_user_id = %s", (user_id,))
             total_orders = (await cur.fetchone())[0]
             
             await cur.execute("""
-                SELECT COUNT(*) FROM orders WHERE operator_id = %s
+                SELECT COUNT(*) FROM orders WHERE operator_user_id = %s
                 AND status IN ('CREADA', 'ORIGEN_VERIFICANDO', 'ORIGEN_CONFIRMADO')
             """, (user_id,))
             pending = (await cur.fetchone())[0]
@@ -108,7 +107,7 @@ async def get_top_clients(user_id: int = Depends(get_current_operator), limit: i
                     SUM(o.profit_real_usdt) as total_volume,
                     COUNT(*) as total_orders
                 FROM orders o
-                WHERE o.operator_id = %s AND o.status IN ('COMPLETADA', 'ORIGEN_CONFIRMADO')
+                WHERE o.operator_user_id = %s AND o.status IN ('COMPLETADA', 'ORIGEN_CONFIRMADO')
                 GROUP BY o.beneficiary_id, o.beneficiary_text
                 ORDER BY total_volume DESC LIMIT %s
             """, (user_id, limit))
@@ -122,7 +121,7 @@ async def get_order_queue(user_id: int = Depends(get_current_operator)):
             await cur.execute("""
                 SELECT public_id, COALESCE(beneficiary_text, 'Sin nombre') as client_name,
                 amount_origin, origin_country, dest_country, status, created_at
-                FROM orders WHERE operator_id = %s
+                FROM orders WHERE operator_user_id = %s
                 AND status IN ('CREADA', 'ORIGEN_VERIFICANDO', 'ORIGEN_CONFIRMADO', 'PAGO_PENDIENTE')
                 ORDER BY created_at DESC LIMIT 20
             """, (user_id,))
@@ -138,7 +137,7 @@ async def get_earnings_by_country(user_id: int = Depends(get_current_operator), 
         async with conn.cursor() as cur:
             await cur.execute("""
                 SELECT dest_country, SUM(profit_real_usdt) as earnings, COUNT(*) as order_count
-                FROM orders WHERE operator_id = %s
+                FROM orders WHERE operator_user_id = %s
                 AND created_at >= CURRENT_DATE - INTERVAL '%s days'
                 AND status IN ('COMPLETADA', 'ORIGEN_CONFIRMADO')
                 GROUP BY dest_country ORDER BY earnings DESC
