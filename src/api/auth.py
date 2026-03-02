@@ -9,20 +9,20 @@ class LoginRequest(BaseModel):
     password: str
 
 class LoginResponse(BaseModel):
-    token: str
-    user: dict
+    access_token: str
+    role: str
+    full_name: str
 
 @router.post("/login", response_model=LoginResponse)
 async def login(req: LoginRequest):
-    # Hardcoded admin credentials based on user request
-    if req.email == "admin@sendmax.com" and req.password == "Maxi2204#":
+    # Strip spaces to prevent accidental "Maxi2204# " typing errors
+    email = req.email.strip().lower()
+    pwd = req.password.strip()
+    
+    if email == "admin@sendmax.com" and pwd == "Maxi2204#":
         return LoginResponse(
-            token="admin_super_secret_token_sendmax",
-            user={
-                "id": 1,
-                "name": "Administrador SendMax",
-                "email": req.email,
-                "role": "admin"
-            }
+            access_token="admin_super_secret_token_sendmax",
+            role="superadmin",
+            full_name="Administrador SendMax"
         )
     raise HTTPException(status_code=401, detail="Credenciales incorrectas")
