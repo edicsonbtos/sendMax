@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { apiGet } from "@/lib/api";
 
 interface Order {
     public_id: number;
@@ -35,27 +36,13 @@ export default function OrdenesPage() {
             setLoading(true);
             setError(null);
             try {
-                const token = localStorage.getItem("operator_token");
-                if (!token) throw new Error("No hay token de sesión");
-
                 const queryParams = new URLSearchParams({
                     limit: "50",
                     ...(statusFilter !== "TODOS" && { status: statusFilter }),
                     ...(search && { q: search }),
                 });
 
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://sendmax11-production.up.railway.app";
-                const res = await fetch(`${apiUrl}/api/operators/orders?${queryParams}`, {
-                    headers: {
-                        "Authorization": `Bearer ${token}`
-                    }
-                });
-
-                if (!res.ok) {
-                    throw new Error("Lamentablemente hubo un error al obtener las órdenes.");
-                }
-
-                const data = await res.json();
+                const data = await apiGet(`/api/operators/orders?${queryParams}`);
                 setOrders(Array.isArray(data) ? data : []);
             } catch (err: any) {
                 setError(err.message);

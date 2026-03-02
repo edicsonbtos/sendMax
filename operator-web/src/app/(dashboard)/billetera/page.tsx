@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { apiGet, apiPost } from "@/lib/api";
 
 interface WalletSummary {
     balance_usdt: number;
@@ -28,32 +29,13 @@ export default function BilleteraPage() {
             setLoading(true);
             setError(null);
             try {
-                const token = localStorage.getItem("auth_token") || localStorage.getItem("operator_token");
-                if (!token) {
-                    window.location.href = "/login";
-                    return;
-                }
-
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://sendmax11-production.up.railway.app";
-                const headers = { "Authorization": `Bearer ${token}` };
-
                 const [resSummary, resLedger] = await Promise.all([
-                    fetch(`${apiUrl}/api/operators/wallet/summary`, { headers }),
-                    fetch(`${apiUrl}/api/operators/wallet/ledger?limit=50`, { headers })
+                    apiGet(`/api/operators/wallet/summary`),
+                    apiGet(`/api/operators/wallet/ledger?limit=50`)
                 ]);
 
-                if (resSummary.status === 401 || resLedger.status === 401) {
-                    localStorage.removeItem("auth_token");
-                    localStorage.removeItem("operator_token");
-                    window.location.href = "/login";
-                    return;
-                }
-
-                if (!resSummary.ok || !resLedger.ok) throw new Error("Error obteniendo datos de la billetera");
-
-                setSummary(await resSummary.json());
-                const ledgerData = await resLedger.json();
-                setLedger(Array.isArray(ledgerData) ? ledgerData : []);
+                setSummary(resSummary);
+                setLedger(Array.isArray(resLedger) ? resLedger : []);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -66,25 +48,14 @@ export default function BilleteraPage() {
 
     const handleWithdraw = async () => {
         try {
-            const token = localStorage.getItem("auth_token") || localStorage.getItem("operator_token");
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://sendmax11-production.up.railway.app";
-            const res = await fetch(`${apiUrl}/api/operators/wallet/withdraw`, {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${token}` }
-            });
-
-            if (res.status === 401) {
-                window.location.href = "/login";
-                return;
-            }
-
-            if (res.status === 501) {
+            await apiPost(`/api/operators/wallet/withdraw`, {});
+            setWithdrawMessage("Solicitud completada (o error no esperado).");
+        } catch (e: any) {
+            if (e.message.includes("501")) {
                 setWithdrawMessage("Not implemented: El sistema de retiros automáticos aún está en desarrollo.");
             } else {
-                setWithdrawMessage("Solicitud completada (o error no esperado).");
+                setWithdrawMessage("Error de conexión al solicitar el retiro.");
             }
-        } catch (e) {
-            setWithdrawMessage("Error de conexión al solicitar el retiro.");
         }
     };
 

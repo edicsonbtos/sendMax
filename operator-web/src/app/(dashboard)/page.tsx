@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiGet } from "@/lib/api";
 import {
     TrendingUp,
     Users,
@@ -101,8 +102,7 @@ export default function Dashboard() {
 
     const fetchRates = async () => {
         try {
-            const res = await fetch(`${apiUrl}/api/rates/current`);
-            const data = await res.json();
+            const data = await apiGet(`/api/rates/current`);
             setRates(Array.isArray(data.rates) ? data.rates.slice(0, 8) : []);
         } catch (err) {
             console.error('Error fetching rates:', err);
@@ -111,8 +111,7 @@ export default function Dashboard() {
 
     const fetchTopClients = async () => {
         try {
-            const res = await fetch(`${apiUrl}/api/operators/dashboard/top-clients?limit=5`);
-            const data = await res.json();
+            const data = await apiGet(`/api/operators/dashboard/top-clients?limit=5`);
             setTopClients(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error('Error fetching top clients:', err);
@@ -121,8 +120,7 @@ export default function Dashboard() {
 
     const fetchOrderQueue = async () => {
         try {
-            const res = await fetch(`${apiUrl}/api/operators/orders/queue`);
-            const data = await res.json();
+            const data = await apiGet(`/api/operators/orders/queue`);
             setOrderQueue(Array.isArray(data) ? data.slice(0, 5) : []);
         } catch (err) {
             console.error('Error fetching orders:', err);
@@ -131,8 +129,7 @@ export default function Dashboard() {
 
     const fetchStats = async () => {
         try {
-            const res = await fetch(`${apiUrl}/api/operators/dashboard/stats`);
-            const data = await res.json();
+            const data = await apiGet(`/api/operators/dashboard/stats`);
             setStats(data);
         } catch (err) {
             console.error('Error fetching stats:', err);
@@ -141,8 +138,7 @@ export default function Dashboard() {
 
     const fetchRanking = async () => {
         try {
-            const res = await fetch(`${apiUrl}/api/ranking/operators?limit=10`);
-            const data = await res.json();
+            const data = await apiGet(`/api/ranking/operators?limit=10`);
             setRanking(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error('Error fetching ranking:', err);
