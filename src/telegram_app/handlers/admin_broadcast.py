@@ -117,13 +117,14 @@ async def on_broadcast_content(update: Update, context: ContextTypes.DEFAULT_TYP
 
     context.user_data["broadcast_count"] = count
 
-    kb = ReplyKeyboardMarkup(
-        [[KeyboardButton(BTN_CONFIRM)], [KeyboardButton(BTN_CANCEL)]],
-        resize_keyboard=True,
-        one_time_keyboard=True,
+    kb = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ Confirmar y Enviar", callback_data="bc_confirm")],
+            [InlineKeyboardButton("❌ Cancelar Difusión", callback_data="bc_cancel")]
+        ]
     )
     await update.message.reply_text(
-        f"Se enviará a **{count}** operadores registrados y activos.\n\n¿Confirmar envío?",
+        f"Se enviará a **{count}** operadores registrados y activos.\n\n¿Deseas enviar este mensaje ahora?",
         reply_markup=kb,
         parse_mode="Markdown",
     )
@@ -131,35 +132,37 @@ async def on_broadcast_content(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def on_broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = (update.message.text or "").strip()
+    query = update.callback_query
+    await query.answer()
+    
+    action = query.data
     admin_id = context.user_data.get("broadcast_admin_id", 0)
 
-    msg_id = update.effective_message.message_id if update.effective_message else 0
-    if msg_id and msg_id in _PROCESSED_BROADCAST_MSGS:
-        logger.warning("[Broadcast] Ignorando doble confirmación de mensaje ID: %s", msg_id)
+    # Bloqueo doble click en inline buttons
+    if query.message.message_id in _PROCESSED_BROADCAST_MSGS:
+        logger.warning("[Broadcast] Ignorando doble clic en botón inline ID: %s", query.message.message_id)
         return ConversationHandler.END
-    if msg_id:
-        _PROCESSED_BROADCAST_MSGS.add(msg_id)
+    _PROCESSED_BROADCAST_MSGS.add(query.message.message_id)
 
-    if text == BTN_CANCEL:
+    if action == "bc_cancel":
         _release_broadcast_lock(admin_id)
-        await update.message.reply_text("Difusión cancelada ✅", reply_markup=admin_panel_keyboard())
+        await query.edit_message_text("Difusión cancelada ✅")
+        await query.message.reply_text("Volviendo al Panel Admin...", reply_markup=admin_panel_keyboard())
         return ConversationHandler.END
 
-    if text != BTN_CONFIRM:
-        await update.message.reply_text("Por favor, usa los botones para confirmar o cancelar.")
+    if action != "bc_confirm":
         return BROADCAST_CONFIRM
 
-    # Idempotency Lock: prevents double click messages
+    # Idempotency Lock
     if context.user_data.get("is_broadcasting"):
-        logger.warning("[Broadcast] Ignorando doble clic, difusión ya en progreso.")
+        logger.warning("[Broadcast] Ignorando doble sesión de difusión activa.")
         return ConversationHandler.END
     context.user_data["is_broadcasting"] = True
 
     from_chat_id = context.user_data.get("broadcast_from_chat_id")
     message_id = context.user_data.get("broadcast_message_id")
 
-    await update.message.reply_text("🚀 Iniciando difusión... esto puede tardar un poco.")
+    await query.edit_message_text("🚀 Iniciando difusión... esto puede tardar unos minutos. Por favor no envíes más comandos.")
 
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
@@ -206,7 +209,7 @@ async def on_broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         f"❌ Errores técnicos: {fail_count}\n"
         f"👥 Total IDs únicos procesados: {len(seen_ids)}"
     )
-    await update.message.reply_text(report, reply_markup=admin_panel_keyboard(), parse_mode="Markdown")
+    await query.message.reply_text(report, reply_markup=admin_panel_keyboard(), parse_mode="Markdown")
 
     # Limpiar estado
     for k in ["broadcast_from_chat_id", "broadcast_message_id", "broadcast_count", "broadcast_admin_id", "is_broadcasting"]:
@@ -233,7 +236,9 @@ def build_broadcast_handler() -> ConversationHandler:
             BROADCAST_CONTENT: [
                 MessageHandler(filters.ALL & ~filters.COMMAND, on_broadcast_content),
             ],
-            BROADCAST_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, on_broadcast_confirm)],
+            BROADCAST_CONFIRM: [
+                CallbackQueryHandler(on_broadcast_confirm, pattern="^bc_(confirm|cancel)$")
+            ],
         },
         fallbacks=[
             CommandHandler(["cancel", "panic"], panic_handler),
