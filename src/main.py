@@ -100,12 +100,12 @@ async def lifespan(app: FastAPI):
             return
         await rates_scheduler.run_stuck_orders_check()
 
-    bot_app.job_queue.run_repeating(
-        job_vault_alert,
-        interval=30 * 60,   # cada 30 minutos
-        first=90,           # primera ejecución a los 90s (escalonado con rates check)
-        name="vault_alert_check",
-    )
+    # bot_app.job_queue.run_repeating(
+    #     job_vault_alert,
+    #     interval=30 * 60,   # cada 30 minutos
+    #     first=90,           # primera ejecución a los 90s (escalonado con rates check)
+    #     name="vault_alert_check",
+    # )
     bot_app.job_queue.run_repeating(
         job_stuck_orders,
         interval=60 * 60,   # cada 60 minutos

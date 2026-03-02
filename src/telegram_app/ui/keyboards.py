@@ -22,6 +22,10 @@ def main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
         [KeyboardButton(BTN_PAYMENT_METHODS), KeyboardButton(BTN_REFERRALS)],
         [KeyboardButton(BTN_WALLET),          KeyboardButton(BTN_HELP)],
     ]
+    
+    if is_admin:
+        # Añade el botón admin en una fila adicional al final
+        keyboard.append([KeyboardButton(BTN_ADMIN)])
 
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
