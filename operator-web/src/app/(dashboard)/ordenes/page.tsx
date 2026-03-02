@@ -55,6 +55,7 @@ export default function OrdenesPage() {
                     throw new Error("Lamentablemente hubo un error al obtener las órdenes.");
                 }
 
+                const data = await res.json();
                 setOrders(Array.isArray(data) ? data : []);
             } catch (err: any) {
                 setError(err.message);
