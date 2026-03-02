@@ -24,7 +24,7 @@ def get_profit_daily(days: int = 30):
     )
 
     m = {}
-    for r in rows:
+    for r in rows or []:
         k = str(r["day"])
         m[k] = {
             "day": k,
@@ -82,7 +82,7 @@ def get_operators_ranking(days: int = 7):
     )
 
     out = []
-    for r in rows:
+    for r in rows or []:
         out.append({
             "telegram_id": r["telegram_id"],
             "name": r["name"],
@@ -124,7 +124,7 @@ def get_corridors(days: int = 30):
     )
 
     out = []
-    for r in rows:
+    for r in rows or []:
         out.append({
             "origin_country": r["origin_country"],
             "dest_country": r["dest_country"],

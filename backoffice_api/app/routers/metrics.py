@@ -290,11 +290,14 @@ def metrics_company_overview(
     ]
 
     # FIX6: derivar paid_usd_usdt en Python (elimina query redundante)
-    paid_usd_usdt = sum(
-        float(r["vol"] or 0)
-        for r in v_rows
-        if r.get("dest_currency") in ("USD", "USDT")
-    )
+    try:
+        paid_usd_usdt = sum(
+            float(r["vol"] or 0)
+            for r in v_rows
+            if r and r.get("dest_currency") in ("USD", "USDT")
+        )
+    except Exception:
+        paid_usd_usdt = 0.0
 
     # --- Query 3: wallets SOLO admin (no se ejecuta para operadores) ---
     origin_wallets_data = None
