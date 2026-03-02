@@ -246,7 +246,7 @@ export default function Dashboard() {
                         <span className="badge badge-warning">#{stats?.rank_position || '-'}</span>
                     </div>
                     <h3 className="text-gray-400 text-sm font-medium mb-1">Trust Score</h3>
-                    <p className="text-2xl font-bold text-white">{stats?.trust_score?.toFixed(1) || '0'}%</p>
+                    <p className="text-2xl font-bold text-white">{stats?.trust_score ? Number(stats.trust_score).toFixed(1) : '0'}%</p>
                 </div>
             </div>
 
@@ -277,8 +277,8 @@ export default function Dashboard() {
                                     <span className="text-xl">{countryFlags[rate.dest] || '🌍'}</span>
                                 </div>
                                 <p className="text-xs text-gray-400 mb-1">{rate.origin} → {rate.dest}</p>
-                                <p className="text-lg font-bold text-white">{rate.rate.toFixed(4)}</p>
-                                <p className="text-xs text-green-400">+{rate.commission_pct.toFixed(1)}% comisión</p>
+                                <p className="text-lg font-bold text-white">{Number(rate.rate || 0).toFixed(4)}</p>
+                                <p className="text-xs text-green-400">+{Number(rate.commission_pct || 0).toFixed(1)}% comisión</p>
                             </div>
                         ))}
                     </div>
@@ -297,14 +297,14 @@ export default function Dashboard() {
                             <div
                                 key={index}
                                 className={`flex items-center gap-4 p-3 rounded-xl transition-all ${entry.is_current_user
-                                        ? 'bg-blue-500/20 border border-blue-500/50'
-                                        : 'bg-white/5 hover:bg-white/10'
+                                    ? 'bg-blue-500/20 border border-blue-500/50'
+                                    : 'bg-white/5 hover:bg-white/10'
                                     }`}
                             >
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${index === 0 ? 'bg-yellow-500 text-black' :
-                                        index === 1 ? 'bg-gray-400 text-black' :
-                                            index === 2 ? 'bg-orange-600 text-white' :
-                                                'bg-white/10 text-white'
+                                    index === 1 ? 'bg-gray-400 text-black' :
+                                        index === 2 ? 'bg-orange-600 text-white' :
+                                            'bg-white/10 text-white'
                                     }`}>
                                     {entry.position}
                                 </div>
@@ -313,7 +313,7 @@ export default function Dashboard() {
                                     <p className="text-xs text-gray-400">{entry.total_orders} órdenes</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-sm font-bold text-white">{entry.trust_score?.toFixed(0)}%</p>
+                                    <p className="text-sm font-bold text-white">{entry.trust_score ? Number(entry.trust_score).toFixed(0) : '0'}%</p>
                                     <p className="text-xs text-green-400">{formatCurrency(entry.monthly_volume_usdt)}</p>
                                 </div>
                             </div>
