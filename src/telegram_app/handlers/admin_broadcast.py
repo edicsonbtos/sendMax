@@ -27,11 +27,9 @@ from src.telegram_app.ui.admin_keyboards import (
 logger = logging.getLogger(__name__)
 
 # Estados
-BROADCAST_TYPE, BROADCAST_CONTENT, BROADCAST_CONFIRM = range(3)
+BROADCAST_CONTENT, BROADCAST_CONFIRM = range(2)
 
 # Botones
-BTN_TEXT = "📝 Texto"
-BTN_IMAGE = "🖼️ Imagen con texto"
 BTN_CONFIRM = "✅ Enviar"
 BTN_CANCEL = "❌ Cancelar"
 
@@ -78,44 +76,18 @@ async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data["broadcast_admin_id"] = admin_id
 
     kb = ReplyKeyboardMarkup(
-        [[KeyboardButton(BTN_TEXT), KeyboardButton(BTN_IMAGE)], [KeyboardButton(BTN_CANCEL)]],
+        [[KeyboardButton(BTN_CANCEL)]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
     await update.message.reply_text(
-        "📢 **Difusión**\n\n¿Qué tipo de difusión deseas realizar?",
+        "📢 **Modo Difusión Iniciado**\n\n"
+        "Envía ahora mismo el mensaje que deseas difundir a todos los operadores.\n\n"
+        "💡 _Tip: Puedes enviar Texto, Fotos, Videos, GIFs o Documentos._",
         reply_markup=kb,
         parse_mode="Markdown",
     )
-    return BROADCAST_TYPE
-
-
-async def on_broadcast_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = (update.message.text or "").strip()
-
-    if text == BTN_CANCEL:
-        _release_broadcast_lock(context.user_data.pop("broadcast_admin_id", 0))
-        await update.message.reply_text("Difusión cancelada ✅", reply_markup=admin_panel_keyboard())
-        return ConversationHandler.END
-
-    if text == BTN_TEXT:
-        context.user_data["broadcast_type"] = "text"
-        await update.message.reply_text(
-            "Escribe el mensaje que deseas enviar a todos los operadores:",
-            reply_markup=ReplyKeyboardMarkup([[KeyboardButton(BTN_CANCEL)]], resize_keyboard=True),
-        )
-        return BROADCAST_CONTENT
-
-    if text == BTN_IMAGE:
-        context.user_data["broadcast_type"] = "image"
-        await update.message.reply_text(
-            "Envía la imagen con el texto (caption) que deseas difundir:",
-            reply_markup=ReplyKeyboardMarkup([[KeyboardButton(BTN_CANCEL)]], resize_keyboard=True),
-        )
-        return BROADCAST_CONTENT
-
-    await update.message.reply_text("Por favor, elige una opción válida usando los botones.")
-    return BROADCAST_TYPE
+    return BROADCAST_CONTENT
 
 
 async def on_broadcast_content(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -124,31 +96,17 @@ async def on_broadcast_content(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("Difusión cancelada ✅", reply_markup=admin_panel_keyboard())
         return ConversationHandler.END
 
-    b_type = context.user_data.get("broadcast_type")
+    # Guardar ID del chat original y del mensaje para usar copy_message
+    context.user_data["broadcast_from_chat_id"] = update.effective_chat.id
+    context.user_data["broadcast_message_id"] = update.message.message_id
 
-    if b_type == "text":
-        if not update.message.text:
-            await update.message.reply_text("Por favor, envía un mensaje de texto.")
-            return BROADCAST_CONTENT
-        context.user_data["broadcast_text"] = update.message.text
-
-    elif b_type == "image":
-        if not update.message.photo:
-            await update.message.reply_text("Por favor, envía una imagen.")
-            return BROADCAST_CONTENT
-        context.user_data["broadcast_photo"] = update.message.photo[-1].file_id
-        context.user_data["broadcast_text"] = update.message.caption or ""
-
-    # Preview
-    await update.message.reply_text("👀 **Vista previa del mensaje:**", parse_mode="Markdown")
-
-    if b_type == "text":
-        await update.message.reply_text(context.user_data["broadcast_text"])
-    else:
-        await update.message.reply_photo(
-            photo=context.user_data["broadcast_photo"],
-            caption=context.user_data["broadcast_text"],
-        )
+    # Vista previa usando copy_message hacia el admin
+    await update.message.reply_text("👀 **Vista previa del mensaje a difundir:**", parse_mode="Markdown")
+    await context.bot.copy_message(
+        chat_id=update.effective_chat.id,
+        from_chat_id=update.effective_chat.id,
+        message_id=update.message.message_id
+    )
 
     # Contar operadores
     async with get_async_conn() as conn:
@@ -198,9 +156,8 @@ async def on_broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         return ConversationHandler.END
     context.user_data["is_broadcasting"] = True
 
-    b_type = context.user_data.get("broadcast_type")
-    b_text = context.user_data.get("broadcast_text")
-    b_photo = context.user_data.get("broadcast_photo")
+    from_chat_id = context.user_data.get("broadcast_from_chat_id")
+    message_id = context.user_data.get("broadcast_message_id")
 
     await update.message.reply_text("🚀 Iniciando difusión... esto puede tardar un poco.")
 
@@ -226,10 +183,11 @@ async def on_broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         seen_ids.add(tg_id_int)
 
         try:
-            if b_type == "text":
-                await context.bot.send_message(chat_id=tg_id_int, text=b_text)
-            else:
-                await context.bot.send_photo(chat_id=tg_id_int, photo=b_photo, caption=b_text)
+            await context.bot.copy_message(
+                chat_id=tg_id_int,
+                from_chat_id=from_chat_id,
+                message_id=message_id
+            )
             success_count += 1
             await asyncio.sleep(0.05)  # Telegram: 20 req/sec máximo
         except Exception as e:
@@ -251,7 +209,7 @@ async def on_broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(report, reply_markup=admin_panel_keyboard(), parse_mode="Markdown")
 
     # Limpiar estado
-    for k in ["broadcast_type", "broadcast_text", "broadcast_photo", "broadcast_count", "broadcast_admin_id", "is_broadcasting"]:
+    for k in ["broadcast_from_chat_id", "broadcast_message_id", "broadcast_count", "broadcast_admin_id", "is_broadcasting"]:
         context.user_data.pop(k, None)
     _release_broadcast_lock(admin_id)
 
@@ -272,10 +230,8 @@ def build_broadcast_handler() -> ConversationHandler:
             MessageHandler(filters.Regex(rf"^{BTN_ADMIN_BROADCAST}$"), start_broadcast),
         ],
         states={
-            BROADCAST_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, on_broadcast_type)],
             BROADCAST_CONTENT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, on_broadcast_content),
-                MessageHandler(filters.PHOTO, on_broadcast_content),
+                MessageHandler(filters.ALL & ~filters.COMMAND, on_broadcast_content),
             ],
             BROADCAST_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, on_broadcast_confirm)],
         },
