@@ -32,7 +32,7 @@ async def get_operator_ranking(limit: int = 10):
                     SELECT u.id, u.alias, u.trust_score,
                     COALESCE(ms.orders_count, 0) as total_orders,
                     COALESCE(ms.volume, 0) as monthly_volume,
-                    ROW_NUMBER() OVER (ORDER BY u.trust_score DESC, ms.volume DESC) as position
+                    ROW_NUMBER() OVER (ORDER BY COALESCE(u.trust_score, 0) DESC, COALESCE(ms.volume, 0) DESC) as position
                     FROM users u
                     LEFT JOIN monthly_stats ms ON u.id = ms.operator_user_id
                     WHERE u.kyc_status = 'APPROVED'
