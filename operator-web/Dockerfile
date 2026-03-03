@@ -6,7 +6,8 @@ WORKDIR /app
 # Copiar package.json y package-lock.json
 COPY package.json package-lock.json ./
 
-# Forzar la instalación normal de todas las dependencias
+# Forzar la instalación normal de todas las dependencias (Cache Busted)
+ARG CACHE_BUST=1
 RUN npm install
 
 # Copiar el resto del código
