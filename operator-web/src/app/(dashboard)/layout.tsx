@@ -21,7 +21,7 @@ const menuItems = [
     { href: '/clientes', icon: Users, label: 'Contactos' },
     { href: '/ordenes', icon: FileText, label: 'Mis Órdenes' },
     { href: '/billetera', icon: Wallet, label: 'Billetera' },
-    { href: '/ranking', icon: Trophy, label: 'Ranking' },
+    // { href: '/ranking', icon: Trophy, label: 'Ranking' },
     { href: '/perfil', icon: User, label: 'Mi Perfil' },
 ];
 

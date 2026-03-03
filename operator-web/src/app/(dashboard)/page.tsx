@@ -255,7 +255,7 @@ export default function Dashboard() {
                         <span className="badge badge-warning">#{stats?.rank_position || '-'}</span>
                     </div>
                     <h3 className="text-gray-400 text-sm font-medium mb-1">Trust Score</h3>
-                    <p className="text-2xl font-bold text-white">{stats?.trust_score?.toFixed(1) || '0'}%</p>
+                    <p className="text-2xl font-bold text-white">{Number(stats?.trust_score || 0).toFixed(1)}%</p>
                 </div>
             </div>
 
@@ -286,8 +286,8 @@ export default function Dashboard() {
                                     <span className="text-xl">{countryFlags[rate.dest] || '🌍'}</span>
                                 </div>
                                 <p className="text-xs text-gray-400 mb-1">{rate.origin} → {rate.dest}</p>
-                                <p className="text-lg font-bold text-white">{(rate.rate ?? 0).toFixed(4)}</p>
-                                <p className="text-xs text-green-400">+{(rate.commission_pct ?? 0).toFixed(1)}% comisión</p>
+                                <p className="text-lg font-bold text-white">{Number(rate.rate || 0).toFixed(4)}</p>
+                                <p className="text-xs text-green-400">+{Number(rate.commission_pct || 0).toFixed(1)}% comisión</p>
                             </div>
                         ))}
                     </div>
@@ -322,7 +322,7 @@ export default function Dashboard() {
                                     <p className="text-xs text-gray-400">{entry.total_orders} órdenes</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-sm font-bold text-white">{entry.trust_score?.toFixed(0)}%</p>
+                                    <p className="text-sm font-bold text-white">{Number(entry.trust_score || 0).toFixed(0)}%</p>
                                     <p className="text-xs text-green-400">{formatCurrency(entry.monthly_volume_usdt)}</p>
                                 </div>
                             </div>
