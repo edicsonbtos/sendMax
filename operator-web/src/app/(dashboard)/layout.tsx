@@ -29,6 +29,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const pathname = usePathname();
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
+    const handleLogout = () => {
+        // Limpiar todo del localStorage
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('operatorData');
+        localStorage.clear();
+        document.cookie = "auth_token=; path=/; max-age=0";
+        // Redirigir al login
+        window.location.href = '/login';
+    };
+
     return (
         <div className="min-h-screen flex">
             {/* Sidebar Desktop */}
@@ -62,7 +73,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                 {/* Footer */}
                 <div className="p-4 border-t border-white/10">
-                    <button className="sidebar-item w-full text-red-400 hover:bg-red-500/10">
+                    <button onClick={handleLogout} className="sidebar-item w-full text-red-400 hover:bg-red-500/10">
                         <LogOut className="w-5 h-5" />
                         <span>Cerrar Sesión</span>
                     </button>

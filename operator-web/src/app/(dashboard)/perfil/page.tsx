@@ -50,7 +50,7 @@ export default function PerfilPage() {
     const handleLogout = () => {
         localStorage.clear();
         document.cookie = "auth_token=; path=/; max-age=0";
-        router.push("/login");
+        window.location.href = "/login";
     };
 
     if (loading) {
