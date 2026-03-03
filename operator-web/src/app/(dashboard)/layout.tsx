@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
     LayoutDashboard,
     Users,
@@ -26,8 +26,23 @@ const menuItems = [
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+    const router = useRouter();
     const pathname = usePathname();
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+
+        if (!token && pathname !== '/login') {
+            router.replace('/login');
+        } else {
+            setIsAuthenticated(true);
+        }
+
+        setIsLoading(false);
+    }, [pathname, router]);
 
     const handleLogout = () => {
         // Limpiar todo del localStorage
@@ -39,6 +54,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         // Redirigir al login
         window.location.href = '/login';
     };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-black">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                </div>
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
+        return null;
+    }
 
     return (
         <div className="min-h-screen flex">

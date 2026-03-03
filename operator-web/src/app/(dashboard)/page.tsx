@@ -82,10 +82,26 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetchAllData();
-        // Actualizar tasas cada 30 segundos
-        const interval = setInterval(fetchRates, 30000);
-        return () => clearInterval(interval);
+        let mounted = true;
+
+        const loadInitialData = async () => {
+            if (mounted) {
+                await fetchAllData();
+            }
+        };
+
+        loadInitialData();
+
+        const interval = setInterval(() => {
+            if (mounted) {
+                fetchRates();
+            }
+        }, 30000);
+
+        return () => {
+            mounted = false;
+            clearInterval(interval);
+        };
     }, []);
 
     const fetchAllData = async () => {
@@ -273,8 +289,8 @@ export default function Dashboard() {
                                     <span className="text-xl">{countryFlags[rate.dest] || '🌍'}</span>
                                 </div>
                                 <p className="text-xs text-gray-400 mb-1">{rate.origin} → {rate.dest}</p>
-                                <p className="text-lg font-bold text-white">{rate.rate.toFixed(4)}</p>
-                                <p className="text-xs text-green-400">+{rate.commission_pct.toFixed(1)}% comisión</p>
+                                <p className="text-lg font-bold text-white">{(rate.rate ?? 0).toFixed(4)}</p>
+                                <p className="text-xs text-green-400">+{(rate.commission_pct ?? 0).toFixed(1)}% comisión</p>
                             </div>
                         ))}
                     </div>

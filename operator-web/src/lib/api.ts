@@ -23,14 +23,21 @@ api.interceptors.request.use(
     }
 );
 
+// ✅ FIXED: PREVENIR BUCLE INFINITO
+let isRedirecting = false;
+
 // Interceptor para manejar errores de autenticación
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
-            // Redirigir al login si el token expiró
-            if (typeof window !== 'undefined') {
-                localStorage.removeItem('token');
+        if (error.response?.status === 401 && !isRedirecting) {
+            isRedirecting = true;
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.clear();
+
+            // Solo redirigir si NO estamos ya en login
+            if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
                 window.location.href = '/login';
             }
         }

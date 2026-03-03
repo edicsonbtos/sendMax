@@ -64,7 +64,7 @@ export default function TopClientsWidget() {
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">${Number(client.total_volume_usdt).toFixed(0)}</p>
+                                <p className="text-sm font-bold text-gray-900">${(Number(client.total_volume_usdt) || 0).toFixed(0)}</p>
                             </div>
                         </div>
                     ))}

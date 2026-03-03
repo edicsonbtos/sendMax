@@ -85,7 +85,7 @@ export default function PerfilPage() {
                                 KYC Aprobado
                             </span>
                             <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                                Trust Score: {profile?.trust_score.toFixed(0)}%
+                                Trust Score: {(profile?.trust_score ?? 0).toFixed(0)}%
                             </span>
                         </div>
                     </div>
@@ -128,7 +128,7 @@ export default function PerfilPage() {
                     <div className="flex items-center justify-between py-3">
                         <span className="text-white/60">Trust Score</span>
                         <span className="text-white font-medium">
-                            {profile?.trust_score.toFixed(0)}%
+                            {(profile?.trust_score ?? 0).toFixed(0)}%
                         </span>
                     </div>
                 </div>
