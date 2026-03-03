@@ -26,6 +26,17 @@ interface Client {
     payment_methods: PaymentMethod[];
 }
 
+interface Beneficiario {
+    id: number;
+    phone?: string;
+    alias?: string;
+    full_name?: string;
+    dest_country: string;
+    bank_name?: string;
+    account_number?: string;
+    payment_method?: string;
+}
+
 const COUNTRIES = [
     { code: 'VENEZUELA', flag: '🇻🇪', name: 'Venezuela' },
     { code: 'COLOMBIA', flag: '🇨🇴', name: 'Colombia' },
@@ -70,10 +81,10 @@ export default function ClientesPage() {
         }
     };
 
-    const groupByClient = (beneficiaries: Record<string, any>[]) => {
+    const groupByClient = (beneficiaries: Beneficiario[]) => {
         const map = new Map<string, Client>();
         beneficiaries.forEach(b => {
-            const key = b.phone || b.alias;
+            const key = (b.phone || b.alias) as string;
             if (map.has(key)) {
                 map.get(key)!.payment_methods.push({
                     id: b.id,
