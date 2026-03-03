@@ -91,7 +91,7 @@ export default function ClientesPage() {
                     country: b.dest_country,
                     bank_name: b.bank_name || '',
                     account_number: b.account_number || '',
-                    alias: b.alias
+                    alias: b.alias || ''
                 });
             } else {
                 map.set(key, {
@@ -103,7 +103,7 @@ export default function ClientesPage() {
                         country: b.dest_country,
                         bank_name: b.bank_name || '',
                         account_number: b.account_number || '',
-                        alias: b.alias
+                        alias: b.alias || ''
                     }]
                 });
             }
