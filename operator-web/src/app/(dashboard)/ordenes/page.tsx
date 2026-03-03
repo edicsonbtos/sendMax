@@ -1,176 +1,177 @@
 "use client";
-
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiGet } from "@/lib/api";
 
 interface Order {
-    public_id: number;
-    origin_country: string;
-    dest_country: string;
-    amount_origin: string; // Decimal comes as string or number
-    payout_dest: string;
+    id: string;
+    beneficiary_name: string;
+    amount_usd: number;
     status: string;
     created_at: string;
-    beneficiary_text: string;
+    payment_method: string;
 }
 
-const statusColors: Record<string, string> = {
-    'CREADA': 'bg-gray-100 text-gray-800',
-    'ORIGEN_VERIFICANDO': 'bg-yellow-100 text-yellow-800',
-    'ORIGEN_CONFIRMADO': 'bg-blue-100 text-blue-800',
-    'PAGO_PENDIENTE': 'bg-orange-100 text-orange-800',
-    'COMPLETADA': 'bg-green-100 text-green-800',
-    'CANCELADA': 'bg-red-100 text-red-800',
-};
-
 export default function OrdenesPage() {
+    const router = useRouter();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [search, setSearch] = useState("");
-    const [statusFilter, setStatusFilter] = useState("TODOS");
+    const [filter, setFilter] = useState<string>("all");
 
     useEffect(() => {
-        const fetchOrders = async () => {
+        loadOrders();
+    }, []);
+
+    const loadOrders = async () => {
+        try {
             setLoading(true);
-            setError(null);
-            try {
-                const queryParams = new URLSearchParams({
-                    limit: "50",
-                    ...(statusFilter !== "TODOS" && { status: statusFilter }),
-                    ...(search && { q: search }),
-                });
+            const data = await apiGet("/api/operators/orders");
+            setOrders(Array.isArray(data) ? data : []);
+        } catch (err: any) {
+            console.error("Error:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-                const data = await apiGet(`/api/operators/orders?${queryParams}`);
-                setOrders(Array.isArray(data) ? data : []);
-            } catch (err: any) {
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
-        };
+    const filteredOrders = orders.filter((o) => {
+        if (filter === "all") return true;
+        return o.status === filter;
+    });
 
-        const debounce = setTimeout(() => {
-            fetchOrders();
-        }, 300);
+    const statusColors: Record<string, string> = {
+        PENDING_APPROVAL: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+        APPROVED: "bg-green-500/20 text-green-400 border-green-500/30",
+        COMPLETED: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+        REJECTED: "bg-red-500/20 text-red-400 border-red-500/30",
+    };
 
-        return () => clearTimeout(debounce);
-    }, [search, statusFilter]);
+    const statusLabels: Record<string, string> = {
+        PENDING_APPROVAL: "Pendiente",
+        APPROVED: "Aprobada",
+        COMPLETED: "Completada",
+        REJECTED: "Rechazada",
+    };
+
+    if (loading) {
+        return (
+            <div className="p-8 max-w-7xl mx-auto">
+                <div className="card-glass p-6">
+                    <p className="text-white">Cargando órdenes...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="p-8 max-w-7xl mx-auto">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-black text-gray-900 tracking-tight">Órdenes</h1>
-                <Link
-                    href="/ordenes/nueva"
-                    className="bg-[#0052FF] text-white px-6 py-2.5 rounded-lg font-semibold shadow-sm hover:bg-[#0040CC] transition-colors"
+        <div className="p-8 max-w-7xl mx-auto space-y-6 animate-slide-up">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold text-white mb-2">Órdenes</h1>
+                    <p className="text-white/60">
+                        {filteredOrders.length} orden{filteredOrders.length !== 1 ? "es" : ""}
+                    </p>
+                </div>
+                <button
+                    onClick={() => router.push("/ordenes/nueva")}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all transform hover:scale-105 shadow-lg"
                 >
-                    Nueva Orden
-                </Link>
+                    + Nueva Orden
+                </button>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-                <div className="flex flex-col md:flex-row gap-4">
-                    <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
-                        <input
-                            type="text"
-                            placeholder="Buscar por ID o Beneficiario..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#0052FF] focus:border-transparent outline-none transition-all"
-                        />
-                    </div>
-                    <div className="w-full md:w-64">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#0052FF] focus:border-transparent outline-none transition-all bg-white"
+            {/* Filtros */}
+            <div className="card-glass p-4">
+                <div className="flex gap-3">
+                    {[
+                        { key: "all", label: "Todas" },
+                        { key: "PENDING_APPROVAL", label: "Pendientes" },
+                        { key: "APPROVED", label: "Aprobadas" },
+                        { key: "COMPLETED", label: "Completadas" },
+                    ].map((f) => (
+                        <button
+                            key={f.key}
+                            onClick={() => setFilter(f.key)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === f.key
+                                    ? "bg-blue-500 text-white"
+                                    : "bg-white/5 text-white/60 hover:bg-white/10"
+                                }`}
                         >
-                            <option value="TODOS">Todos</option>
-                            <option value="CREADA">Creada</option>
-                            <option value="ORIGEN_VERIFICANDO">Origen Verificando</option>
-                            <option value="ORIGEN_CONFIRMADO">Origen Confirmado</option>
-                            <option value="PAGO_PENDIENTE">Pago Pendiente</option>
-                            <option value="COMPLETADA">Completada</option>
-                            <option value="CANCELADA">Cancelada</option>
-                        </select>
-                    </div>
+                            {f.label}
+                        </button>
+                    ))}
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="bg-gray-50 border-b border-gray-100">
-                            <tr>
-                                <th className="py-4 px-6 font-semibold text-gray-500 text-sm">ID</th>
-                                <th className="py-4 px-6 font-semibold text-gray-500 text-sm">Ruta</th>
-                                <th className="py-4 px-6 font-semibold text-gray-500 text-sm">Beneficiario</th>
-                                <th className="py-4 px-6 font-semibold text-gray-500 text-sm text-right">Monto Origen</th>
-                                <th className="py-4 px-6 font-semibold text-gray-500 text-sm text-right">Recibe</th>
-                                <th className="py-4 px-6 font-semibold text-gray-500 text-sm text-center">Estado</th>
-                                <th className="py-4 px-6 font-semibold text-gray-500 text-sm">Fecha</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={7} className="py-8 text-center text-gray-500">
-                                        <div className="flex items-center justify-center gap-3">
-                                            <div className="w-5 h-5 border-2 border-t-[#0052FF] border-gray-200 rounded-full animate-spin"></div>
-                                            Cargando órdenes...
-                                        </div>
-                                    </td>
+            {/* Tabla */}
+            <div className="card-glass p-6">
+                {filteredOrders.length === 0 ? (
+                    <div className="text-center py-12">
+                        <p className="text-white/40 mb-4">No hay órdenes para mostrar</p>
+                        <button
+                            onClick={() => router.push("/ordenes/nueva")}
+                            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                        >
+                            Crear Primera Orden
+                        </button>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-white/10">
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Beneficiario
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Monto
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Método
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Estado
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Fecha
+                                    </th>
                                 </tr>
-                            ) : error ? (
-                                <tr>
-                                    <td colSpan={7} className="py-8 text-center text-red-500">
-                                        {error}
-                                    </td>
-                                </tr>
-                            ) : orders.length === 0 ? (
-                                <tr>
-                                    <td colSpan={7} className="py-8 text-center text-gray-500">
-                                        No se encontraron órdenes.
-                                    </td>
-                                </tr>
-                            ) : (
-                                orders.map((order) => (
-                                    <tr key={order.public_id} className="hover:bg-gray-50/50 transition-colors">
-                                        <td className="py-4 px-6 font-mono text-sm">#{order.public_id}</td>
-                                        <td className="py-4 px-6">
-                                            <div className="flex items-center gap-2 text-sm">
-                                                <span className="font-medium text-gray-900">{order.origin_country}</span>
-                                                <span className="text-gray-400">→</span>
-                                                <span className="font-medium text-gray-900">{order.dest_country}</span>
-                                            </div>
+                            </thead>
+                            <tbody>
+                                {filteredOrders.map((order) => (
+                                    <tr
+                                        key={order.id}
+                                        className="border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
+                                        onClick={() => router.push(`/ordenes/${order.id}`)}
+                                    >
+                                        <td className="py-4 px-4 text-white font-medium">
+                                            {order.beneficiary_name}
                                         </td>
-                                        <td className="py-4 px-6 text-sm text-gray-600 truncate max-w-[150px]" title={order.beneficiary_text}>
-                                            {order.beneficiary_text.length > 30 ? order.beneficiary_text.substring(0, 30) + '...' : order.beneficiary_text || 'Sin nombre'}
+                                        <td className="py-4 px-4 text-white font-medium">
+                                            ${order.amount_usd.toFixed(2)}
                                         </td>
-                                        <td className="py-4 px-6 text-right font-medium text-gray-900">
-                                            $ {Number(order.amount_origin).toFixed(2)}
+                                        <td className="py-4 px-4 text-white/80 text-sm">
+                                            {order.payment_method}
                                         </td>
-                                        <td className="py-4 px-6 text-right font-medium text-[#0052FF]">
-                                            $ {Number(order.payout_dest).toFixed(2)}
-                                        </td>
-                                        <td className="py-4 px-6 text-center">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}`}>
-                                                {order.status.replace('_', ' ')}
+                                        <td className="py-4 px-4">
+                                            <span
+                                                className={`px-2.5 py-1 rounded-full text-xs font-medium border ${statusColors[order.status] ||
+                                                    "bg-gray-500/20 text-gray-400"
+                                                    }`}
+                                            >
+                                                {statusLabels[order.status] || order.status}
                                             </span>
                                         </td>
-                                        <td className="py-4 px-6 text-sm text-gray-500">
-                                            {new Date(order.created_at).toLocaleDateString()}
+                                        <td className="py-4 px-4 text-white/60 text-sm">
+                                            {new Date(order.created_at).toLocaleDateString("es-ES")}
                                         </td>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
         </div>
     );
