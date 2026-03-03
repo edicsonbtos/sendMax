@@ -47,13 +47,29 @@ async def operator_login(credentials: OperatorLoginRequest):
                     """, 
                     (credentials.email.strip(),)
                 )
-                row = await cur.fetchone()
+                rows = await cur.fetchall()
+                row = rows[0] if rows else None
     except Exception as e:
         _logger.exception(f"DB error during login query: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error de base de datos: {str(e)}"
         )
+
+@router.get("/debug-schema")
+async def debug_schema():
+    """Temp debug endpoint to check users table columns"""
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' 
+                AND column_name IN ('email', 'hashed_password', 'kyc_status', 'alias', 'id')
+                ORDER BY ordinal_position
+            """)
+            cols = await cur.fetchall()
+            return {"columns": [{"name": c[0], "type": c[1]} for c in cols]}
     
     # Verificar que el usuario existe
     if not row:
