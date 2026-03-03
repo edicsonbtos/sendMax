@@ -4,6 +4,8 @@ from typing import List, Optional
 from datetime import datetime
 from decimal import Decimal
 import logging
+from uuid import uuid4
+import json
 
 from src.db.connection import get_async_conn
 
@@ -325,6 +327,252 @@ async def get_wallet_ledger(limit: int = 50, user_id: int = Depends(get_current_
         logger.warning(f"Wallet ledger table read failed: {e}")
     return items
 
+class WithdrawRequest(BaseModel):
+    """Modelo para solicitud de retiro"""
+    amount_usdt: Decimal
+    withdrawal_method: str  # "bank_transfer", "crypto_usdt", "paypal", etc.
+    account_info: str  # Número de cuenta, dirección wallet, email PayPal, etc.
+    notes: str = ""  # Notas opcionales
+
 @router.post("/wallet/withdraw")
-async def request_withdrawal(user_id: int = Depends(get_current_operator)):
-    raise HTTPException(status_code=501, detail="Not implemented")
+async def request_withdrawal(
+    req: WithdrawRequest,
+    user_id: int = Depends(get_current_operator)
+):
+    """
+    Solicita un retiro de fondos de la billetera del operador.
+    
+    Validaciones:
+    - El monto debe ser mayor a 0
+    - El operador debe tener saldo suficiente
+    - El método de retiro debe ser válido
+    - KYC debe estar aprobado
+    """
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            # 1. Verificar saldo disponible
+            await cur.execute(
+                """
+                SELECT COALESCE(SUM(
+                    CASE 
+                        WHEN type IN ('ORDER_COMMISSION', 'BONUS', 'ADJUSTMENT_CREDIT') THEN amount_usdt
+                        WHEN type IN ('WITHDRAWAL_APPROVED', 'WITHDRAWAL_PENDING', 'ADJUSTMENT_DEBIT') THEN -amount_usdt
+                        ELSE 0
+                    END
+                ), 0) as available_balance
+                FROM wallet_ledger
+                WHERE operator_id = %s
+                """,
+                (user_id,)
+            )
+            row = await cur.fetchone()
+            available_balance = row[0] if row else Decimal("0")
+            
+            # 2. Validar monto
+            if req.amount_usdt <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El monto debe ser mayor a 0"
+                )
+            
+            if req.amount_usdt > available_balance:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Saldo insuficiente. Disponible: ${available_balance:.2f} USDT"
+                )
+            
+            # 3. Validar método
+            valid_methods = ["bank_transfer", "crypto_usdt", "paypal", "zelle", "binance"]
+            if req.withdrawal_method not in valid_methods:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Método inválido. Use: {', '.join(valid_methods)}"
+                )
+            
+            # 4. Verificar KYC
+            await cur.execute(
+                "SELECT kyc_status FROM users WHERE id = %s",
+                (user_id,)
+            )
+            kyc_row = await cur.fetchone()
+            if not kyc_row or kyc_row[0] != 'APPROVED':
+                raise HTTPException(
+                    status_code=403,
+                    detail="KYC no aprobado. Contacta soporte."
+                )
+            
+            # 5. Crear registro de retiro en wallet_ledger
+            withdrawal_id = str(uuid4())
+            await cur.execute(
+                """
+                INSERT INTO wallet_ledger (
+                    id, operator_id, type, amount_usdt, 
+                    description, metadata, created_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                RETURNING id
+                """,
+                (
+                    withdrawal_id,
+                    user_id,
+                    "WITHDRAWAL_PENDING",
+                    req.amount_usdt,
+                    f"Retiro solicitado vía {req.withdrawal_method}",
+                    json.dumps({
+                        "method": req.withdrawal_method,
+                        "account": req.account_info,
+                        "notes": req.notes,
+                        "status": "pending"
+                    })
+                )
+            )
+            
+            await conn.commit()
+            
+            return {
+                "status": "success",
+                "message": "Solicitud de retiro enviada. Será procesada en 24-48 horas.",
+                "withdrawal_id": withdrawal_id,
+                "amount": float(req.amount_usdt),
+                "new_balance": float(available_balance - req.amount_usdt)
+            }
+
+@router.get("/wallet/withdrawals")
+async def get_withdrawals(
+    limit: int = 50,
+    user_id: int = Depends(get_current_operator)
+):
+    """
+    Obtiene el historial de retiros del operador.
+    
+    Retorna lista de retiros ordenados por fecha (más recientes primero).
+    """
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT 
+                    id,
+                    amount_usdt,
+                    type,
+                    description,
+                    metadata,
+                    created_at
+                FROM wallet_ledger
+                WHERE operator_id = %s 
+                  AND type IN ('WITHDRAWAL_PENDING', 'WITHDRAWAL_APPROVED', 'WITHDRAWAL_REJECTED')
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (user_id, limit)
+            )
+            
+            rows = await cur.fetchall()
+            
+            withdrawals = []
+            for row in rows:
+                metadata = json.loads(row[4]) if row[4] else {}
+                
+                # Determinar estado
+                status_map = {
+                    "WITHDRAWAL_PENDING": "pending",
+                    "WITHDRAWAL_APPROVED": "approved",
+                    "WITHDRAWAL_REJECTED": "rejected"
+                }
+                
+                withdrawals.append({
+                    "id": row[0],
+                    "amount": float(row[1]),
+                    "status": status_map.get(row[2], "unknown"),
+                    "method": metadata.get("method", "N/A"),
+                    "account": metadata.get("account", "N/A"),
+                    "notes": metadata.get("notes", ""),
+                    "created_at": row[5].isoformat(),
+                    "description": row[3]
+                })
+            
+            return {
+                "withdrawals": withdrawals,
+                "total": len(withdrawals)
+            }
+
+class CreateOrderRequest(BaseModel):
+    """Modelo para crear una orden desde la web"""
+    beneficiary_id: int  # ID del contacto guardado
+    amount_usd: Decimal
+    payment_method: str  # "Zelle", "Bank Transfer", etc.
+    notes: str = ""
+
+@router.post("/orders/create")
+async def create_order_web(
+    req: CreateOrderRequest,
+    user_id: int = Depends(get_current_operator)
+):
+    """
+    Crea una nueva orden desde la interfaz web.
+    
+    Similar al flujo de Telegram pero adaptado para web.
+    """
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            # 1. Verificar que el beneficiario existe y pertenece al operador
+            await cur.execute(
+                """
+                SELECT id, full_name, payment_method, account_number
+                FROM saved_beneficiaries
+                WHERE id = %s AND user_id = %s
+                """,
+                (req.beneficiary_id, user_id)
+            )
+            beneficiary = await cur.fetchone()
+            
+            if not beneficiary:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Contacto no encontrado"
+                )
+            
+            # 2. Validar monto
+            if req.amount_usd <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El monto debe ser mayor a 0"
+                )
+            
+            if req.amount_usd > 10000:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El monto máximo por orden es $10,000 USD"
+                )
+            
+            # 3. Crear la orden
+            order_id = str(uuid4())
+            await cur.execute(
+                """
+                INSERT INTO orders (
+                    id, user_id, beneficiary_id, amount_usd,
+                    payment_method, status, notes, created_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                RETURNING id
+                """,
+                (
+                    order_id,
+                    user_id,
+                    req.beneficiary_id,
+                    req.amount_usd,
+                    req.payment_method,
+                    "PENDING_APPROVAL",  # Requiere aprobación de admin
+                    req.notes
+                )
+            )
+            
+            await conn.commit()
+            
+            return {
+                "status": "success",
+                "message": "Orden creada exitosamente. Pendiente de aprobación.",
+                "order_id": order_id,
+                "beneficiary_name": beneficiary[1],
+                "amount": float(req.amount_usd)
+            }
