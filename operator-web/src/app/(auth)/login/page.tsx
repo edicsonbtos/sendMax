@@ -32,7 +32,7 @@ export default function LoginPage() {
             const data = await res.json();
 
             // Guardar token y datos del operador en localStorage
-            localStorage.setItem("auth_token", data.access_token);
+            localStorage.setItem("token", data.access_token);
             localStorage.setItem("operator_id", data.operator_id);
             localStorage.setItem("operator_alias", data.alias);
             localStorage.setItem("operator_email", data.email);
@@ -40,9 +40,8 @@ export default function LoginPage() {
             // También en cookies para el middleware (SSR/Client sync)
             document.cookie = `auth_token=${data.access_token}; path=/; max-age=${7 * 24 * 60 * 60}`;
 
-            // Redirigir al dashboard
-            router.push("/");
-            router.refresh();
+            // Redirigir al dashboard (Hard Redirect para evitar caché de NextJS)
+            window.location.href = "/";
         } catch (err: any) {
             setError(err.message);
         } finally {
