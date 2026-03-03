@@ -1,15 +1,18 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiGet } from "@/lib/api";
+import api from "@/lib/api"; // FIXED: Corregir el cliente falso destructurado apiGet
 
 interface Order {
-    id: string;
-    beneficiary_name: string;
-    amount_usd: number;
+    id?: string;
+    public_id: number;
+    beneficiary_text?: string;
+    beneficiary_name?: string;
+    amount_origin?: number;
+    amount_usd?: number;
     status: string;
     created_at: string;
-    payment_method: string;
+    payment_method?: string;
 }
 
 export default function OrdenesPage() {
@@ -25,8 +28,8 @@ export default function OrdenesPage() {
     const loadOrders = async () => {
         try {
             setLoading(true);
-            const data = await apiGet("/api/operators/orders");
-            setOrders(Array.isArray(data) ? data : []);
+            const res = await api.get("/api/operators/orders"); // FIXED: Usar api.get
+            setOrders(Array.isArray(res.data) ? res.data : []);
         } catch (err: any) {
             console.error("Error:", err);
         } finally {
@@ -94,8 +97,8 @@ export default function OrdenesPage() {
                             key={f.key}
                             onClick={() => setFilter(f.key)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === f.key
-                                    ? "bg-blue-500 text-white"
-                                    : "bg-white/5 text-white/60 hover:bg-white/10"
+                                ? "bg-blue-500 text-white"
+                                : "bg-white/5 text-white/60 hover:bg-white/10"
                                 }`}
                         >
                             {f.label}
@@ -141,18 +144,18 @@ export default function OrdenesPage() {
                             <tbody>
                                 {filteredOrders.map((order) => (
                                     <tr
-                                        key={order.id}
+                                        key={order.public_id || order.id}
                                         className="border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
-                                        onClick={() => router.push(`/ordenes/${order.id}`)}
+                                        onClick={() => router.push(`/ordenes/${order.public_id || order.id}`)}
                                     >
                                         <td className="py-4 px-4 text-white font-medium">
-                                            {order.beneficiary_name}
+                                            {order.beneficiary_text || order.beneficiary_name || `Orden #${order.public_id}`}
                                         </td>
                                         <td className="py-4 px-4 text-white font-medium">
-                                            ${order.amount_usd.toFixed(2)}
+                                            ${(order.amount_origin ?? order.amount_usd ?? 0).toFixed(2)} {/* FIXED: Proteccion TypeError undefined pydantic decimal */}
                                         </td>
                                         <td className="py-4 px-4 text-white/80 text-sm">
-                                            {order.payment_method}
+                                            {order.payment_method || 'Transferencia'}
                                         </td>
                                         <td className="py-4 px-4">
                                             <span

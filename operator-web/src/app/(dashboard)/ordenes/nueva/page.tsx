@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiGet, apiPost } from "@/lib/api";
+import api from "@/lib/api";
 
 interface Beneficiary {
     id: number;
@@ -32,8 +32,8 @@ export default function NuevaOrdenPage() {
     const loadBeneficiaries = async () => {
         try {
             setLoading(true);
-            const data = await apiGet("/api/operators/beneficiaries");
-            setBeneficiaries(data.beneficiaries || []);
+            const res = await api.get("/api/operators/beneficiaries");
+            setBeneficiaries(res.data?.beneficiaries || []);
         } catch (err: any) {
             setError("Error cargando contactos");
         } finally {
@@ -54,14 +54,14 @@ export default function NuevaOrdenPage() {
         setSubmitting(true);
 
         try {
-            const response = await apiPost("/api/operators/orders/create", {
+            const response = await api.post("/api/operators/orders/create", {
                 beneficiary_id: selectedBeneficiary,
                 amount_usd: parseFloat(amount),
                 payment_method: paymentMethod,
                 notes: notes,
             });
 
-            setSuccess(response.message || "Orden creada exitosamente");
+            setSuccess(response.data?.message || "Orden creada exitosamente");
 
             // Redirigir a lista de órdenes después de 2 segundos
             setTimeout(() => {
@@ -138,8 +138,8 @@ export default function NuevaOrdenPage() {
                                     key={b.id}
                                     onClick={() => setSelectedBeneficiary(b.id)}
                                     className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${selectedBeneficiary === b.id
-                                            ? "border-blue-500 bg-blue-500/10"
-                                            : "border-white/10 bg-white/5 hover:border-white/20"
+                                        ? "border-blue-500 bg-blue-500/10"
+                                        : "border-white/10 bg-white/5 hover:border-white/20"
                                         }`}
                                 >
                                     <div className="flex items-center justify-between">
@@ -230,7 +230,7 @@ export default function NuevaOrdenPage() {
                             </p>
                             <p className="text-white">
                                 <span className="text-white/60">Monto:</span>{" "}
-                                <span className="font-bold">${parseFloat(amount).toFixed(2)} USD</span>
+                                <span className="font-bold">${amount ? parseFloat(amount).toFixed(2) : "0.00"} USD</span>
                             </p>
                             <p className="text-white">
                                 <span className="text-white/60">Método:</span> {paymentMethod}
