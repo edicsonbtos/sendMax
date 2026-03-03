@@ -1,164 +1,170 @@
 "use client";
-
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiPost } from "@/lib/api";
-import Link from "next/link";
 
 export default function NuevoClientePage() {
     const router = useRouter();
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
 
-    const [form, setForm] = useState({
-        alias: "",
-        full_name: "",
-        dest_country: "VENEZUELA",
-        bank_name: "",
-        account_number: "",
-        phone: "",
-        payment_method: "",
-        notes: ""
-    });
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        setForm({ ...form, [e.target.name]: e.target.value });
-    };
+    // Form state
+    const [fullName, setFullName] = useState("");
+    const [paymentMethod, setPaymentMethod] = useState("Zelle");
+    const [accountNumber, setAccountNumber] = useState("");
+    const [bankName, setBankName] = useState("");
+    const [country, setCountry] = useState("Venezuela");
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError(null);
-        setLoading(true);
+        setError("");
+        setSuccess("");
+        setSubmitting(true);
 
         try {
-            await apiPost("/api/operators/beneficiaries", form);
-            router.push("/clientes"); // Redirige al success
+            await apiPost("/api/operators/beneficiaries", {
+                full_name: fullName,
+                payment_method: paymentMethod,
+                account_number: accountNumber,
+                bank_name: bankName,
+                country: country,
+            });
+
+            setSuccess("Cliente guardado exitosamente");
+
+            // Redirigir después de 1.5 segundos
+            setTimeout(() => {
+                router.push("/clientes");
+            }, 1500);
         } catch (err: any) {
-            setError(err.message || "Error al crear beneficiario");
-            setLoading(false);
+            setError(err.message || "Error al guardar cliente");
+        } finally {
+            setSubmitting(false);
         }
     };
 
     return (
-        <div className="max-w-3xl mx-auto">
-            <div className="flex items-center gap-4 mb-6">
-                <Link href="/clientes" className="text-gray-400 hover:text-[#0052FF] transition-colors">
-                    ← Volver
-                </Link>
-                <h1 className="text-2xl font-bold text-gray-900">Agregar Contacto / Beneficiario</h1>
+        <div className="p-8 max-w-4xl mx-auto space-y-6 animate-slide-up">
+            {/* Header */}
+            <div>
+                <h1 className="text-3xl font-bold text-white mb-2">Nuevo Cliente</h1>
+                <p className="text-white/60">Agrega un nuevo contacto a tu agenda</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-gray-100 space-y-6">
-                {error && (
-                    <div className="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200">
-                        {error}
-                    </div>
-                )}
+            {/* Mensajes */}
+            {error && (
+                <div className="card-glass p-4 border-l-4 border-red-500 bg-red-500/10">
+                    <p className="text-red-400">{error}</p>
+                </div>
+            )}
 
+            {success && (
+                <div className="card-glass p-4 border-l-4 border-green-500 bg-green-500/10">
+                    <p className="text-green-400">{success}</p>
+                </div>
+            )}
+
+            {/* Formulario */}
+            <form onSubmit={handleSubmit} className="card-glass p-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Alias */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Alias (Requerido) *</label>
+                    {/* Nombre completo */}
+                    <div className="md:col-span-2">
+                        <label className="block text-white/80 text-sm font-medium mb-2">
+                            Nombre Completo *
+                        </label>
                         <input
-                            name="alias" required value={form.alias} onChange={handleChange}
-                            placeholder="Ej. Mamá Venezuela"
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0052FF] focus:border-[#0052FF] outline-none"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Debe ser único. Así lo buscarás en el bot.</p>
-                    </div>
-
-                    {/* Nombre Completo */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Completo *</label>
-                        <input
-                            name="full_name" required value={form.full_name} onChange={handleChange}
-                            placeholder="Ej. Maria Perez"
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0052FF] focus:border-[#0052FF] outline-none"
+                            type="text"
+                            required
+                            value={fullName}
+                            onChange={(e) => setFullName(e.target.value)}
+                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                            placeholder="Juan Pérez"
                         />
                     </div>
 
-                    {/* País Destino */}
+                    {/* Método de pago */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">País Destino *</label>
+                        <label className="block text-white/80 text-sm font-medium mb-2">
+                            Método de Pago *
+                        </label>
                         <select
-                            name="dest_country" required value={form.dest_country} onChange={handleChange}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0052FF] focus:border-[#0052FF] outline-none bg-white font-medium"
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value)}
+                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
                         >
-                            <option value="VENEZUELA">Venezuela (Bs)</option>
-                            <option value="VENEZUELA_CASH">Venezuela (Dólar Efectivo)</option>
-                            <option value="COLOMBIA">Colombia (COP)</option>
-                            <option value="PERU">Perú (Soles)</option>
-                            <option value="CHILE">Chile (CLP)</option>
-                            <option value="ARGENTINA">Argentina (ARS)</option>
-                            <option value="MEXICO">México (MXN)</option>
-                            <option value="USA">USA (Zelle/Cash App)</option>
+                            <option value="Zelle">Zelle</option>
+                            <option value="Bank Transfer">Transferencia Bancaria</option>
+                            <option value="Cash">Efectivo</option>
+                            <option value="Pago Móvil">Pago Móvil</option>
+                            <option value="Binance">Binance</option>
                         </select>
                     </div>
 
-                    {/* Teléfono */}
+                    {/* País */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                        <label className="block text-white/80 text-sm font-medium mb-2">
+                            País *
+                        </label>
+                        <select
+                            value={country}
+                            onChange={(e) => setCountry(e.target.value)}
+                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                        >
+                            <option value="Venezuela">Venezuela</option>
+                            <option value="Colombia">Colombia</option>
+                            <option value="Perú">Perú</option>
+                            <option value="Argentina">Argentina</option>
+                            <option value="México">México</option>
+                            <option value="USA">USA</option>
+                        </select>
+                    </div>
+
+                    {/* Número de cuenta */}
+                    <div>
+                        <label className="block text-white/80 text-sm font-medium mb-2">
+                            Número de Cuenta / Teléfono *
+                        </label>
                         <input
-                            name="phone" value={form.phone} onChange={handleChange}
-                            placeholder="+58 412..."
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0052FF] outline-none"
+                            type="text"
+                            required
+                            value={accountNumber}
+                            onChange={(e) => setAccountNumber(e.target.value)}
+                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                            placeholder="0412-1234567 o cuenta bancaria"
                         />
                     </div>
 
                     {/* Banco */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Banco / Institución</label>
+                        <label className="block text-white/80 text-sm font-medium mb-2">
+                            Banco (Opcional)
+                        </label>
                         <input
-                            name="bank_name" value={form.bank_name} onChange={handleChange}
-                            placeholder="Ej. Banesco, Bancolombia, BCP..."
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0052FF] outline-none"
-                        />
-                    </div>
-
-                    {/* Nro Cuenta */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Nro. de Cuenta / ID</label>
-                        <input
-                            name="account_number" value={form.account_number} onChange={handleChange}
-                            placeholder="0134... / Correo Zelle"
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0052FF] outline-none"
-                        />
-                    </div>
-
-                    {/* Método de Pago */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Cuenta</label>
-                        <input
-                            name="payment_method" value={form.payment_method} onChange={handleChange}
-                            placeholder="Ej. Ahorro, Corriente, Pago Móvil..."
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0052FF] outline-none"
+                            type="text"
+                            value={bankName}
+                            onChange={(e) => setBankName(e.target.value)}
+                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                            placeholder="Nombre del banco"
                         />
                     </div>
                 </div>
 
-                {/* Notas */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Cédula / Notas Adicionales</label>
-                    <textarea
-                        name="notes" value={form.notes} onChange={handleChange} rows={3}
-                        placeholder="Cédula: 12345678. Notas adicionales..."
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0052FF] outline-none resize-none"
-                    ></textarea>
-                </div>
-
-                <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
-                    <Link
-                        href="/clientes"
-                        className="px-5 py-2.5 rounded-lg font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                {/* Botones */}
+                <div className="flex gap-4 pt-4">
+                    <button
+                        type="button"
+                        onClick={() => router.push("/clientes")}
+                        className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white border border-white/10 font-medium rounded-xl transition-all"
                     >
                         Cancelar
-                    </Link>
+                    </button>
                     <button
                         type="submit"
-                        disabled={loading}
-                        className="bg-[#0052FF] hover:bg-blue-700 text-white px-8 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
+                        disabled={submitting}
+                        className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
                     >
-                        {loading ? "Guardando..." : "Guardar Beneficiario"}
+                        {submitting ? "Guardando..." : "Guardar Cliente"}
                     </button>
                 </div>
             </form>
