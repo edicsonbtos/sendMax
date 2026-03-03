@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiGet } from "@/lib/api";
+import api from '@/lib/api'; // FIXED: Importar cliente API para autorizar peticiones
 import {
     TrendingUp,
     Users,
@@ -102,8 +102,8 @@ export default function Dashboard() {
 
     const fetchRates = async () => {
         try {
-            const data = await apiGet(`/api/rates/current`);
-            setRates(Array.isArray(data.rates) ? data.rates.slice(0, 8) : []);
+            const res = await api.get('/api/rates/current'); // FIXED: Usar api.get
+            setRates(res.data.rates?.slice(0, 8) || []);
         } catch (err) {
             console.error('Error fetching rates:', err);
         }
@@ -111,8 +111,8 @@ export default function Dashboard() {
 
     const fetchTopClients = async () => {
         try {
-            const data = await apiGet(`/api/operators/dashboard/top-clients?limit=5`);
-            setTopClients(Array.isArray(data) ? data : []);
+            const res = await api.get('/api/operators/dashboard/top-clients?limit=5'); // FIXED: Usar api.get
+            setTopClients(res.data || []);
         } catch (err) {
             console.error('Error fetching top clients:', err);
         }
@@ -120,8 +120,8 @@ export default function Dashboard() {
 
     const fetchOrderQueue = async () => {
         try {
-            const data = await apiGet(`/api/operators/orders/queue`);
-            setOrderQueue(Array.isArray(data) ? data.slice(0, 5) : []);
+            const res = await api.get('/api/operators/orders/queue'); // FIXED: Usar api.get
+            setOrderQueue(res.data?.slice(0, 5) || []);
         } catch (err) {
             console.error('Error fetching orders:', err);
         }
@@ -129,8 +129,8 @@ export default function Dashboard() {
 
     const fetchStats = async () => {
         try {
-            const data = await apiGet(`/api/operators/dashboard/stats`);
-            setStats(data);
+            const res = await api.get('/api/operators/dashboard/stats'); // FIXED: Usar api.get
+            setStats(res.data);
         } catch (err) {
             console.error('Error fetching stats:', err);
         }
@@ -138,8 +138,8 @@ export default function Dashboard() {
 
     const fetchRanking = async () => {
         try {
-            const data = await apiGet(`/api/ranking/operators?limit=10`);
-            setRanking(Array.isArray(data) ? data : []);
+            const res = await api.get('/api/ranking/operators?limit=10'); // FIXED: Usar api.get
+            setRanking(res.data || []);
         } catch (err) {
             console.error('Error fetching ranking:', err);
         }
@@ -242,7 +242,7 @@ export default function Dashboard() {
                         <span className="badge badge-warning">#{stats?.rank_position || '-'}</span>
                     </div>
                     <h3 className="text-gray-400 text-sm font-medium mb-1">Trust Score</h3>
-                    <p className="text-2xl font-bold text-white">{stats?.trust_score ? Number(stats.trust_score).toFixed(1) : '0'}%</p>
+                    <p className="text-2xl font-bold text-white">{stats?.trust_score?.toFixed(1) || '0'}%</p>
                 </div>
             </div>
 
@@ -273,8 +273,8 @@ export default function Dashboard() {
                                     <span className="text-xl">{countryFlags[rate.dest] || '🌍'}</span>
                                 </div>
                                 <p className="text-xs text-gray-400 mb-1">{rate.origin} → {rate.dest}</p>
-                                <p className="text-lg font-bold text-white">{Number(rate.rate || 0).toFixed(4)}</p>
-                                <p className="text-xs text-green-400">+{Number(rate.commission_pct || 0).toFixed(1)}% comisión</p>
+                                <p className="text-lg font-bold text-white">{rate.rate.toFixed(4)}</p>
+                                <p className="text-xs text-green-400">+{rate.commission_pct.toFixed(1)}% comisión</p>
                             </div>
                         ))}
                     </div>
@@ -309,8 +309,8 @@ export default function Dashboard() {
                                     <p className="text-xs text-gray-400">{entry.total_orders} órdenes</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-sm font-bold text-white">{entry.trust_score ? Number(entry.trust_score).toFixed(0) : '0'}%</p>
-                                    <p className="text-xs text-green-400">{formatCurrency(entry.monthly_volume_usdt || 0)}</p>
+                                    <p className="text-sm font-bold text-white">{entry.trust_score?.toFixed(0)}%</p>
+                                    <p className="text-xs text-green-400">{formatCurrency(entry.monthly_volume_usdt)}</p>
                                 </div>
                             </div>
                         ))}
@@ -344,7 +344,7 @@ export default function Dashboard() {
                                         <p className="text-sm text-gray-400">{client.total_orders} órdenes</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-bold text-green-400">{formatCurrency(client.total_volume_usdt || 0)}</p>
+                                        <p className="font-bold text-green-400">{formatCurrency(client.total_volume_usdt)}</p>
                                     </div>
                                 </div>
                             ))
@@ -379,7 +379,7 @@ export default function Dashboard() {
                                         <p className="text-sm text-gray-400">#{order.public_id}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-bold text-white">{formatCurrency(order.amount_origin || 0)}</p>
+                                        <p className="font-bold text-white">{formatCurrency(order.amount_origin)}</p>
                                         <span className={`badge ${getStatusColor(order.status)}`}>
                                             {order.status}
                                         </span>

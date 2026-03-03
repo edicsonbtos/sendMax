@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { apiGet, apiPost } from "@/lib/api";
+import api from "@/lib/api"; // FIXED: Importar correctamente el cliente Axios default
 
 interface WalletSummary {
     balance_usdt: number;
@@ -36,18 +36,21 @@ export default function BilleteraPage() {
 
     useEffect(() => {
         loadData();
+        // FIXED: Implementar auto-refresh en tiempo real cada 30 segundos
+        const interval = setInterval(loadData, 30000);
+        return () => clearInterval(interval);
     }, []);
 
     const loadData = async () => {
         try {
             setLoading(true);
-            const [summaryData, withdrawalsData] = await Promise.all([
-                apiGet("/api/operators/wallet/summary"),
-                apiGet("/api/operators/wallet/withdrawals"),
+            const [summaryRes, withdrawalsRes] = await Promise.all([
+                api.get("/api/operators/wallet/summary"), // FIXED: Usar api.get() valido
+                api.get("/api/operators/wallet/withdrawals"), // FIXED: Usar api.get() valido
             ]);
 
-            setSummary(summaryData);
-            setWithdrawals(withdrawalsData.withdrawals || []);
+            setSummary(summaryRes.data);
+            setWithdrawals(withdrawalsRes.data.withdrawals || []);
         } catch (err: any) {
             console.error("Error cargando datos:", err);
         } finally {
@@ -62,14 +65,15 @@ export default function BilleteraPage() {
         setSubmitting(true);
 
         try {
-            const response = await apiPost("/api/operators/wallet/withdraw", {
+            // FIXED: Usar api.post() del cliente real
+            const response = await api.post("/api/operators/wallet/withdraw", {
                 amount_usdt: parseFloat(amount),
                 withdrawal_method: method,
                 account_info: account,
                 notes: notes,
             });
 
-            setSuccess(response.message || "Retiro solicitado exitosamente");
+            setSuccess(response.data.message || "Retiro solicitado exitosamente");
 
             // Limpiar form
             setAmount("");
@@ -80,7 +84,7 @@ export default function BilleteraPage() {
             // Recargar datos
             setTimeout(loadData, 1000);
         } catch (err: any) {
-            setError(err.message || "Error al solicitar retiro");
+            setError(err.response?.data?.detail || err.message || "Error al solicitar retiro");
         } finally {
             setSubmitting(false);
         }
