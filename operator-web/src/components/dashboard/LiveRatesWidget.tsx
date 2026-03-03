@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet } from "@/lib/api";
+import api from "@/lib/api";
 
 type Rate = {
     origin: string;
@@ -16,7 +16,7 @@ export default function LiveRatesWidget() {
     const [error, setError] = useState<string | null>(null);
 
     const fetchRates = () => {
-        apiGet("/api/rates/current")
+        api.get("/api/rates/current").then(res => res.data)
             .then(data => {
                 setRates(Array.isArray(data) ? data : []);
                 setLoading(false);

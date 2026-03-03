@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet } from "@/lib/api";
+import api from "@/lib/api";
 
 type Client = {
     name: string;
@@ -15,7 +15,7 @@ export default function TopClientsWidget() {
     const [error, setError] = useState<string | null>(null);
 
     const fetchClients = () => {
-        apiGet("/api/operators/dashboard/top-clients?limit=5")
+        api.get("/api/operators/dashboard/top-clients?limit=5").then(res => res.data)
             .then(data => {
                 setClients(Array.isArray(data) ? data : []);
                 setError(null);

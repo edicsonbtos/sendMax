@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiPost } from "@/lib/api";
+import api from "@/lib/api";
 
 export default function NuevoClientePage() {
     const router = useRouter();
@@ -23,13 +23,13 @@ export default function NuevoClientePage() {
         setSubmitting(true);
 
         try {
-            await apiPost("/api/operators/beneficiaries", {
+            (await api.post("/api/operators/beneficiaries", {
                 full_name: fullName,
                 payment_method: paymentMethod,
                 account_number: accountNumber,
                 bank_name: bankName,
                 country: country,
-            });
+            })).data;
 
             setSuccess("Cliente guardado exitosamente");
 

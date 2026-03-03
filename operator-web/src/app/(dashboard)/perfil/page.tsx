@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiGet } from "@/lib/api";
+import api from "@/lib/api";
 
 interface Profile {
     email: string;
@@ -29,7 +29,7 @@ export default function PerfilPage() {
             const alias = localStorage.getItem("operator_alias") || "";
 
             // Luego obtener stats del backend
-            const stats = await apiGet("/api/operators/dashboard/stats");
+            const stats = (await api.get("/api/operators/dashboard/stats")).data;
 
             setProfile({
                 email,

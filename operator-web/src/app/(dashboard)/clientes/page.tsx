@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { apiGet, apiPost } from "@/lib/api";
+import api from "@/lib/api";
 import {
     Users,
     Plus,
@@ -64,7 +64,7 @@ export default function ClientesPage() {
 
     const fetchClients = async () => {
         try {
-            const data = await apiGet(`/api/operators/beneficiaries`);
+            const data = (await api.get(`/api/operators/beneficiaries`)).data;
             // Agrupar por cliente
             const grouped = groupByClient(Array.isArray(data) ? data : []);
             setClients(grouped);
@@ -109,12 +109,12 @@ export default function ClientesPage() {
         if (!newClient.name || !newClient.phone) return;
 
         try {
-            await apiPost(`/api/operators/beneficiaries`, {
+            (await api.post(`/api/operators/beneficiaries`, {
                 alias: newClient.name,
                 full_name: newClient.name,
                 phone: newClient.phone,
                 dest_country: 'PENDING'
-            });
+            })).data;
             setShowModal(false);
             setNewClient({ name: '', phone: '' });
             fetchClients();
@@ -127,14 +127,14 @@ export default function ClientesPage() {
         if (!selectedClient || !newPayment.country) return;
 
         try {
-            await apiPost(`/api/operators/beneficiaries`, {
+            (await api.post(`/api/operators/beneficiaries`, {
                 alias: `${selectedClient.name} - ${newPayment.country}`,
                 full_name: selectedClient.name,
                 phone: selectedClient.phone,
                 dest_country: newPayment.country,
                 bank_name: newPayment.bank_name,
                 account_number: newPayment.account_number
-            });
+            })).data;
             setShowPaymentModal(false);
             setNewPayment({ country: '', bank_name: '', account_number: '', alias: '' });
             fetchClients();
