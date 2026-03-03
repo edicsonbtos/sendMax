@@ -7,8 +7,10 @@ from src.utils.crypto import verify_password
 from src.utils.jwt import create_access_token
 from src.db.connection import get_async_conn
 from datetime import timedelta
+import logging
 
 router = APIRouter(prefix="/auth/operator", tags=["Operator Auth"])
+_logger = logging.getLogger("auth_operators")
 
 class OperatorLoginRequest(BaseModel):
     email: EmailStr
@@ -26,18 +28,10 @@ async def operator_login(credentials: OperatorLoginRequest):
     """
     Login para operadores con email y contraseña.
     Retorna JWT válido por 7 días.
-    
-    El operador debe:
-    - Tener email y password configurados (vía KYC)
-    - Tener kyc_status = 'APPROVED'
     """
-    import logging
-    _logger = logging.getLogger("auth_operators")
-
     try:
         async with get_async_conn() as conn:
             async with conn.cursor() as cur:
-                # Buscar usuario por email (case-insensitive)
                 await cur.execute(
                     """
                     SELECT id, alias, email, hashed_password, kyc_status 
@@ -55,21 +49,6 @@ async def operator_login(credentials: OperatorLoginRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error de base de datos: {str(e)}"
         )
-
-@router.get("/debug-schema")
-async def debug_schema():
-    """Temp debug endpoint to check users table columns"""
-    async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("""
-                SELECT column_name, data_type 
-                FROM information_schema.columns 
-                WHERE table_name = 'users' 
-                AND column_name IN ('email', 'hashed_password', 'kyc_status', 'alias', 'id')
-                ORDER BY ordinal_position
-            """)
-            cols = await cur.fetchall()
-            return {"columns": [{"name": c[0], "type": c[1]} for c in cols]}
     
     # Verificar que el usuario existe
     if not row:
