@@ -14,7 +14,7 @@ import {
     Menu,
     X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const menuItems = [
     { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -36,7 +36,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const token = localStorage.getItem('token');
 
         if (!token && pathname !== '/login') {
-            router.replace('/login');
+            window.location.href = '/login';
         } else {
             setIsAuthenticated(true);
         }
