@@ -147,7 +147,7 @@ export default function BilleteraPage() {
                 <div className="card-glass p-6">
                     <p className="text-white/60 text-sm mb-2">Balance Disponible</p>
                     <p className="text-3xl font-bold text-white">
-                        ${summary?.balance_usdt?.toFixed(2) || "0.00"}
+                        ${Number(summary?.balance_usdt || 0).toFixed(2)}
                     </p>
                     <p className="text-white/40 text-xs mt-1">USDT</p>
                 </div>
@@ -155,21 +155,21 @@ export default function BilleteraPage() {
                 <div className="card-glass p-6">
                     <p className="text-white/60 text-sm mb-2">Total Ganado</p>
                     <p className="text-2xl font-bold text-green-400">
-                        ${summary?.total_earned?.toFixed(2) || "0.00"}
+                        ${Number(summary?.total_earned || 0).toFixed(2)}
                     </p>
                 </div>
 
                 <div className="card-glass p-6">
                     <p className="text-white/60 text-sm mb-2">Total Retirado</p>
                     <p className="text-2xl font-bold text-blue-400">
-                        ${summary?.total_withdrawn?.toFixed(2) || "0.00"}
+                        ${Number(summary?.total_withdrawn || 0).toFixed(2)}
                     </p>
                 </div>
 
                 <div className="card-glass p-6">
                     <p className="text-white/60 text-sm mb-2">Retiros Pendientes</p>
                     <p className="text-2xl font-bold text-yellow-400">
-                        ${summary?.pending_withdrawals?.toFixed(2) || "0.00"}
+                        ${Number(summary?.pending_withdrawals || 0).toFixed(2)}
                     </p>
                 </div>
             </div>
@@ -195,7 +195,7 @@ export default function BilleteraPage() {
                                     placeholder="0.00"
                                 />
                                 <p className="text-white/40 text-xs mt-1">
-                                    Disponible: ${summary?.balance_usdt?.toFixed(2) || "0.00"}
+                                    Disponible: ${Number(summary?.balance_usdt || 0).toFixed(2)}
                                 </p>
                             </div>
 
@@ -301,7 +301,7 @@ export default function BilleteraPage() {
                                             })}
                                         </td>
                                         <td className="py-4 px-4 text-white font-medium">
-                                            ${w.amount.toFixed(2)}
+                                            ${Number(w.amount || 0).toFixed(2)}
                                         </td>
                                         <td className="py-4 px-4 text-white/80 text-sm">
                                             {w.method}

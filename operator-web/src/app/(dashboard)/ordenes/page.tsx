@@ -152,7 +152,7 @@ export default function OrdenesPage() {
                                             {order.beneficiary_text || order.beneficiary_name || `Orden #${order.public_id}`}
                                         </td>
                                         <td className="py-4 px-4 text-white font-medium">
-                                            ${(order.amount_origin ?? order.amount_usd ?? 0).toFixed(2)} {/* FIXED: Proteccion TypeError undefined pydantic decimal */}
+                                            ${Number(order.amount_origin ?? order.amount_usd ?? 0).toFixed(2)} {/* FIXED: Number() para strings del backend */}
                                         </td>
                                         <td className="py-4 px-4 text-white/80 text-sm">
                                             {order.payment_method || 'Transferencia'}

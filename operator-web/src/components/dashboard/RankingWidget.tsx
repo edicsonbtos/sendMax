@@ -71,7 +71,7 @@ export default function RankingWidget() {
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="font-bold text-sm text-green-600">${Number(op.monthly_volume_usdt).toFixed(0)}</p>
+                                    <p className="font-bold text-sm text-green-600">${Number(op.monthly_volume_usdt || 0).toFixed(0)}</p>
                                     <p className="text-[10px] text-gray-400 uppercase">Volumen</p>
                                 </div>
                             </div>
