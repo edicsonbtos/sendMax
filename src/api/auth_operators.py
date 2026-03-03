@@ -31,19 +31,29 @@ async def operator_login(credentials: OperatorLoginRequest):
     - Tener email y password configurados (vía KYC)
     - Tener kyc_status = 'APPROVED'
     """
-    async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            # Buscar usuario por email (case-insensitive)
-            await cur.execute(
-                """
-                SELECT id, alias, email, hashed_password, kyc_status 
-                FROM users 
-                WHERE LOWER(email) = LOWER(%s) 
-                LIMIT 1
-                """, 
-                (credentials.email.strip(),)
-            )
-            row = await cur.fetchone()
+    import logging
+    _logger = logging.getLogger("auth_operators")
+
+    try:
+        async with get_async_conn() as conn:
+            async with conn.cursor() as cur:
+                # Buscar usuario por email (case-insensitive)
+                await cur.execute(
+                    """
+                    SELECT id, alias, email, hashed_password, kyc_status 
+                    FROM users 
+                    WHERE LOWER(email) = LOWER(%s) 
+                    LIMIT 1
+                    """, 
+                    (credentials.email.strip(),)
+                )
+                row = await cur.fetchone()
+    except Exception as e:
+        _logger.exception(f"DB error during login query: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error de base de datos: {str(e)}"
+        )
     
     # Verificar que el usuario existe
     if not row:
@@ -53,6 +63,13 @@ async def operator_login(credentials: OperatorLoginRequest):
         )
     
     user_id, alias, email, hashed_password, kyc_status = row
+    
+    # Verificar que tiene contraseña configurada
+    if not hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tu cuenta no tiene contraseña web configurada. Contacta soporte."
+        )
     
     # Verificar que está aprobado
     if kyc_status != 'APPROVED':
