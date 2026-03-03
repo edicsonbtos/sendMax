@@ -70,7 +70,7 @@ export default function ClientesPage() {
         }
     };
 
-    const groupByClient = (beneficiaries: Record<string, unknown>[]) => {
+    const groupByClient = (beneficiaries: Record<string, any>[]) => {
         const map = new Map<string, Client>();
         beneficiaries.forEach(b => {
             const key = b.phone || b.alias;
