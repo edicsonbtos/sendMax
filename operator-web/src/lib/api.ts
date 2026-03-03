@@ -53,3 +53,10 @@ export async function apiPost(endpoint: string, data: any) {
 
     return res.json();
 }
+
+const api = {
+    get: apiGet,
+    post: apiPost
+};
+
+export default api;
