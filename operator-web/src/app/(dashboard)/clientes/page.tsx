@@ -84,7 +84,7 @@ export default function ClientesPage() {
     const groupByClient = (beneficiaries: Beneficiario[]) => {
         const map = new Map<string, Client>();
         beneficiaries.forEach(b => {
-            const key = (b.phone || b.alias) as string;
+            const key = String(b.phone || b.alias || '');
             if (map.has(key)) {
                 map.get(key)!.payment_methods.push({
                     id: b.id,
@@ -96,7 +96,7 @@ export default function ClientesPage() {
             } else {
                 map.set(key, {
                     id: b.id,
-                    name: b.full_name || b.alias,
+                    name: b.full_name || b.alias || 'Sin nombre',
                     phone: b.phone || '',
                     payment_methods: [{
                         id: b.id,
