@@ -23,13 +23,13 @@ export default function NuevoClientePage() {
         setSubmitting(true);
 
         try {
-            (await api.post("/api/operators/beneficiaries", {
+            await api.post("/api/operators/beneficiaries", {
                 full_name: fullName,
                 payment_method: paymentMethod,
                 account_number: accountNumber,
                 bank_name: bankName,
                 country: country,
-            })).data;
+            });
 
             setSuccess("Cliente guardado exitosamente");
 
@@ -37,8 +37,9 @@ export default function NuevoClientePage() {
             setTimeout(() => {
                 router.push("/clientes");
             }, 1500);
-        } catch (err: any) {
-            setError(err.message || "Error al guardar cliente");
+        } catch (err: unknown) {
+            const errorMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Error al guardar el contacto";
+            setError(errorMsg);
         } finally {
             setSubmitting(false);
         }

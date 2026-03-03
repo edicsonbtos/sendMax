@@ -34,7 +34,7 @@ export default function NuevaOrdenPage() {
             setLoading(true);
             const res = await api.get("/api/operators/beneficiaries");
             setBeneficiaries(res.data?.beneficiaries || []);
-        } catch (err: any) {
+        } catch {
             setError("Error cargando contactos");
         } finally {
             setLoading(false);
@@ -67,8 +67,8 @@ export default function NuevaOrdenPage() {
             setTimeout(() => {
                 router.push("/ordenes");
             }, 2000);
-        } catch (err: any) {
-            setError(err.message || "Error al crear la orden");
+        } catch (error) {
+            setError((error as Error).message || "Error al crear la orden");
         } finally {
             setSubmitting(false);
         }

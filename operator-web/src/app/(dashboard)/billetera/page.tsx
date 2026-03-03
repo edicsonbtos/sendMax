@@ -51,7 +51,7 @@ export default function BilleteraPage() {
 
             setSummary(summaryRes.data);
             setWithdrawals(withdrawalsRes.data.withdrawals || []);
-        } catch (err: any) {
+        } catch (err) {
             console.error("Error cargando datos:", err);
         } finally {
             setLoading(false);
@@ -83,8 +83,9 @@ export default function BilleteraPage() {
 
             // Recargar datos
             setTimeout(loadData, 1000);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || err.message || "Error al solicitar retiro");
+        } catch (err: unknown) {
+            const errorMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || (err as Error).message || "Error al solicitar retiro";
+            setError(errorMsg);
         } finally {
             setSubmitting(false);
         }

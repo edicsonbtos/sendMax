@@ -30,8 +30,8 @@ export default function OrdenesPage() {
             setLoading(true);
             const res = await api.get("/api/operators/orders"); // FIXED: Usar api.get
             setOrders(Array.isArray(res.data) ? res.data : []);
-        } catch (err: any) {
-            console.error("Error:", err);
+        } catch (error) {
+            console.error("Error:", error);
         } finally {
             setLoading(false);
         }

@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
 interface Profile {
@@ -14,7 +13,6 @@ interface Profile {
 }
 
 export default function PerfilPage() {
-    const router = useRouter();
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -40,8 +38,8 @@ export default function PerfilPage() {
                 total_orders: stats.total_orders || 0,
                 total_earned: stats.total_earned || 0,
             });
-        } catch (err: any) {
-            console.error("Error:", err);
+        } catch (error) {
+            console.error("Error:", error);
         } finally {
             setLoading(false);
         }

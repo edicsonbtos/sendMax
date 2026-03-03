@@ -7,9 +7,6 @@ import {
     Plus,
     Search,
     Phone,
-    MapPin,
-    CreditCard,
-    ChevronRight,
     X,
     Check
 } from 'lucide-react';
@@ -28,8 +25,6 @@ interface Client {
     phone: string;
     payment_methods: PaymentMethod[];
 }
-
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://sendmax11-production.up.railway.app";
 
 const COUNTRIES = [
     { code: 'VENEZUELA', flag: '🇻🇪', name: 'Venezuela' },
@@ -75,7 +70,7 @@ export default function ClientesPage() {
         }
     };
 
-    const groupByClient = (beneficiaries: any[]) => {
+    const groupByClient = (beneficiaries: Record<string, unknown>[]) => {
         const map = new Map<string, Client>();
         beneficiaries.forEach(b => {
             const key = b.phone || b.alias;
@@ -109,12 +104,12 @@ export default function ClientesPage() {
         if (!newClient.name || !newClient.phone) return;
 
         try {
-            (await api.post(`/api/operators/beneficiaries`, {
+            await api.post(`/api/operators/beneficiaries`, {
                 alias: newClient.name,
                 full_name: newClient.name,
                 phone: newClient.phone,
                 dest_country: 'PENDING'
-            })).data;
+            });
             setShowModal(false);
             setNewClient({ name: '', phone: '' });
             fetchClients();
@@ -127,14 +122,14 @@ export default function ClientesPage() {
         if (!selectedClient || !newPayment.country) return;
 
         try {
-            (await api.post(`/api/operators/beneficiaries`, {
+            await api.post(`/api/operators/beneficiaries`, {
                 alias: `${selectedClient.name} - ${newPayment.country}`,
                 full_name: selectedClient.name,
                 phone: selectedClient.phone,
                 dest_country: newPayment.country,
                 bank_name: newPayment.bank_name,
                 account_number: newPayment.account_number
-            })).data;
+            });
             setShowPaymentModal(false);
             setNewPayment({ country: '', bank_name: '', account_number: '', alias: '' });
             fetchClients();

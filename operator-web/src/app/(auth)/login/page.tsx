@@ -1,13 +1,11 @@
 "use client";
 import { useState, FormEvent } from "react";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
-    const router = useRouter();
 
     const handleLogin = async (e: FormEvent) => {
         e.preventDefault();
@@ -42,8 +40,12 @@ export default function LoginPage() {
 
             // Redirigir al dashboard (Hard Redirect para evitar caché de NextJS)
             window.location.href = "/";
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError("Ocurrió un error desconocido");
+            }
         } finally {
             setLoading(false);
         }

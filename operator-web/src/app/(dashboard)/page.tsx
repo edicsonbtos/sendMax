@@ -7,7 +7,6 @@ import {
     Users,
     Wallet,
     ArrowUpRight,
-    ArrowDownRight,
     Clock,
     Trophy,
     Target,
@@ -56,8 +55,6 @@ interface RankingEntry {
     monthly_volume_usdt: number;
     is_current_user: boolean;
 }
-
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://sendmax11-production.up.railway.app";
 
 // Banderas de países
 const countryFlags: Record<string, string> = {
