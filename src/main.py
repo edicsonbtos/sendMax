@@ -193,6 +193,9 @@ app.include_router(operators_router)
 app.include_router(ranking_router)
 app.include_router(rates_live_router)
 
+from src.api.beneficiaries import router as beneficiaries_router
+app.include_router(beneficiaries_router)
+
 
 @app.get("/")
 async def root():
