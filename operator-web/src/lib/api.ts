@@ -35,6 +35,7 @@ api.interceptors.response.use(
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             localStorage.clear();
+            document.cookie = "auth_token=; path=/; max-age=0";
 
             // Solo redirigir si NO estamos ya en login
             if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
