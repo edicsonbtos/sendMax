@@ -221,6 +221,65 @@ def metrics_p2p_prices(
 
 
 # ============================================================
+# GET /metrics/operator-leaderboard
+# ============================================================
+
+@router.get("/metrics/operator-leaderboard")
+def metrics_operator_leaderboard(
+    limit: int = Query(default=10, ge=1, le=50),
+    auth: dict = Depends(require_operator_or_admin),
+):
+    """Top operadores por trust_score + volumen mensual."""
+    rows = fetch_all(
+        """
+        SELECT u.id, u.alias, u.full_name,
+               COALESCE(u.trust_score, 50) AS trust_score,
+               u.kyc_status,
+               COALESCE((
+                   SELECT SUM(wl.amount_usdt) FROM wallet_ledger wl
+                   WHERE wl.user_id = u.id AND wl.type = 'ORDER_PROFIT'
+                     AND wl.created_at >= date_trunc('month', now())
+               ), 0) AS profit_month,
+               COALESCE((
+                   SELECT COUNT(*) FROM orders o
+                   WHERE o.operator_user_id = u.id AND o.status = 'PAGADA'
+                     AND o.created_at >= date_trunc('month', now())
+               ), 0) AS orders_month
+        FROM users u
+        WHERE u.role IN ('operator', 'admin')
+          AND u.is_active = true
+        ORDER BY u.trust_score DESC NULLS LAST, profit_month DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+
+    from decimal import Decimal
+
+    def _s(v):
+        if v is None:
+            return None
+        if isinstance(v, Decimal):
+            return str(v.quantize(Decimal("0.01")))
+        return v
+
+    return {
+        "leaderboard": [
+            {
+                "rank": idx + 1,
+                "alias": r["alias"],
+                "full_name": r.get("full_name") or r["alias"],
+                "trust_score": float(r["trust_score"]),
+                "profit_month": _s(r["profit_month"]),
+                "orders_month": int(r["orders_month"]),
+                "kyc_status": r.get("kyc_status") or "PENDING",
+            }
+            for idx, r in enumerate(rows or [])
+        ]
+    }
+
+
+# ============================================================
 # GET /metrics/company-overview
 # ============================================================
 

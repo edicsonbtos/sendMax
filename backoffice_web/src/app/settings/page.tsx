@@ -91,7 +91,7 @@ function CashDeliveryPanel({ saving, setSaving, setError, setSuccess }: CashDeli
   const [loaded, setLoaded] = React.useState(false);
 
   React.useEffect(() => {
-    apiGet<{ value_json?: { zelle_usdt_cost?: number; margin_cash_zelle?: number; margin_cash_general?: number } }>("/settings/cash_delivery")
+    apiGet<{ value_json?: { zelle_usdt_cost?: number; margin_cash_zelle?: number; margin_cash_general?: number } }>("/admin/settings/cash_delivery")
       .then((res) => {
         const v = res?.value_json;
         if (v) {
@@ -119,7 +119,7 @@ function CashDeliveryPanel({ saving, setSaving, setError, setSuccess }: CashDeli
     setSaving(true);
     setError(null);
     try {
-      await apiPut("/settings/cash_delivery", {
+      await apiPut("/admin/settings/cash_delivery", {
         value_json: {
           zelle_usdt_cost: cost,
           margin_cash_zelle: mz,
