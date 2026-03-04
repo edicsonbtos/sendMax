@@ -265,7 +265,7 @@ async def get_wallet_summary(user_id: int = Depends(get_current_operator)):
                     SELECT 
                         COALESCE(SUM(amount_usdt), 0) as balance 
                     FROM wallet_ledger 
-                    WHERE operator_id = %s
+                    WHERE user_id = %s
                 """, (user_id,))
                 res_balance = await cur.fetchone()
                 if res_balance:
@@ -275,7 +275,7 @@ async def get_wallet_summary(user_id: int = Depends(get_current_operator)):
                     SELECT 
                         COALESCE(SUM(amount_usdt), 0) as lifetime 
                     FROM wallet_ledger 
-                    WHERE operator_id = %s AND amount_usdt > 0 AND type = 'EARNING'
+                    WHERE user_id = %s AND amount_usdt > 0 AND type = 'EARNING'
                 """, (user_id,))
                 res_life = await cur.fetchone()
                 if res_life:
@@ -285,7 +285,7 @@ async def get_wallet_summary(user_id: int = Depends(get_current_operator)):
                     SELECT 
                         COALESCE(SUM(ABS(amount_usdt)), 0) as pending 
                     FROM wallet_ledger 
-                    WHERE operator_id = %s AND type = 'WITHDRAWAL_PENDING'
+                    WHERE user_id = %s AND type = 'WITHDRAWAL_PENDING'
                 """, (user_id,))
                 res_pend = await cur.fetchone()
                 if res_pend:
@@ -309,9 +309,9 @@ async def get_wallet_ledger(limit: int = 50, user_id: int = Depends(get_current_
         async with get_async_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
-                    SELECT id, amount_usdt, type, description, created_at 
+                    SELECT id, amount_usdt, type, memo, created_at 
                     FROM wallet_ledger 
-                    WHERE operator_id = %s 
+                    WHERE user_id = %s 
                     ORDER BY created_at DESC LIMIT %s
                 """, (user_id, limit))
                 rows = await cur.fetchall()
@@ -320,7 +320,7 @@ async def get_wallet_ledger(limit: int = 50, user_id: int = Depends(get_current_
                         id=r[0],
                         amount_usdt=r[1],
                         type=r[2],
-                        description=r[3],
+                        description=r[3] if r[3] else "",
                         created_at=r[4]
                     ))
     except Exception as e:
@@ -402,30 +402,32 @@ async def request_withdrawal(
                 )
             
             # 5. Crear registro de retiro en wallet_ledger
-            withdrawal_id = str(uuid4())
             await cur.execute(
                 """
                 INSERT INTO wallet_ledger (
-                    id, operator_id, type, amount_usdt, 
-                    description, metadata, created_at
+                    user_id, type, amount_usdt, 
+                    memo, created_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                VALUES (%s, %s, %s, %s, NOW())
                 RETURNING id
                 """,
                 (
-                    withdrawal_id,
                     user_id,
                     "WITHDRAWAL_PENDING",
                     req.amount_usdt,
-                    f"Retiro solicitado vía {req.withdrawal_method}",
                     json.dumps({
                         "method": req.withdrawal_method,
                         "account": req.account_info,
                         "notes": req.notes,
-                        "status": "pending"
+                        "status": "pending",
+                        "text": f"Retiro solicitado vía {req.withdrawal_method}"
                     })
                 )
             )
+            
+            new_id_row = await cur.fetchone()
+            withdrawal_id = str(new_id_row[0]) if new_id_row else ""
+
             
             await conn.commit()
             
