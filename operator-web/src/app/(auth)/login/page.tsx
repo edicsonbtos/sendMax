@@ -8,44 +8,45 @@ export default function LoginPage() {
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
 
-    const handleLogin = async (e: FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
         setLoading(true);
 
         try {
-            const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/auth/operator/login`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email, password }),
-                }
-            );
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/operator/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password }),
+            });
 
             if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.detail || "Error al iniciar sesión");
+                const errorData = await res.json();
+                throw new Error(errorData.detail || "Credenciales inválidas");
             }
 
             const data = await res.json();
 
-            // Guardar token y datos del operador en localStorage
+            // Guardar en localStorage
             localStorage.setItem("token", data.access_token);
             localStorage.setItem("operator_id", data.operator_id);
             localStorage.setItem("operator_alias", data.alias);
             localStorage.setItem("operator_email", data.email);
 
-            // También en cookies para el middleware (SSR/Client sync)
-            document.cookie = `auth_token=${data.access_token}; path=/; max-age=${7 * 24 * 60 * 60}`;
+            // Guardar en cookies para middleware (IMPORTANTE: max-age en segundos)
+            const maxAge = 7 * 24 * 60 * 60; // 7 días
+            document.cookie = `auth_token=${data.access_token}; path=/; max-age=${maxAge}; SameSite=Lax`;
 
-            // Redirigir al dashboard (Hard Redirect para evitar caché de NextJS)
-            window.location.href = "/";
+            // Pequeño delay para asegurar que cookies se guarden
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Redirigir usando replace para limpiar historial
+            window.location.replace("/");
         } catch (err: unknown) {
             if (err instanceof Error) {
                 setError(err.message);
             } else {
-                setError("Ocurrió un error desconocido");
+                setError("Error desconocido al iniciar sesión");
             }
         } finally {
             setLoading(false);
@@ -64,7 +65,7 @@ export default function LoginPage() {
                     </p>
                 </div>
 
-                <form onSubmit={handleLogin} className="space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-6">
                     {error && (
                         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
                             {error}

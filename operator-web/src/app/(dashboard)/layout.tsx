@@ -31,18 +31,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
+        // Ejecutar SOLO una vez al montar el componente
+        if (hasCheckedAuth) return;
 
-        if (!token && pathname !== '/login') {
-            window.location.href = '/login';
+        const token = localStorage.getItem('token');
+        const cookieToken = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('auth_token='))
+            ?.split('=')[1];
+
+        if (!token && !cookieToken) {
+            // NO usar window.location.href - dejar que middleware maneje
+            setIsAuthenticated(false);
         } else {
             setIsAuthenticated(true);
         }
 
         setIsLoading(false);
-    }, [pathname, router]);
+        setHasCheckedAuth(true);
+    }, []); // Array vacío = ejecutar SOLO una vez
 
     const handleLogout = () => {
         // Limpiar todo del localStorage
@@ -51,8 +61,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         localStorage.removeItem('operatorData');
         localStorage.clear();
         document.cookie = "auth_token=; path=/; max-age=0";
-        // Redirigir al login
-        window.location.href = '/login';
+
+        // Forzar recarga completa para limpiar estado
+        window.location.replace('/login');
     };
 
     if (isLoading) {

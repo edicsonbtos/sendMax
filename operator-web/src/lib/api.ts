@@ -23,24 +23,35 @@ api.interceptors.request.use(
     }
 );
 
-// ✅ FIXED: PREVENIR BUCLE INFINITO
+// ✅ PREVENIR BUCLE INFINITO - Control de redirección
 let isRedirecting = false;
 
-// Interceptor para manejar errores de autenticación
 api.interceptors.response.use(
     (response) => response,
     (error) => {
+        // Manejar error 401 (No autorizado) UNA SOLA VEZ
         if (error.response?.status === 401 && !isRedirecting) {
             isRedirecting = true;
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
+
+            // Limpiar autenticación
             localStorage.clear();
             document.cookie = "auth_token=; path=/; max-age=0";
 
-            // Solo redirigir si NO estamos ya en login
-            if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-                window.location.href = '/login';
+            // Solo redirigir si NO estamos en rutas públicas
+            if (typeof window !== 'undefined') {
+                const pathname = window.location.pathname;
+                const isPublicRoute = pathname.includes('/login') || pathname.includes('/recuperar');
+
+                if (!isPublicRoute) {
+                    // Usar replace para no generar entrada en historial
+                    window.location.replace('/login');
+                }
             }
+
+            // Resetear flag después de 2 segundos
+            setTimeout(() => {
+                isRedirecting = false;
+            }, 2000);
         }
         return Promise.reject(error);
     }
