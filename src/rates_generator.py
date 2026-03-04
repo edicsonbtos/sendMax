@@ -23,17 +23,17 @@ class GenerateResult:
     any_unverified: bool
 
 
-async def _pick_price_with_method_fallback(client: BinanceP2PClient, *, fiat: str, trade_type: str, methods: list[str], trans_amount: float):
+async def _pick_price_with_method_fallback(country: str, client: BinanceP2PClient, *, fiat: str, trade_type: str, methods: list[str], trans_amount: float):
+    from src.integrations.price_override import get_buy_price, get_sell_price
     last_err = None
     for m in methods:
         try:
-            q = await client.fetch_first_price(
-                fiat=fiat,
-                trade_type=trade_type,
-                pay_methods=[m],
-                trans_amount=trans_amount,
-            )
-            return (Decimal(str(q.price)), bool(q.is_verified), m)
+            if trade_type == "BUY":
+                price = await get_buy_price(country, m, fallback_to_binance=True)
+                return (Decimal(str(price)), True, m)
+            else:
+                price = await get_sell_price(country, m)
+                return (Decimal(str(price)), True, m)
         except Exception as e:
             last_err = e
             continue
@@ -58,10 +58,10 @@ async def generate_rates_full(*, kind: str, reason: str) -> GenerateResult:
         for code, cfg in COUNTRIES.items():
             try:
                 buy_price, buy_verified, buy_method = await _pick_price_with_method_fallback(
-                    client, fiat=cfg.fiat, trade_type="BUY", methods=cfg.buy_methods, trans_amount=cfg.trans_amount
+                    code, client, fiat=cfg.fiat, trade_type="BUY", methods=cfg.buy_methods, trans_amount=cfg.trans_amount
                 )
                 sell_price, sell_verified, sell_method = await _pick_price_with_method_fallback(
-                    client, fiat=cfg.fiat, trade_type="SELL", methods=cfg.sell_methods, trans_amount=cfg.trans_amount
+                    code, client, fiat=cfg.fiat, trade_type="SELL", methods=cfg.sell_methods, trans_amount=cfg.trans_amount
                 )
 
                 is_verified = bool(buy_verified and sell_verified)

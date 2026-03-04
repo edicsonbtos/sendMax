@@ -77,33 +77,21 @@ def _order_actions_kb(public_id: int) -> InlineKeyboardMarkup:
 
 
 async def _fetch_realtime_prices(origin_country: str, dest_country: str):
-    """Consulta precios actuales de Binance P2P (ASYNC) para calcular profit real"""
+    """Consulta precios actuales de Binance P2P (ASYNC) para calcular profit real con overrides"""
     origin_cfg = COUNTRIES.get(origin_country)
     dest_cfg = COUNTRIES.get(dest_country)
 
     if not origin_cfg or not dest_cfg:
         return None, None
 
-    client = BinanceP2PClient()
+    from src.integrations.price_override import get_buy_price, get_sell_price
     try:
-        buy_quote = await client.fetch_first_price(
-            fiat=origin_cfg.fiat,
-            trade_type="BUY",
-            pay_methods=origin_cfg.buy_methods,
-            trans_amount=origin_cfg.trans_amount,
-        )
-        sell_quote = await client.fetch_first_price(
-            fiat=dest_cfg.fiat,
-            trade_type="SELL",
-            pay_methods=dest_cfg.sell_methods,
-            trans_amount=dest_cfg.trans_amount,
-        )
-        return Decimal(str(buy_quote.price)), Decimal(str(sell_quote.price))
+        buy_price = await get_buy_price(origin_country, origin_cfg.buy_methods[0])
+        sell_price = await get_sell_price(dest_country, dest_cfg.sell_methods[0])
+        return buy_price, sell_price
     except Exception as e:
-        logger.warning(f"No pude obtener precios real-time de Binance: {e}")
+        logger.warning(f"No pude obtener precios real-time: {e}")
         return None, None
-    finally:
-        await client.close()
 
 
 def _get_fiat_currency(country: str) -> str:

@@ -82,13 +82,8 @@ class RatesScheduler:
                         continue
 
                     try:
-                        buy_quote = await client.fetch_first_price(
-                            fiat=cfg.fiat,
-                            trade_type="BUY",
-                            pay_methods=cfg.buy_methods,
-                            trans_amount=cfg.trans_amount,
-                        )
-                        current_buy = Decimal(str(buy_quote.price))
+                        from src.integrations.price_override import get_buy_price
+                        current_buy = await get_buy_price(code, cfg.buy_methods[0])
                         saved_buy = Decimal(str(cp.buy_price))
 
                         if saved_buy > 0:
