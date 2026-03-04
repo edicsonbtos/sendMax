@@ -167,21 +167,41 @@ async def lifespan(app: FastAPI):
     await close_pool()
 
 
-app = FastAPI(lifespan=lifespan)
+IS_PRODUCTION = os.environ.get("RAILWAY_ENVIRONMENT") == "production" or bool(os.environ.get("WEBHOOK_URL"))
 
-# Configuración CORS para permitir requests desde el panel web
+app = FastAPI(
+    lifespan=lifespan,
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+)
+
+# Configuración CORS — dominios específicos (sin wildcard)
+_ALLOWED_ORIGINS = [
+    "https://sendmax-web-production.up.railway.app",
+    "https://admin-web-production-442a.up.railway.app",
+]
+if not IS_PRODUCTION:
+    _ALLOWED_ORIGINS.append("http://localhost:3000")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://sendmax-web-production.up.railway.app",
-        "https://admin-web-production-442a.up.railway.app",
-        "https://*.up.railway.app",
-    ],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Security Headers
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if IS_PRODUCTION:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 app.include_router(internal_rates.router)
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])

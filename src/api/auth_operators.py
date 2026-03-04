@@ -1,16 +1,35 @@
 """
 Endpoints de autenticación para operadores
 """
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from src.utils.crypto import verify_password
 from src.utils.jwt import create_access_token
 from src.db.connection import get_async_conn
 from datetime import timedelta
 import logging
+import time
+from collections import defaultdict
 
 router = APIRouter(prefix="/auth/operator", tags=["Operator Auth"])
 _logger = logging.getLogger("auth_operators")
+
+# ── Rate limiter simple (sin dependencias externas) ──────────
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+_MAX_ATTEMPTS = 5
+_WINDOW_SECONDS = 60
+
+def _check_rate_limit(ip: str) -> None:
+    """Limita a 5 intentos por minuto por IP."""
+    now = time.time()
+    # Limpiar entradas expiradas
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _WINDOW_SECONDS]
+    if len(_login_attempts[ip]) >= _MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiados intentos. Espera 1 minuto.",
+        )
+    _login_attempts[ip].append(now)
 
 class OperatorLoginRequest(BaseModel):
     email: EmailStr
@@ -24,11 +43,15 @@ class OperatorLoginResponse(BaseModel):
     email: str
 
 @router.post("/login", response_model=OperatorLoginResponse)
-async def operator_login(credentials: OperatorLoginRequest):
+async def operator_login(credentials: OperatorLoginRequest, request: Request):
     """
     Login para operadores con email y contraseña.
     Retorna JWT válido por 7 días.
     """
+    # Rate limit: 5 intentos/minuto por IP
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
+
     try:
         async with get_async_conn() as conn:
             async with conn.cursor() as cur:
