@@ -159,6 +159,16 @@ def get_admin_settings(auth: dict = Depends(require_admin)):
     return {"items": rows}
 
 
+@router.get("/admin/settings/{key}")
+def get_admin_setting_by_key(key: str, auth: dict = Depends(require_admin)):
+    k = _validate_key(key)
+    row = fetch_one("SELECT key, value_json, updated_at, updated_by FROM settings WHERE key=%s", (k,))
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Setting '{k}' not found")
+    return {"ok": True, "key": row["key"], "value_json": _normalize_json(row["value_json"])}
+
+
+
 @router.put("/admin/settings/{key}")
 def put_admin_settings(
     key: str,
