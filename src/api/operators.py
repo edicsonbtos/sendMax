@@ -457,11 +457,10 @@ async def get_withdrawals(
                     id,
                     amount_usdt,
                     type,
-                    description,
-                    metadata,
+                    memo,
                     created_at
                 FROM wallet_ledger
-                WHERE operator_id = %s 
+                WHERE user_id = %s 
                   AND type IN ('WITHDRAWAL_PENDING', 'WITHDRAWAL_APPROVED', 'WITHDRAWAL_REJECTED')
                 ORDER BY created_at DESC
                 LIMIT %s
@@ -473,7 +472,10 @@ async def get_withdrawals(
             
             withdrawals = []
             for row in rows:
-                metadata = json.loads(row[4]) if row[4] else {}
+                try:
+                    metadata = json.loads(row[3]) if row[3] else {}
+                except Exception:
+                    metadata = {"text": str(row[3])}
                 
                 # Determinar estado
                 status_map = {
@@ -483,14 +485,14 @@ async def get_withdrawals(
                 }
                 
                 withdrawals.append({
-                    "id": row[0],
+                    "id": str(row[0]),
                     "amount": float(row[1]),
                     "status": status_map.get(row[2], "unknown"),
                     "method": metadata.get("method", "N/A"),
                     "account": metadata.get("account", "N/A"),
                     "notes": metadata.get("notes", ""),
-                    "created_at": row[5].isoformat(),
-                    "description": row[3]
+                    "created_at": row[4].isoformat(),
+                    "description": metadata.get("text", "Retiro")
                 })
             
             return {
