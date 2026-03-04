@@ -1,5 +1,6 @@
 "use client";
 import { useState, FormEvent } from "react";
+import Link from "next/link";
 
 export default function LoginPage() {
     const [email, setEmail] = useState("");
@@ -109,9 +110,11 @@ export default function LoginPage() {
                     </button>
                 </form>
 
-                <div className="text-center text-sm text-gray-500">
-                    <p>¿Problemas para acceder?</p>
-                    <p className="mt-1">Contacta al administrador</p>
+                <div className="text-center text-sm text-gray-500 space-y-1">
+                    <Link href="/recuperar" className="text-blue-600 hover:text-blue-500 font-medium">
+                        ¿Olvidaste tu contraseña?
+                    </Link>
+                    <p>¿Problemas para acceder? Contacta al administrador</p>
                 </div>
             </div>
         </div>
