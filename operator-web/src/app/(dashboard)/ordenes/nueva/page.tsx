@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { safeToFixed } from '@/lib/utils';
 
 interface Beneficiary {
     id: number;
@@ -230,7 +231,7 @@ export default function NuevaOrdenPage() {
                             </p>
                             <p className="text-white">
                                 <span className="text-white/60">Monto:</span>{" "}
-                                <span className="font-bold">${amount ? parseFloat(amount).toFixed(2) : "0.00"} USD</span>
+                                <span className="font-bold">${amount ? safeToFixed(amount, 2) : "0.00"} USD</span>
                             </p>
                             <p className="text-white">
                                 <span className="text-white/60">Método:</span> {paymentMethod}

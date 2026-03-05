@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { safeToFixed } from '@/lib/utils';
 
 interface Profile {
     email: string;
@@ -83,7 +84,7 @@ export default function PerfilPage() {
                                 KYC Aprobado
                             </span>
                             <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                                Trust Score: {Number(profile?.trust_score || 0).toFixed(0)}%
+                                Trust Score: {safeToFixed(profile?.trust_score, 0)}%
                             </span>
                         </div>
                     </div>
@@ -100,7 +101,7 @@ export default function PerfilPage() {
                 <div className="card-glass p-6">
                     <p className="text-white/60 text-sm mb-2">Total Ganado</p>
                     <p className="text-3xl font-bold text-green-400">
-                        ${Number(profile?.total_earned || 0).toFixed(2)}
+                        ${safeToFixed(profile?.total_earned, 2)}
                     </p>
                 </div>
             </div>
@@ -126,7 +127,7 @@ export default function PerfilPage() {
                     <div className="flex items-center justify-between py-3">
                         <span className="text-white/60">Trust Score</span>
                         <span className="text-white font-medium">
-                            {Number(profile?.trust_score || 0).toFixed(0)}%
+                            {safeToFixed(profile?.trust_score, 0)}%
                         </span>
                     </div>
                 </div>
