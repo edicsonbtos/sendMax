@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { safeToFixed } from "@/lib/utils";
 
 type RankingEntry = {
     position: number;
@@ -71,7 +72,7 @@ export default function RankingWidget() {
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="font-bold text-sm text-green-600">${Number(op.monthly_volume_usdt || 0).toFixed(0)}</p>
+                                    <p className="font-bold text-sm text-green-600">${safeToFixed(op.monthly_volume_usdt, 0)}</p>
                                     <p className="text-[10px] text-gray-400 uppercase">Volumen</p>
                                 </div>
                             </div>

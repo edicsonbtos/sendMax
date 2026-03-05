@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { safeToFixed } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -99,7 +100,7 @@ export default function OrderQueueWidget() {
                                     <td className="px-4 py-3 font-semibold text-gray-900">#{o.public_id}</td>
                                     <td className="px-4 py-3 text-gray-700 truncate max-w-[150px]">{o.client_name}</td>
                                     <td className="px-4 py-3 text-xs text-gray-500">{o.origin_country} <span className="mx-1">→</span> {o.dest_country}</td>
-                                    <td className="px-4 py-3 font-medium text-gray-900">{Number(o.amount_origin || 0).toFixed(2)}</td>
+                                    <td className="px-4 py-3 font-medium text-gray-900">{safeToFixed(o.amount_origin, 2)}</td>
                                     <td className="px-4 py-3">
                                         <span className={`px-2 py-1 text-xs border rounded-md font-medium whitespace-nowrap ${getStatusColor(o.status)}`}>
                                             {o.status.replace(/_/g, " ")}

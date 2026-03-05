@@ -143,6 +143,7 @@ export default function Dashboard() {
     const fetchStats = async () => {
         try {
             const res = await api.get('/api/operators/dashboard/stats'); // FIXED: Usar api.get
+            console.log("Datos del backend:", res.data); // <-- AGREGADO POR ANTIGRAVITI
             setStats(res.data);
         } catch (err) {
             console.error('Error fetching stats:', err);

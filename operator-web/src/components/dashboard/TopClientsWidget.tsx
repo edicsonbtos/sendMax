@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { safeToFixed } from "@/lib/utils";
 
 type Client = {
     name: string;
@@ -64,7 +65,7 @@ export default function TopClientsWidget() {
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">${(Number(client.total_volume_usdt) || 0).toFixed(0)}</p>
+                                <p className="text-sm font-bold text-gray-900">${safeToFixed(client.total_volume_usdt, 0)}</p>
                             </div>
                         </div>
                     ))}
