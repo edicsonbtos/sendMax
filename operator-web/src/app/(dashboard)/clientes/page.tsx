@@ -1,407 +1,272 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import api from "@/lib/api";
+import { safeToFixed } from '@/lib/utils';
 import {
     Users,
     Plus,
     Search,
     Phone,
-    X,
-    Check
+    Trophy,
+    TrendingUp,
+    Calendar,
+    DollarSign,
+    ShoppingCart
 } from 'lucide-react';
 
-interface PaymentMethod {
-    id: number;
-    country: string;
-    bank_name: string;
-    account_number: string;
-    alias: string;
-}
-
-interface Client {
-    id: number;
+interface ClientRanking {
+    beneficiary_id: number;
     name: string;
-    phone: string;
-    payment_methods: PaymentMethod[];
-}
-
-interface Beneficiario {
-    id: number;
-    phone?: string;
-    alias?: string;
-    full_name?: string;
+    phone: string | null;
     dest_country: string;
-    bank_name?: string;
-    account_number?: string;
-    payment_method?: string;
+    total_orders: number;
+    completed_orders: number;
+    total_volume_usdt: number;
+    last_order_date: string | null;
+    rank: number;
 }
 
-const COUNTRIES = [
-    { code: 'VENEZUELA', flag: '🇻🇪', name: 'Venezuela' },
-    { code: 'COLOMBIA', flag: '🇨🇴', name: 'Colombia' },
-    { code: 'ARGENTINA', flag: '🇦🇷', name: 'Argentina' },
-    { code: 'CHILE', flag: '🇨🇱', name: 'Chile' },
-    { code: 'PERU', flag: '🇵🇪', name: 'Perú' },
-    { code: 'MEXICO', flag: '🇲🇽', name: 'México' },
-    { code: 'ECUADOR', flag: '🇪🇨', name: 'Ecuador' },
-];
+interface ClientStats {
+    total_clients: number;
+    active_clients: number;
+    total_volume_usdt: number;
+}
+
+const COUNTRY_FLAGS: { [key: string]: string } = {
+    'VENEZUELA': '🇻🇪',
+    'COLOMBIA': '🇨🇴',
+    'ARGENTINA': '🇦🇷',
+    'CHILE': '🇨🇱',
+    'PERU': '🇵🇪',
+    'MEXICO': '🇲🇽',
+    'ECUADOR': '🇪🇨',
+};
 
 export default function ClientesPage() {
-    const [clients, setClients] = useState<Client[]>([]);
-    const [showModal, setShowModal] = useState(false);
-    const [showPaymentModal, setShowPaymentModal] = useState(false);
-    const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+    const router = useRouter();
+    const [clients, setClients] = useState<ClientRanking[]>([]);
+    const [stats, setStats] = useState<ClientStats | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
-
-    // Form states
-    const [newClient, setNewClient] = useState({ name: '', phone: '' });
-    const [newPayment, setNewPayment] = useState({
-        country: '',
-        bank_name: '',
-        account_number: '',
-        alias: ''
-    });
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        fetchClients();
+        fetchData();
     }, []);
 
-    const fetchClients = async () => {
+    const fetchData = async () => {
         try {
-            const data = (await api.get(`/api/operators/beneficiaries`)).data;
-            // Agrupar por cliente
-            const grouped = groupByClient(Array.isArray(data) ? data : []);
-            setClients(grouped);
-        } catch (err) {
-            console.error('Error:', err);
+            setLoading(true);
+            const [rankingRes, statsRes] = await Promise.all([
+                api.get('/api/operators/clients/ranking?limit=50'),
+                api.get('/api/operators/clients/stats')
+            ]);
+
+            setClients(rankingRes.data || []);
+            setStats(statsRes.data || null);
+            setError(null);
+        } catch (err: any) {
+            console.error('Error cargando datos:', err);
+            setError(err.message || 'Error al cargar clientes');
         } finally {
             setLoading(false);
         }
     };
 
-    const groupByClient = (beneficiaries: Beneficiario[]) => {
-        const map = new Map<string, Client>();
-        beneficiaries.forEach(b => {
-            const key = String(b.phone || b.alias || '');
-            if (map.has(key)) {
-                map.get(key)!.payment_methods.push({
-                    id: b.id,
-                    country: b.dest_country,
-                    bank_name: b.bank_name || '',
-                    account_number: b.account_number || '',
-                    alias: b.alias || ''
-                });
-            } else {
-                map.set(key, {
-                    id: b.id,
-                    name: b.full_name || b.alias || 'Sin nombre',
-                    phone: b.phone || '',
-                    payment_methods: [{
-                        id: b.id,
-                        country: b.dest_country,
-                        bank_name: b.bank_name || '',
-                        account_number: b.account_number || '',
-                        alias: b.alias || ''
-                    }]
-                });
-            }
-        });
-        return Array.from(map.values());
-    };
-
-    const handleAddClient = async () => {
-        if (!newClient.name || !newClient.phone) return;
-
-        try {
-            await api.post(`/api/operators/beneficiaries`, {
-                alias: newClient.name,
-                full_name: newClient.name,
-                phone: newClient.phone,
-                dest_country: 'PENDING'
-            });
-            setShowModal(false);
-            setNewClient({ name: '', phone: '' });
-            fetchClients();
-        } catch (err) {
-            console.error('Error:', err);
-        }
-    };
-
-    const handleAddPayment = async () => {
-        if (!selectedClient || !newPayment.country) return;
-
-        try {
-            await api.post(`/api/operators/beneficiaries`, {
-                alias: `${selectedClient.name} - ${newPayment.country}`,
-                full_name: selectedClient.name,
-                phone: selectedClient.phone,
-                dest_country: newPayment.country,
-                bank_name: newPayment.bank_name,
-                account_number: newPayment.account_number
-            });
-            setShowPaymentModal(false);
-            setNewPayment({ country: '', bank_name: '', account_number: '', alias: '' });
-            fetchClients();
-        } catch (err) {
-            console.error('Error:', err);
-        }
-    };
-
     const filteredClients = clients.filter(c =>
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.phone.includes(searchTerm)
+        (c.phone && c.phone.includes(searchTerm))
     );
 
+    const getRankBadge = (rank: number) => {
+        if (rank === 1) return { icon: '🥇', color: 'from-yellow-400 to-yellow-600', text: 'TOP 1' };
+        if (rank === 2) return { icon: '🥈', color: 'from-gray-300 to-gray-500', text: 'TOP 2' };
+        if (rank === 3) return { icon: '🥉', color: 'from-orange-400 to-orange-600', text: 'TOP 3' };
+        return { icon: `#${rank}`, color: 'from-blue-500 to-purple-500', text: `#${rank}` };
+    };
+
+    if (loading) {
+        return (
+            <div className="p-6 flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-white/60">Cargando ranking de clientes...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 animate-slide-up">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold text-white mb-2">Mis Contactos</h1>
-                    <p className="text-gray-400">{clients.length} contactos guardados</p>
+                    <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+                        <Trophy className="w-8 h-8 text-yellow-400" />
+                        Leaderboard de Clientes
+                    </h1>
+                    <p className="text-white/60">Tus mejores clientes por volumen transaccionado</p>
                 </div>
                 <button
-                    onClick={() => setShowModal(true)}
-                    className="btn-primary flex items-center gap-2"
+                    onClick={() => router.push('/clientes/nuevo')}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all shadow-lg flex items-center gap-2"
                 >
                     <Plus className="w-5 h-5" />
-                    Nuevo Contacto
+                    Nuevo Cliente
                 </button>
             </div>
 
-            {/* Búsqueda */}
-            <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                    type="text"
-                    placeholder="Buscar por nombre o teléfono..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="input-glass pl-12 w-full max-w-md"
-                />
-            </div>
-
-            {/* Lista de Clientes */}
-            <div className="grid gap-4">
-                {loading ? (
-                    <div className="text-center py-12">
-                        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                        <p className="text-gray-400">Cargando contactos...</p>
-                    </div>
-                ) : filteredClients.length === 0 ? (
-                    <div className="card-glass p-12 text-center">
-                        <Users className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-                        <h3 className="text-xl font-bold text-white mb-2">Sin contactos</h3>
-                        <p className="text-gray-400 mb-6">Agrega tu primer contacto para comenzar</p>
-                        <button onClick={() => setShowModal(true)} className="btn-primary">
-                            <Plus className="w-5 h-5 inline mr-2" />
-                            Agregar Contacto
-                        </button>
-                    </div>
-                ) : (
-                    filteredClients.map((client) => (
-                        <div key={client.id} className="card-glass p-6">
-                            <div className="flex items-start justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                                        {client.name.charAt(0)}
-                                    </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-white">{client.name}</h3>
-                                        <p className="text-gray-400 flex items-center gap-2">
-                                            <Phone className="w-4 h-4" />
-                                            {client.phone || 'Sin teléfono'}
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => {
-                                        setSelectedClient(client);
-                                        setShowPaymentModal(true);
-                                    }}
-                                    className="btn-secondary text-sm py-2 px-4 flex items-center gap-2"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Agregar Destino
-                                </button>
-                            </div>
-
-                            {/* Métodos de pago/destinos */}
-                            {client.payment_methods.length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-white/10">
-                                    <p className="text-sm text-gray-400 mb-3">Destinos configurados:</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {client.payment_methods.map((pm, idx) => (
-                                            <div
-                                                key={idx}
-                                                className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-lg border border-white/10"
-                                            >
-                                                <span className="text-lg">
-                                                    {COUNTRIES.find(c => c.code === pm.country)?.flag || '🌍'}
-                                                </span>
-                                                <div>
-                                                    <p className="text-sm text-white">{pm.country}</p>
-                                                    {pm.bank_name && (
-                                                        <p className="text-xs text-gray-400">{pm.bank_name}</p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    ))
-                )}
-            </div>
-
-            {/* Modal Nuevo Contacto */}
-            {showModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-                    <div className="card-glass p-8 w-full max-w-md mx-4 animate-slide-up">
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold text-white">Nuevo Contacto</h2>
-                            <button
-                                onClick={() => setShowModal(false)}
-                                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                            >
-                                <X className="w-5 h-5 text-gray-400" />
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
+            {/* Stats Cards */}
+            {stats && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="card-glass p-6 border-l-4 border-blue-500">
+                        <div className="flex items-center justify-between">
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Nombre del contacto
-                                </label>
-                                <input
-                                    type="text"
-                                    placeholder="Ej: Juan Pérez"
-                                    value={newClient.name}
-                                    onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
-                                    className="input-glass"
-                                />
+                                <p className="text-white/60 text-sm mb-1">Total Clientes</p>
+                                <p className="text-3xl font-bold text-white">{stats.total_clients}</p>
                             </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    WhatsApp / Teléfono
-                                </label>
-                                <input
-                                    type="tel"
-                                    placeholder="Ej: +58 412 1234567"
-                                    value={newClient.phone}
-                                    onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
-                                    className="input-glass"
-                                />
-                            </div>
+                            <Users className="w-12 h-12 text-blue-400 opacity-50" />
                         </div>
+                    </div>
 
-                        <div className="flex gap-4 mt-8">
-                            <button
-                                onClick={() => setShowModal(false)}
-                                className="btn-secondary flex-1"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleAddClient}
-                                className="btn-primary flex-1 flex items-center justify-center gap-2"
-                                disabled={!newClient.name || !newClient.phone}
-                            >
-                                <Check className="w-5 h-5" />
-                                Guardar
-                            </button>
+                    <div className="card-glass p-6 border-l-4 border-green-500">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-white/60 text-sm mb-1">Clientes Activos</p>
+                                <p className="text-3xl font-bold text-white">{stats.active_clients}</p>
+                            </div>
+                            <TrendingUp className="w-12 h-12 text-green-400 opacity-50" />
+                        </div>
+                    </div>
+
+                    <div className="card-glass p-6 border-l-4 border-yellow-500">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-white/60 text-sm mb-1">Volumen Total</p>
+                                <p className="text-3xl font-bold text-white">${safeToFixed(stats.total_volume_usdt, 0)}</p>
+                            </div>
+                            <DollarSign className="w-12 h-12 text-yellow-400 opacity-50" />
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Modal Agregar Destino */}
-            {showPaymentModal && selectedClient && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-                    <div className="card-glass p-8 w-full max-w-md mx-4 animate-slide-up">
-                        <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h2 className="text-2xl font-bold text-white">Agregar Destino</h2>
-                                <p className="text-gray-400">Para: {selectedClient.name}</p>
-                            </div>
-                            <button
-                                onClick={() => setShowPaymentModal(false)}
-                                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                            >
-                                <X className="w-5 h-5 text-gray-400" />
-                            </button>
-                        </div>
+            {/* Error Message */}
+            {error && (
+                <div className="card-glass p-4 border-l-4 border-red-500 bg-red-500/10">
+                    <p className="text-red-400">{error}</p>
+                </div>
+            )}
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    País destino
-                                </label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {COUNTRIES.map((country) => (
-                                        <button
-                                            key={country.code}
-                                            onClick={() => setNewPayment({ ...newPayment, country: country.code })}
-                                            className={`p-3 rounded-xl flex items-center gap-3 transition-all ${newPayment.country === country.code
-                                                ? 'bg-blue-500/30 border-2 border-blue-500'
-                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
-                                                }`}
-                                        >
-                                            <span className="text-2xl">{country.flag}</span>
-                                            <span className="text-sm text-white">{country.name}</span>
-                                        </button>
-                                    ))}
+            {/* Búsqueda */}
+            <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                <input
+                    type="text"
+                    placeholder="Buscar cliente por nombre o teléfono..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                />
+            </div>
+
+            {/* Lista de Clientes */}
+            {filteredClients.length === 0 ? (
+                <div className="card-glass p-12 text-center">
+                    <Users className="w-16 h-16 text-white/20 mx-auto mb-4" />
+                    <h3 className="text-xl font-bold text-white mb-2">
+                        {searchTerm ? 'No se encontraron clientes' : 'Sin clientes activos'}
+                    </h3>
+                    <p className="text-white/60 mb-6">
+                        {searchTerm
+                            ? 'Intenta con otro término de búsqueda'
+                            : 'Los clientes aparecerán aquí después de completar su primera orden'}
+                    </p>
+                    {!searchTerm && (
+                        <button
+                            onClick={() => router.push('/clientes/nuevo')}
+                            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all shadow-lg inline-flex items-center gap-2"
+                        >
+                            <Plus className="w-5 h-5" />
+                            Agregar Primer Cliente
+                        </button>
+                    )}
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {filteredClients.map((client) => {
+                        const badge = getRankBadge(client.rank);
+                        return (
+                            <div
+                                key={client.beneficiary_id}
+                                className={`card-glass p-6 hover:scale-[1.02] transition-all cursor-pointer ${client.rank <= 3 ? 'border-2 border-yellow-500/30' : ''
+                                    }`}
+                                onClick={() => router.push(`/clientes/${client.beneficiary_id}`)}
+                            >
+                                <div className="flex items-center justify-between gap-4">
+                                    {/* Ranking Badge */}
+                                    <div className={`flex-shrink-0 w-16 h-16 rounded-xl bg-gradient-to-br ${badge.color} flex items-center justify-center text-white font-bold text-xl shadow-lg`}>
+                                        {badge.icon}
+                                    </div>
+
+                                    {/* Info del Cliente */}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <h3 className="text-lg font-bold text-white truncate">{client.name}</h3>
+                                            <span className="text-2xl">{COUNTRY_FLAGS[client.dest_country] || '🌍'}</span>
+                                        </div>
+                                        {client.phone && (
+                                            <p className="text-white/60 text-sm flex items-center gap-2">
+                                                <Phone className="w-4 h-4" />
+                                                {client.phone}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Métricas */}
+                                    <div className="flex gap-6 items-center">
+                                        {/* Órdenes */}
+                                        <div className="text-center">
+                                            <div className="flex items-center gap-2 text-white/60 text-xs mb-1">
+                                                <ShoppingCart className="w-4 h-4" />
+                                                Órdenes
+                                            </div>
+                                            <p className="text-2xl font-bold text-white">{client.completed_orders}</p>
+                                            <p className="text-xs text-white/40">de {client.total_orders}</p>
+                                        </div>
+
+                                        {/* Volumen */}
+                                        <div className="text-center">
+                                            <div className="flex items-center gap-2 text-green-400 text-xs mb-1">
+                                                <DollarSign className="w-4 h-4" />
+                                                Volumen
+                                            </div>
+                                            <p className="text-2xl font-bold text-green-400">${safeToFixed(client.total_volume_usdt, 0)}</p>
+                                            <p className="text-xs text-white/40">USDT</p>
+                                        </div>
+
+                                        {/* Última orden */}
+                                        {client.last_order_date && (
+                                            <div className="text-center">
+                                                <div className="flex items-center gap-2 text-white/60 text-xs mb-1">
+                                                    <Calendar className="w-4 h-4" />
+                                                    Última orden
+                                                </div>
+                                                <p className="text-sm text-white/80">
+                                                    {new Date(client.last_order_date).toLocaleDateString('es-ES', {
+                                                        day: '2-digit',
+                                                        month: 'short'
+                                                    })}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Banco (opcional)
-                                </label>
-                                <input
-                                    type="text"
-                                    placeholder="Ej: Bancolombia, Banesco..."
-                                    value={newPayment.bank_name}
-                                    onChange={(e) => setNewPayment({ ...newPayment, bank_name: e.target.value })}
-                                    className="input-glass"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Número de cuenta (opcional)
-                                </label>
-                                <input
-                                    type="text"
-                                    placeholder="Ej: 0134-0001-00-1234567890"
-                                    value={newPayment.account_number}
-                                    onChange={(e) => setNewPayment({ ...newPayment, account_number: e.target.value })}
-                                    className="input-glass"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex gap-4 mt-8">
-                            <button
-                                onClick={() => setShowPaymentModal(false)}
-                                className="btn-secondary flex-1"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleAddPayment}
-                                className="btn-primary flex-1 flex items-center justify-center gap-2"
-                                disabled={!newPayment.country}
-                            >
-                                <Check className="w-5 h-5" />
-                                Agregar Destino
-                            </button>
-                        </div>
-                    </div>
+                        );
+                    })}
                 </div>
             )}
         </div>
