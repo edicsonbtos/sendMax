@@ -78,13 +78,14 @@ async def create_order_tx(
     beneficiary_text: str,
     origin_payment_proof_file_id: str,
     initial_status: str = "CREADA",
+    client_id: int | None = None,
 ) -> Order:
     if initial_status not in VALID_STATUSES:
         raise ValueError(f"Estado inicial invalido: {initial_status}")
 
     sql_insert = """
         INSERT INTO orders (
-            public_id, operator_user_id,
+            public_id, operator_user_id, client_id,
             origin_country, dest_country,
             amount_origin,
             rate_version_id, commission_pct, rate_client, payout_dest,
@@ -92,7 +93,7 @@ async def create_order_tx(
             origin_payment_proof_file_id,
             status
         )
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING
             id, public_id, operator_user_id,
             origin_country, dest_country,
@@ -110,7 +111,7 @@ async def create_order_tx(
         await cur.execute(
             sql_insert,
             (
-                public_id, operator_user_id,
+                public_id, operator_user_id, client_id,
                 origin_country, dest_country,
                 amount_origin,
                 rate_version_id, commission_pct, rate_client, payout_dest,
@@ -136,6 +137,7 @@ async def create_order(
     beneficiary_text: str,
     origin_payment_proof_file_id: str,
     initial_status: str = "CREADA",
+    client_id: int | None = None,
 ) -> Order:
     async with get_async_conn() as conn:
         async with conn.transaction():
@@ -152,6 +154,7 @@ async def create_order(
                 beneficiary_text=beneficiary_text,
                 origin_payment_proof_file_id=origin_payment_proof_file_id,
                 initial_status=initial_status,
+                client_id=client_id,
             )
             return order
 

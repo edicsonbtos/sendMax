@@ -502,6 +502,7 @@ async def get_withdrawals(
 
 class CreateOrderRequest(BaseModel):
     """Modelo para crear una orden desde la web"""
+    client_id: int  # NUEVO - obligatorio
     beneficiary_id: int  # ID del contacto guardado
     amount_usd: Decimal
     payment_method: str  # "Zelle", "Bank Transfer", etc.
@@ -554,21 +555,34 @@ async def create_order_web(
             await cur.execute(
                 """
                 INSERT INTO orders (
-                    id, user_id, beneficiary_id, amount_usd,
+                    id, user_id, client_id, beneficiary_id, amount_usd,
                     payment_method, status, notes, created_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING id
                 """,
                 (
                     order_id,
                     user_id,
+                    req.client_id,
                     req.beneficiary_id,
                     req.amount_usd,
                     req.payment_method,
                     "PENDING_APPROVAL",  # Requiere aprobación de admin
                     req.notes
                 )
+            )
+            
+            # Actualizar métricas del cliente
+            await cur.execute(
+                """
+                UPDATE clients 
+                SET total_orders = total_orders + 1,
+                    total_volume = total_volume + %s,
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (req.amount_usd, req.client_id)
             )
             
             await conn.commit()

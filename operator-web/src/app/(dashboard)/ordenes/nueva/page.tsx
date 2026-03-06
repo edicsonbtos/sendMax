@@ -12,6 +12,13 @@ interface Beneficiary {
     bank_name?: string;
 }
 
+interface Client {
+    id: number;
+    full_name: string;
+    phone: string | null;
+    total_orders: number;
+}
+
 export default function NuevaOrdenPage() {
     const router = useRouter();
     const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
@@ -26,9 +33,46 @@ export default function NuevaOrdenPage() {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
 
+    // Client states
+    const [clientSearch, setClientSearch] = useState("");
+    const [clientResults, setClientResults] = useState<Client[]>([]);
+    const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+    const [showCreateClient, setShowCreateClient] = useState(false);
+    const [newClientPhone, setNewClientPhone] = useState("");
+
     useEffect(() => {
         loadBeneficiaries();
     }, []);
+
+    // Buscar clientes con debounce
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (clientSearch.length >= 2) {
+                api.get(`/api/operators/clients/search?q=${clientSearch}`)
+                    .then(res => setClientResults(res.data))
+                    .catch(() => setClientResults([]));
+            } else {
+                setClientResults([]);
+            }
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [clientSearch]);
+
+    // Crear cliente rápido
+    const handleCreateQuickClient = async () => {
+        try {
+            const res = await api.post("/api/operators/clients/", {
+                full_name: clientSearch,
+                phone: newClientPhone
+            });
+            setSelectedClient(res.data);
+            setShowCreateClient(false);
+            setClientSearch("");
+            setClientResults([]);
+        } catch (err: any) {
+            setError(err.response?.data?.detail || "Error al crear cliente");
+        }
+    };
 
     const loadBeneficiaries = async () => {
         try {
@@ -47,8 +91,13 @@ export default function NuevaOrdenPage() {
         setError("");
         setSuccess("");
 
+        if (!selectedClient) {
+            setError("Selecciona el cliente que envía el dinero");
+            return;
+        }
+
         if (!selectedBeneficiary) {
-            setError("Selecciona un contacto");
+            setError("Selecciona un contacto / beneficiario");
             return;
         }
 
@@ -56,6 +105,7 @@ export default function NuevaOrdenPage() {
 
         try {
             const response = await api.post("/api/operators/orders/create", {
+                client_id: selectedClient.id,
                 beneficiary_id: selectedBeneficiary,
                 amount_usd: parseFloat(amount),
                 payment_method: paymentMethod,
@@ -113,6 +163,79 @@ export default function NuevaOrdenPage() {
 
             {/* Formulario */}
             <form onSubmit={handleSubmit} className="card-glass p-6 space-y-6">
+
+                {/* PASO 1: Seleccionar Cliente */}
+                <div className="space-y-4">
+                    <label className="block text-white/80 text-sm font-medium">
+                        👤 ¿Quién te envía el dinero? (Cliente)
+                    </label>
+
+                    {selectedClient ? (
+                        <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl flex justify-between items-center">
+                            <div>
+                                <p className="text-white font-bold">{selectedClient.full_name}</p>
+                                <p className="text-white/60 text-sm">{selectedClient.phone || 'Sin teléfono'}</p>
+                                <p className="text-green-400 text-xs">{selectedClient.total_orders} órdenes previas</p>
+                            </div>
+                            <button type="button" onClick={() => setSelectedClient(null)} className="text-red-400 hover:text-red-300">
+                                ✕ Cambiar
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            <input
+                                type="text"
+                                value={clientSearch}
+                                onChange={(e) => setClientSearch(e.target.value)}
+                                placeholder="Buscar por nombre o teléfono..."
+                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                            />
+
+                            {clientResults.length > 0 && (
+                                <div className="bg-white/5 rounded-xl border border-white/10 divide-y divide-white/10 max-h-48 overflow-y-auto">
+                                    {clientResults.map(client => (
+                                        <div
+                                            key={client.id}
+                                            onClick={() => { setSelectedClient(client); setClientSearch(""); setClientResults([]); setShowCreateClient(false); }}
+                                            className="p-4 hover:bg-white/10 cursor-pointer"
+                                        >
+                                            <p className="text-white font-medium">{client.full_name}</p>
+                                            <p className="text-white/60 text-sm">{client.phone || 'Sin teléfono'} • {client.total_orders} órdenes</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {clientSearch.length >= 2 && clientResults.length === 0 && !showCreateClient && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCreateClient(true)}
+                                    className="w-full p-4 border-2 border-dashed border-blue-500/50 rounded-xl text-blue-400 hover:bg-blue-500/10 transition-colors text-left pl-4"
+                                >
+                                    ➕ Crear nuevo cliente "{clientSearch}"
+                                </button>
+                            )}
+
+                            {showCreateClient && (
+                                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl space-y-3 mt-2">
+                                    <p className="text-white font-medium">Nuevo Cliente: {clientSearch}</p>
+                                    <input
+                                        type="text"
+                                        value={newClientPhone}
+                                        onChange={(e) => setNewClientPhone(e.target.value)}
+                                        placeholder="Teléfono (Opcional)"
+                                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                    />
+                                    <div className="flex gap-2 mt-2">
+                                        <button type="button" onClick={handleCreateQuickClient} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium">Guardar y Seleccionar</button>
+                                        <button type="button" onClick={() => setShowCreateClient(false)} className="px-4 py-2 border border-white/10 text-white hover:bg-white/10 rounded-lg font-medium transition-colors">Cancelar</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
                 {/* Seleccionar beneficiario */}
                 <div>
                     <label className="block text-white/80 text-sm font-medium mb-3">
@@ -251,7 +374,7 @@ export default function NuevaOrdenPage() {
                     </button>
                     <button
                         type="submit"
-                        disabled={submitting || !selectedBeneficiary || !amount}
+                        disabled={submitting || !selectedBeneficiary || !selectedClient || !amount}
                         className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
                     >
                         {submitting ? "Creando..." : "Crear Orden"}

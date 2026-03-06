@@ -75,7 +75,7 @@ UX:
 """
 
 # Estados
-ASK_ORIGIN, ASK_DEST, ASK_BENEF_MODE, ASK_AMOUNT, ASK_BENEF, ASK_PROOF, ASK_CONFIRM, ASK_EDIT, ASK_EDIT_FIELD, ASK_SAVE_ALIAS = range(10)
+ASK_CLIENT_NAME, ASK_ORIGIN, ASK_DEST, ASK_BENEF_MODE, ASK_AMOUNT, ASK_BENEF, ASK_PROOF, ASK_CONFIRM, ASK_EDIT, ASK_EDIT_FIELD, ASK_SAVE_ALIAS = range(11)
 
 # Botones
 BTN_CANCEL = "Cancelar"
@@ -315,6 +315,29 @@ async def entry_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data["order"] = {}
     context.user_data.pop("edit_target", None)
     context.user_data.pop("screen_message_id", None)
+
+    await _screen_send_or_edit(
+        update, context,
+        "👤 ¿Quién te envía el dinero?\n\nEscribe el *Nombre del Cliente*:",
+        reply_markup=_cancel_keyboard(),
+        parse_mode="Markdown",
+    )
+    return ASK_CLIENT_NAME
+
+
+async def receive_client_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = (update.message.text or "").strip()
+    if text.lower() == BTN_CANCEL.lower():
+        await _screen_send_or_edit(update, context, "Envío cancelado ✅")
+        _reset_flow_memory(context)
+        return ConversationHandler.END
+
+    if len(text) < 2:
+        await _screen_send_or_edit(update, context, "⚠️ Escribe un nombre válido (mínimo 2 letras):", reply_markup=_cancel_keyboard())
+        return ASK_CLIENT_NAME
+
+    await _best_effort_delete(update, context, update.message.message_id)
+    context.user_data["order"]["client_name"] = text
 
     try:
         telegram_id = update.effective_user.id
@@ -895,6 +918,8 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     rate_version_id = order_data["rate_version_id"]
     rate_client = order_data["rate_client"]
 
+    client_name = order_data.get("client_name")
+
     # Usar valor ya calculado en receive_proof (evita segunda consulta DB)
     commission_pct = order_data.get("commission_pct", Decimal("0.06"))
 
@@ -908,6 +933,22 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         async with get_async_conn() as conn:
             async with conn.transaction():
+                # 0. Get or create client
+                client_id = None
+                if client_name:
+                    async with conn.cursor() as cur:
+                        await cur.execute("SELECT id FROM clients WHERE full_name ILIKE %s LIMIT 1;", (client_name,))
+                        c_row = await cur.fetchone()
+                        if c_row:
+                            client_id = c_row[0]
+                        else:
+                            await cur.execute(
+                                "INSERT INTO clients (operator_user_id, full_name) VALUES (%s, %s) RETURNING id;",
+                                (user.id, client_name)
+                            )
+                            c_new = await cur.fetchone()
+                            client_id = c_new[0] if c_new else None
+
                 # 1. Crear orden (nace como CREADA en DB por defecto)
                 order = await create_order_tx(
                     conn,
@@ -922,7 +963,18 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     beneficiary_text=beneficiary_text,
                     origin_payment_proof_file_id=file_id,
                     initial_status="CREADA",
+                    client_id=client_id,
                 )
+
+                # 1.5 Actualizar metricas del cliente
+                if client_id:
+                    async with conn.cursor() as cur:
+                        await cur.execute(
+                            "UPDATE clients SET total_orders = total_orders + 1, "
+                            "total_volume = total_volume + %s, updated_at = now() "
+                            "WHERE id = %s;",
+                            (amount_origin, client_id)
+                        )
 
                 # 2. Cambiar estado inmediatamente (Atómico)
                 await update_order_status_tx(conn, int(order.public_id), "ORIGEN_VERIFICANDO")
@@ -1031,6 +1083,7 @@ def build_new_order_conversation() -> ConversationHandler:
     return ConversationHandler(
         entry_points=[MessageHandler(filters.Regex(rf"^{BTN_NEW_ORDER}$"), entry_from_menu)],
         states={
+            ASK_CLIENT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_client_name)],
             ASK_ORIGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_origin)],
             ASK_DEST: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_dest)],
             # Address Book menu (callback inline)
