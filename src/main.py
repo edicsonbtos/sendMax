@@ -64,7 +64,17 @@ async def lifespan(app: FastAPI):
                         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
                     );
                 """)
-        logger.info("Migración automática de tabla vaults y clients ejecutada correctamente.")
+                # Asegurar UNIQUE para UPSERT: Telegram ID o (operator_user_id, full_name)
+                # Al no tener el UUID de telegram de los emisores, unificamos con operator_user_id
+                # En PostgreSQL podemos usar ADD CONSTRAINT IF NOT EXISTS pero eso requiere versión >= 9.6, lo es
+                try:
+                    await cur.execute('ALTER TABLE clients ADD CONSTRAINT unq_operator_client UNIQUE(operator_user_id, full_name);')
+                except Exception:
+                    pass # Ignore if unique constraint already exists
+
+                # Migración de ordenes
+                await cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL;")
+        logger.info("Migración automática de tabla vaults, clients y orders ejecutada correctamente.")
 
     except asyncio.TimeoutError:
         logger.warning("Database connection timeout - bot will start anyway")

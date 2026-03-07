@@ -933,27 +933,29 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         async with get_async_conn() as conn:
             async with conn.transaction():
-                # 0. Get or create client
+                # 0. Get or create client (UPSERT robusto)
                 client_id = None
                 if client_name:
                     async with conn.cursor() as cur:
                         try:
-                            await cur.execute("SELECT id FROM clients WHERE full_name ILIKE %s LIMIT 1;", (str(client_name),))
+                            await cur.execute("""
+                                INSERT INTO clients (operator_user_id, full_name) 
+                                VALUES (%s, %s) 
+                                ON CONFLICT (operator_user_id, full_name) 
+                                DO UPDATE SET full_name = EXCLUDED.full_name, updated_at = now()
+                                RETURNING id;
+                            """, (int(user.id), str(client_name)))
+                            
                             c_row = await cur.fetchone()
                             if c_row is not None:
                                 client_id = c_row[0]
-                            else:
-                                await cur.execute(
-                                    "INSERT INTO clients (operator_user_id, full_name) VALUES (%s, %s) RETURNING id;",
-                                    (int(user.id), str(client_name))
-                                )
-                                c_new = await cur.fetchone()
-                                if c_new is not None:
-                                    client_id = c_new[0]
-                                else:
-                                    client_id = None
+                                
+                            # Importante: Consumir cualquier resultado restante para vaciar el cursor
+                            while await cur.fetchone() is not None:
+                                pass
+                                
                         except Exception as inner_e:
-                            logger.error(f"Error fetching/creating client: {inner_e}")
+                            logger.error(f"Error upserting client: {inner_e}")
                             client_id = None
 
                 # 1. Crear orden (nace como CREADA en DB por defecto)

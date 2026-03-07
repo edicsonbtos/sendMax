@@ -422,3 +422,25 @@ async def clear_awaiting_paid_proof_tx(conn: psycopg.AsyncConnection, public_id:
     async with conn.cursor() as cur:
         await cur.execute(sql, (public_id,))
         return cur.rowcount > 0
+
+
+async def get_top_clients_by_volume(limit: int = 5) -> list[dict]:
+    """
+    Obtiene los principales clientes ordenados por volumen total enviado (amount_origin),
+    considerando solo ordenes finalizadas (PAGADA o COMPLETADA).
+    """
+    sql = """
+        SELECT c.id, c.full_name, SUM(o.amount_origin) as total_volume
+        FROM clients c
+        JOIN orders o ON c.id = o.client_id
+        WHERE o.status IN ('PAGADA', 'COMPLETADA')
+        GROUP BY c.id, c.full_name
+        ORDER BY total_volume DESC
+        LIMIT %s;
+    """
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql, (limit,))
+            rows = await cur.fetchall()
+            return [{"id": r[0], "full_name": r[1], "total_volume": float(r[2] or 0)} for r in rows]
+
