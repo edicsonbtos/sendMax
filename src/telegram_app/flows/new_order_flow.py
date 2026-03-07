@@ -937,17 +937,24 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 client_id = None
                 if client_name:
                     async with conn.cursor() as cur:
-                        await cur.execute("SELECT id FROM clients WHERE full_name ILIKE %s LIMIT 1;", (client_name,))
-                        c_row = await cur.fetchone()
-                        if c_row:
-                            client_id = c_row[0]
-                        else:
-                            await cur.execute(
-                                "INSERT INTO clients (operator_user_id, full_name) VALUES (%s, %s) RETURNING id;",
-                                (user.id, client_name)
-                            )
-                            c_new = await cur.fetchone()
-                            client_id = c_new[0] if c_new else None
+                        try:
+                            await cur.execute("SELECT id FROM clients WHERE full_name ILIKE %s LIMIT 1;", (str(client_name),))
+                            c_row = await cur.fetchone()
+                            if c_row is not None:
+                                client_id = c_row[0]
+                            else:
+                                await cur.execute(
+                                    "INSERT INTO clients (operator_user_id, full_name) VALUES (%s, %s) RETURNING id;",
+                                    (int(user.id), str(client_name))
+                                )
+                                c_new = await cur.fetchone()
+                                if c_new is not None:
+                                    client_id = c_new[0]
+                                else:
+                                    client_id = None
+                        except Exception as inner_e:
+                            logger.error(f"Error fetching/creating client: {inner_e}")
+                            client_id = None
 
                 # 1. Crear orden (nace como CREADA en DB por defecto)
                 order = await create_order_tx(
