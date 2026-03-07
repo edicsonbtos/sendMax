@@ -51,7 +51,20 @@ async def lifespan(app: FastAPI):
             async with conn.cursor() as cur:
                 await cur.execute("ALTER TABLE vaults ADD COLUMN IF NOT EXISTS type VARCHAR(50);")
                 await cur.execute("ALTER TABLE vaults ADD COLUMN IF NOT EXISTS tipo VARCHAR(50);")
-        logger.info("Migración automática de tabla vaults ejecutada correctamente.")
+                
+                # Inyección de Emergencia: Crear tabla clients (Sprint 5)
+                await cur.execute("""
+                    CREATE TABLE IF NOT EXISTS clients (
+                        id SERIAL PRIMARY KEY,
+                        operator_user_id INTEGER NOT NULL,
+                        full_name VARCHAR(255) NOT NULL,
+                        total_orders INTEGER DEFAULT 0,
+                        total_volume NUMERIC(16, 2) DEFAULT 0,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    );
+                """)
+        logger.info("Migración automática de tabla vaults y clients ejecutada correctamente.")
 
     except asyncio.TimeoutError:
         logger.warning("Database connection timeout - bot will start anyway")
