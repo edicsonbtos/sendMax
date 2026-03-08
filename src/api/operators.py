@@ -255,6 +255,58 @@ async def list_my_orders(
         for r in rows
     ]
 
+class OrderDetailResponse(BaseModel):
+    public_id: int
+    status: str
+    created_at: datetime
+    origin_country: str
+    amount_origin: Decimal
+    client_name: str
+    dest_country: str
+    amount_dest: Decimal
+    beneficiary_text: str
+    notes: Optional[str] = None
+
+@router.get("/orders/{public_id}", response_model=OrderDetailResponse)
+async def get_my_order_detail(
+    public_id: int,
+    user_id: int = Depends(get_current_operator),
+):
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT 
+                    o.public_id, o.status, o.created_at,
+                    o.origin_country, o.amount_origin,
+                    COALESCE(c.full_name, 'Desconocido') as client_name,
+                    o.dest_country, o.payout_dest,
+                    COALESCE(o.beneficiary_text, 'No especificado'),
+                    o.notes
+                FROM orders o
+                LEFT JOIN clients c ON o.client_id = c.id
+                WHERE o.public_id = %s AND o.operator_user_id = %s
+                """,
+                (public_id, user_id)
+            )
+            row = await cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Orden no encontrada")
+                
+            return OrderDetailResponse(
+                public_id=row[0],
+                status=row[1],
+                created_at=row[2],
+                origin_country=row[3],
+                amount_origin=row[4],
+                client_name=row[5],
+                dest_country=row[6],
+                amount_dest=row[7],
+                beneficiary_text=row[8],
+                notes=row[9]
+            )
+
+
 class WalletSummaryResponse(BaseModel):
     balance_usdt: Decimal
     lifetime_earnings_usdt: Decimal
