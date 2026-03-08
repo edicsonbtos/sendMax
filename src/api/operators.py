@@ -12,7 +12,7 @@ from src.db.repositories.users_repo import get_payout_method
 from src.db.repositories.withdrawals_repo import WithdrawalsRepo
 from src.db.repositories import rates_repo
 from src.config.settings import settings
-from src.telegram_app.bot import get_bot
+from telegram import Bot
 
 router = APIRouter(prefix="/api/operators", tags=["operators"])
 logger = logging.getLogger(__name__)
@@ -438,7 +438,7 @@ async def request_withdrawal(
         
         if admin_chat_id:
             from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-            bot = get_bot()
+            bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
             admin_text = (
                 "💸 Retiro SOLICITADO (Desde Web)\n\n"
                 f"Operador: {alias}\n"
