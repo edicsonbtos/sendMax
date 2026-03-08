@@ -10,6 +10,13 @@ interface WalletSummary {
     pending_withdrawals: number;
 }
 
+interface WithdrawInfo {
+    country: string;
+    method_text: string;
+    available_balance: number;
+    formatted_balance: string;
+}
+
 interface Withdrawal {
     id: string;
     amount: number;
@@ -25,12 +32,11 @@ export default function BilleteraPage() {
     const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
     const [loading, setLoading] = useState(true);
     const [showWithdrawForm, setShowWithdrawForm] = useState(false);
+    const [withdrawInfo, setWithdrawInfo] = useState<WithdrawInfo | null>(null);
+    const [infoLoading, setInfoLoading] = useState(false);
 
     // Form state
     const [amount, setAmount] = useState("");
-    const [method, setMethod] = useState("bank_transfer");
-    const [account, setAccount] = useState("");
-    const [notes, setNotes] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
@@ -59,6 +65,25 @@ export default function BilleteraPage() {
         }
     };
 
+    const handleToggleForm = async () => {
+        if (!showWithdrawForm) {
+            setInfoLoading(true);
+            setError("");
+            setSuccess("");
+            try {
+                const res = await api.get("/api/operators/wallet/withdraw-info");
+                setWithdrawInfo(res.data);
+                setShowWithdrawForm(true);
+            } catch (err: any) {
+                setError(err.response?.data?.detail || "Asegúrate de tener un método de cobro (KYC) configurado.");
+            } finally {
+                setInfoLoading(false);
+            }
+        } else {
+            setShowWithdrawForm(false);
+        }
+    };
+
     const handleSubmitWithdraw = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
@@ -66,20 +91,18 @@ export default function BilleteraPage() {
         setSubmitting(true);
 
         try {
-            // FIXED: Usar api.post() del cliente real
+            // FIXED: Modificado para sólo enviar amount_usdt al nuevo API 100% transaccional
             const response = await api.post("/api/operators/wallet/withdraw", {
                 amount_usdt: parseFloat(amount),
-                withdrawal_method: method,
-                account_info: account,
-                notes: notes,
+                withdrawal_method: "", // Obsoleto (ahora interno en base a KYC)
+                account_info: "", // Obsoleto
+                notes: "", // Obsoleto
             });
 
             setSuccess(response.data.message || "Retiro solicitado exitosamente");
 
             // Limpiar form
             setAmount("");
-            setAccount("");
-            setNotes("");
             setShowWithdrawForm(false);
 
             // Recargar datos
@@ -123,10 +146,11 @@ export default function BilleteraPage() {
                     <p className="text-white/60">Gestiona tus fondos y retiros</p>
                 </div>
                 <button
-                    onClick={() => setShowWithdrawForm(!showWithdrawForm)}
-                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all transform hover:scale-105 shadow-lg"
+                    onClick={handleToggleForm}
+                    disabled={infoLoading}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-wait"
                 >
-                    {showWithdrawForm ? "Cancelar" : "Solicitar Retiro"}
+                    {infoLoading ? "Cargando..." : showWithdrawForm ? "Cancelar" : "Solicitar Retiro"}
                 </button>
             </div>
 
@@ -176,81 +200,61 @@ export default function BilleteraPage() {
             </div>
 
             {/* Formulario de retiro */}
-            {showWithdrawForm && (
+            {showWithdrawForm && withdrawInfo && (
                 <div className="card-glass p-6">
                     <h2 className="text-xl font-bold text-white mb-4">Solicitar Retiro</h2>
-                    <form onSubmit={handleSubmitWithdraw} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-white/80 text-sm mb-2">
-                                    Monto (USDT)
-                                </label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0.01"
-                                    required
-                                    value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
-                                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                                    placeholder="0.00"
-                                />
-                                <p className="text-white/40 text-xs mt-1">
-                                    Disponible: ${safeToFixed(summary?.balance_usdt, 2)}
-                                </p>
+                    <form onSubmit={handleSubmitWithdraw} className="space-y-6">
+                        {/* Info Destino Bloqueado */}
+                        <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                            <h3 className="text-sm font-medium text-white/60 mb-3 uppercase tracking-wider">
+                                Destino del Retiro (Datos de KYC)
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <p className="text-xs text-white/40 mb-1">País destino</p>
+                                    <p className="text-white font-medium bg-black/20 px-3 py-2 rounded-lg border border-white/5">
+                                        {withdrawInfo.country}
+                                    </p>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <p className="text-xs text-white/40 mb-1">Detalles de la cuenta / billetera</p>
+                                    <p className="text-white bg-black/20 px-3 py-2 rounded-lg border border-white/5 whitespace-pre-wrap font-mono text-sm">
+                                        {withdrawInfo.method_text}
+                                    </p>
+                                </div>
                             </div>
-
-                            <div>
-                                <label className="block text-white/80 text-sm mb-2">
-                                    Método de Retiro
-                                </label>
-                                <select
-                                    value={method}
-                                    onChange={(e) => setMethod(e.target.value)}
-                                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                                >
-                                    <option value="bank_transfer">Transferencia Bancaria</option>
-                                    <option value="crypto_usdt">USDT (Crypto)</option>
-                                    <option value="paypal">PayPal</option>
-                                    <option value="zelle">Zelle</option>
-                                    <option value="binance">Binance</option>
-                                </select>
-                            </div>
+                            <p className="text-xs text-yellow-500/80 mt-3 italic flex items-center gap-1">
+                                <span className="inline-block w-2 h-2 rounded-full bg-yellow-500"></span>
+                                Tu dinero será enviado a esta cuenta automáticamente por un agente de envío verificado. Para cambiarla, contacta a un administrador.
+                            </p>
                         </div>
 
                         <div>
                             <label className="block text-white/80 text-sm mb-2">
-                                Cuenta / Dirección
+                                Monto (USDT)
                             </label>
                             <input
-                                type="text"
+                                type="number"
+                                step="0.01"
+                                min="10.00"
                                 required
-                                value={account}
-                                onChange={(e) => setAccount(e.target.value)}
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                                placeholder="Número de cuenta, dirección wallet, email, etc."
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white font-bold text-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                                placeholder="0.00"
                             />
-                        </div>
-
-                        <div>
-                            <label className="block text-white/80 text-sm mb-2">
-                                Notas (Opcional)
-                            </label>
-                            <textarea
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                                rows={3}
-                                placeholder="Información adicional..."
-                            />
+                            <p className="text-white/40 text-xs mt-2 flex justify-between">
+                                <span>Mínimo: $10.00 USDT</span>
+                                <span>Disponible real: <strong className="text-green-400">{withdrawInfo.formatted_balance}</strong></span>
+                            </p>
                         </div>
 
                         <button
                             type="submit"
                             disabled={submitting}
-                            className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(59,130,246,0.3)]"
                         >
-                            {submitting ? "Procesando..." : "Confirmar Retiro"}
+                            {submitting ? "Procesando..." : `Confirmar Retiro`}
                         </button>
                     </form>
                 </div>

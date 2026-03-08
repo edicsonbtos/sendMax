@@ -8,6 +8,11 @@ from uuid import uuid4
 import json
 
 from src.db.connection import get_async_conn
+from src.db.repositories.users_repo import get_payout_method
+from src.db.repositories.withdrawals_repo import WithdrawalsRepo
+from src.db.repositories import rates_repo
+from src.config.settings import settings
+from src.telegram_app.bot import get_bot
 
 router = APIRouter(prefix="/api/operators", tags=["operators"])
 logger = logging.getLogger(__name__)
@@ -327,6 +332,40 @@ async def get_wallet_ledger(limit: int = 50, user_id: int = Depends(get_current_
         logger.warning(f"Wallet ledger table read failed: {e}")
     return items
 
+class WithdrawInfoResponse(BaseModel):
+    country: str
+    method_text: str
+    available_balance: Decimal
+    formatted_balance: str
+
+@router.get("/wallet/withdraw-info", response_model=WithdrawInfoResponse)
+async def get_withdraw_info(user_id: int = Depends(get_current_operator)):
+    """
+    Obtiene la informacion del metodo de pago del KYC y el balance real
+    para bloquear el formulario de retiro web.
+    """
+    country, method_text = await get_payout_method(user_id)
+    if not country or not method_text:
+        raise HTTPException(
+            status_code=400,
+            detail="No tienes metodo de cobro configurado. Completa tu KYC."
+        )
+
+    # Buscar el balance validado
+    async with get_async_conn() as conn:
+        async with conn.cursor() as cur:
+            # Replicar query que haya existido de obtener saldo en billetera
+            await cur.execute("SELECT balance_usdt FROM wallets WHERE user_id = %s", (user_id,))
+            row = await cur.fetchone()
+            available = row[0] if row else Decimal("0")
+
+    return WithdrawInfoResponse(
+        country=country,
+        method_text=method_text,
+        available_balance=available,
+        formatted_balance=f"{available:.2f} USDT"
+    )
+
 class WithdrawRequest(BaseModel):
     """Modelo para solicitud de retiro"""
     amount_usdt: Decimal
@@ -341,103 +380,89 @@ async def request_withdrawal(
 ):
     """
     Solicita un retiro de fondos de la billetera del operador.
-    
-    Validaciones:
-    - El monto debe ser mayor a 0
-    - El operador debe tener saldo suficiente
-    - El método de retiro debe ser válido
-    - KYC debe estar aprobado
+    Usa el motor transaccional de WithdrawalsRepo y los datos de KYC.
     """
-    async with get_async_conn() as conn:
-        async with conn.cursor() as cur:
-            # 1. Verificar saldo disponible
-            await cur.execute(
-                """
-                SELECT COALESCE(SUM(
-                    CASE 
-                        WHEN type IN ('ORDER_COMMISSION', 'BONUS', 'ADJUSTMENT_CREDIT') THEN amount_usdt
-                        WHEN type IN ('WITHDRAWAL_APPROVED', 'WITHDRAWAL_PENDING', 'ADJUSTMENT_DEBIT') THEN -amount_usdt
-                        ELSE 0
-                    END
-                ), 0) as available_balance
-                FROM wallet_ledger
-                WHERE operator_id = %s
-                """,
-                (user_id,)
-            )
-            row = await cur.fetchone()
-            available_balance = row[0] if row else Decimal("0")
-            
-            # 2. Validar monto
-            if req.amount_usdt <= 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="El monto debe ser mayor a 0"
-                )
-            
-            if req.amount_usdt > available_balance:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Saldo insuficiente. Disponible: ${available_balance:.2f} USDT"
-                )
-            
-            # 3. Validar método
-            valid_methods = ["bank_transfer", "crypto_usdt", "paypal", "zelle", "binance"]
-            if req.withdrawal_method not in valid_methods:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Método inválido. Use: {', '.join(valid_methods)}"
-                )
-            
-            # 4. Verificar KYC
-            await cur.execute(
-                "SELECT kyc_status FROM users WHERE id = %s",
-                (user_id,)
-            )
-            kyc_row = await cur.fetchone()
-            if not kyc_row or kyc_row[0] != 'APPROVED':
-                raise HTTPException(
-                    status_code=403,
-                    detail="KYC no aprobado. Contacta soporte."
-                )
-            
-            # 5. Crear registro de retiro en wallet_ledger
-            await cur.execute(
-                """
-                INSERT INTO wallet_ledger (
-                    user_id, type, amount_usdt, 
-                    memo, created_at
-                )
-                VALUES (%s, %s, %s, %s, NOW())
-                RETURNING id
-                """,
-                (
-                    user_id,
-                    "WITHDRAWAL_PENDING",
-                    req.amount_usdt,
-                    json.dumps({
-                        "method": req.withdrawal_method,
-                        "account": req.account_info,
-                        "notes": req.notes,
-                        "status": "pending",
-                        "text": f"Retiro solicitado vía {req.withdrawal_method}"
-                    })
-                )
-            )
-            
-            new_id_row = await cur.fetchone()
-            withdrawal_id = str(new_id_row[0]) if new_id_row else ""
+    if req.amount_usdt < 10:
+        raise HTTPException(status_code=400, detail="El monto mínimo de retiro es 10 USDT")
 
-            
-            await conn.commit()
-            
-            return {
-                "status": "success",
-                "message": "Solicitud de retiro enviada. Será procesada en 24-48 horas.",
-                "withdrawal_id": withdrawal_id,
-                "amount": float(req.amount_usdt),
-                "new_balance": float(available_balance - req.amount_usdt)
-            }
+    country, dest_text = await get_payout_method(user_id)
+    if not country or not dest_text:
+        raise HTTPException(status_code=400, detail="No tienes método de cobro configurado. Completa tu KYC.")
+
+    # Obtener tasa activa del pais
+    result = await rates_repo.get_latest_active_country_sell(country=country)
+    if not result:
+        raise HTTPException(status_code=400, detail=f"No hay tasa de venta activa para {country}")
+    
+    fiat, sell_price = result
+    sell_price = Decimal(str(sell_price))
+    fiat_amount = (req.amount_usdt * sell_price).quantize(Decimal("0.01"))
+
+    withdrawal_id = None
+    alias = "Operador"
+    try:
+        async with get_async_conn() as conn:
+            # check kyc 
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT kyc_status, alias FROM users WHERE id = %s", (user_id,))
+                kyc_row = await cur.fetchone()
+                if not kyc_row or kyc_row[0] != 'APPROVED':
+                    raise HTTPException(status_code=403, detail="KYC no aprobado.")
+                alias = kyc_row[1]
+
+            repo = WithdrawalsRepo(conn)
+            try:
+                withdrawal_id = await repo.create_withdrawal_request_fiat(
+                    user_id=user_id,
+                    amount_usdt=req.amount_usdt,
+                    country=country,
+                    fiat=fiat,
+                    fiat_amount=fiat_amount,
+                    dest_text=dest_text,
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error procesando retiro web: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al procesar el retiro")
+
+    # Notificar a los administradores via Telegram
+    try:
+        admin_chat_id = settings.PAYMENTS_TELEGRAM_CHAT_ID
+        if not admin_chat_id:
+            admin_ids = settings.admin_user_ids
+            if admin_ids:
+                admin_chat_id = next(iter(admin_ids))
+        
+        if admin_chat_id:
+            from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+            bot = get_bot()
+            admin_text = (
+                "💸 Retiro SOLICITADO (Desde Web)\n\n"
+                f"Operador: {alias}\n"
+                f"País: {country}\n"
+                f"Monto: {req.amount_usdt:.8f} USDT\n"
+                f"Estimado: {fiat_amount:.2f} {fiat}\n"
+                f"Destino (KYC):\n{dest_text}\n\n"
+                f"ID: {withdrawal_id}"
+            )
+            kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Aprobar", callback_data=f"wd_admin_appr:{withdrawal_id}"),
+                InlineKeyboardButton("❌ Rechazar", callback_data=f"wd_admin_rej:{withdrawal_id}"),
+            ]])
+            await bot.send_message(chat_id=int(admin_chat_id), text=admin_text, reply_markup=kb)
+    except Exception as e:
+        logger.error(f"Error notificando admin sobre retiro web {withdrawal_id}: {e}")
+
+    return {
+        "status": "success",
+        "message": "Solicitud de retiro enviada. Será procesada en 24-48 horas.",
+        "withdrawal_id": str(withdrawal_id),
+        "amount": float(req.amount_usdt),
+    }
+
 
 @router.get("/wallet/withdrawals")
 async def get_withdrawals(
