@@ -1,84 +1,68 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKOFFICE_API_BASE || '';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-if (typeof window !== 'undefined') {
-  console.log("NEXT_PUBLIC_API_URL detectada:", process.env.NEXT_PUBLIC_API_URL);
-  console.log("NEXT_PUBLIC_BACKOFFICE_API_BASE detectada:", process.env.NEXT_PUBLIC_BACKOFFICE_API_BASE);
-  console.log("API_BASE resultante:", API_BASE);
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
-  if (!API_BASE) {
-    console.error("CRÍTICO: API_BASE está vacía. Las peticiones al backend fallarán (404).");
-  }
-}
-
-export function getToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('auth_token');
-}
-
-export function getApiKey(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('BACKOFFICE_API_KEY');
-}
-
-export async function apiRequest<T = unknown>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const token = getToken();
-  const apiKey = getApiKey();
-
-  const headers: Record<string, string> = {
+const api = axios.create({
+  baseURL: API_BASE,
+  headers: {
     'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> || {}),
-  };
+  },
+  timeout: 30000,
+});
 
-  if (token) {
-    headers['Authorization'] = 'Bearer ' + token;
-  }
+let isRedirecting = false;
 
-  if (apiKey) {
-    headers['X-API-KEY'] = apiKey;
-  }
+// Request Interceptor: Inject tokens
+api.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
+      const apiKey = localStorage.getItem('api_key');
 
-  const response = await fetch(API_BASE + endpoint, {
-    ...options,
-    headers,
-  });
+      if (token && config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      if (apiKey && config.headers) {
+        config.headers['X-API-KEY'] = apiKey;
+      }
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      if (typeof window !== 'undefined' && !endpoint.includes('/auth/login')) {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_role');
-        localStorage.removeItem('auth_name');
+// Response Interceptor: Handle errors
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (error.response?.status === 401 && !isRedirecting) {
+      isRedirecting = true;
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('token');
+        localStorage.removeItem('admin_user');
         window.location.href = '/login';
       }
-      const errorText = await response.text().catch(() => '');
-      throw new Error(errorText || 'UNAUTHORIZED');
+      setTimeout(() => { isRedirecting = false; }, 3000);
     }
-    const errorText = await response.text().catch(() => '');
-    throw new Error(errorText || 'HTTP ' + response.status);
+    return Promise.reject(error);
   }
+);
 
-  return response.json();
-}
+export default api;
 
-export async function apiGet<T>(endpoint: string): Promise<T> {
-  return apiRequest<T>(endpoint, { method: 'GET' });
-}
+// Helper exports
+export const apiGet = <T = any>(url: string, config = {}) =>
+  api.get<T>(url, config);
 
-export async function apiPost<T>(endpoint: string, body: unknown): Promise<T> {
-  return apiRequest<T>(endpoint, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
+export const apiPost = <T = any>(url: string, data?: any, config = {}) =>
+  api.post<T>(url, data, config);
 
-export async function apiPut<T>(endpoint: string, body: unknown): Promise<T> {
-  return apiRequest<T>(endpoint, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  });
-}
+export const apiPut = <T = any>(url: string, data?: any, config = {}) =>
+  api.put<T>(url, data, config);
 
-export { API_BASE };
+export const apiDelete = <T = any>(url: string, config = {}) =>
+  api.delete<T>(url, config);
+
+export const apiPatch = <T = any>(url: string, data?: any, config = {}) =>
+  api.patch<T>(url, data, config);
