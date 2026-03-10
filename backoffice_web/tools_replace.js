@@ -1,4 +1,19 @@
-'use client';
+const fs = require('fs');
+const path = require('path');
+
+const filesToReplace = [
+    'src/app/users/[id]/page.tsx',
+    'src/app/settings/page.tsx',
+    'src/app/routes/page.tsx',
+    'src/app/payment-methods/page.tsx',
+    'src/app/orders/[id]/page.tsx',
+    'src/app/origin/page.tsx',
+    'src/app/operator-office/page.tsx',
+    'src/app/metrics/page.tsx',
+    'src/app/daily-close/page.tsx'
+];
+
+const placeholderCode = `'use client';
 import React from 'react';
 import { Settings, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -14,7 +29,7 @@ export default function PlaceholderPage() {
       <p className="text-gray-400 max-w-md mb-8">
         Esta sección está siendo reescrita con el nuevo diseño Glassmorphism 10x y estará disponible próximamente en la Fase 4.
       </p>
-      <button
+      <button 
         onClick={() => router.back()}
         className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-white font-bold hover:bg-white/10 transition-colors"
       >
@@ -22,4 +37,14 @@ export default function PlaceholderPage() {
       </button>
     </div>
   );
-}
+}`;
+
+filesToReplace.forEach(file => {
+    const fullPath = path.join(process.cwd(), file);
+    if (fs.existsSync(fullPath)) {
+        fs.writeFileSync(fullPath, placeholderCode);
+        console.log(`Replaced: ${file}`);
+    } else {
+        console.log(`Not found (skipped): ${file}`);
+    }
+});

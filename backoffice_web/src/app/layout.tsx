@@ -1,25 +1,23 @@
 ﻿import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
-import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
-import { ThemeProvider } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
-import theme from './theme';
-import { AuthProvider } from '@/components/AuthProvider';
-import LayoutShell from '@/components/LayoutShell';
+import { Toaster } from 'react-hot-toast';
 
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-inter",
+const geistSans = localFont({
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist-sans",
+  weight: "100 900",
+});
+
+const geistMono = localFont({
+  src: "./fonts/GeistMonoVF.woff",
+  variable: "--font-geist-mono",
+  weight: "100 900",
 });
 
 export const metadata: Metadata = {
-  title: "Sendmax Backoffice",
-  description: "Panel de administracion Sendmax - Gestion de ordenes, billeteras y cierres",
-  icons: {
-    icon: "/logo.png",
-  },
+  title: "Admin Dashboard 10x",
+  description: "Panel de administración empresarial",
 };
 
 export default function RootLayout({
@@ -28,17 +26,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={inter.variable}>
-      <body className={inter.className}>
-        <AppRouterCacheProvider>
-          <ThemeProvider theme={theme}>
-            <CssBaseline />
-            <AuthProvider>
-              <LayoutShell>{children}</LayoutShell>
-            </AuthProvider>
-          </ThemeProvider>
-        </AppRouterCacheProvider>
+    <html lang="es">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        {children}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            style: {
+              background: '#1a2332',
+              color: '#fff',
+              border: '1px solid rgba(255,255,255,0.1)',
+            },
+          }}
+        />
       </body>
     </html>
   );
 }
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;

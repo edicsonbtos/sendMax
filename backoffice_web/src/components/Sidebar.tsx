@@ -1,54 +1,51 @@
-﻿"use client";
+﻿'use client';
 
 import React, { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  Button, Drawer, List, ListItem, ListItemButton, ListItemIcon,
-  ListItemText, Box, Typography, Divider, Avatar, Stack, Chip,
-  IconButton, useMediaQuery, useTheme,
-} from "@mui/material";
-import {
-  Dashboard as DashboardIcon, Receipt as ReceiptIcon,
-  AccountBalance as WalletIcon, EventNote as CalendarIcon,
-  Settings as SettingsIcon, Assessment as MetricsIcon,
-  Menu as MenuIcon, Close as CloseIcon, Logout as LogoutIcon,
-  People as PeopleIcon,
-} from "@mui/icons-material";
 import { useAuth } from "@/components/AuthProvider";
-
-const drawerWidth = 264;
+import {
+  BarChart,
+  ReceiptSquare,
+  Wallet,
+  Settings,
+  LineChart,
+  Calendar,
+  Users,
+  CreditCard,
+  LogOut,
+  Menu,
+  X
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const adminMenu = [
-  { text: "Overview", path: "/", icon: <DashboardIcon />, description: "Dashboard principal" },
-  { text: "Ordenes", path: "/orders", icon: <ReceiptIcon />, description: "Gestionar ordenes" },
-  { text: "Billeteras Origen", path: "/origin", icon: <WalletIcon />, description: "Entradas y sweeps" },
-  { text: "Metricas", path: "/metrics", icon: <MetricsIcon />, description: "Profit y volumen" },
-  { text: "Cierre Diario", path: "/daily-close", icon: <CalendarIcon />, description: "Reportes y cierres" },
-  { text: "Usuarios", path: "/users", icon: <PeopleIcon />, description: "Gestionar operadores" },
-  { text: "Rutas Comision", path: "/routes", icon: <ReceiptIcon />, description: "Margenes por ruta" },
-  { text: "Configuracion", path: "/settings", icon: <SettingsIcon />, description: "Reglas y margenes" },
-  { text: "Metodos de Pago", path: "/payment-methods", icon: <WalletIcon />, description: "Metodos por pais" },
+  { text: "Overview", path: "/", icon: BarChart, description: "Dashboard principal" },
+  { text: "Órdenes", path: "/orders", icon: ReceiptSquare, description: "Gestionar órdenes" },
+  { text: "Billeteras Origen", path: "/origin", icon: Wallet, description: "Entradas y sweeps" },
+  { text: "Métricas", path: "/metrics", icon: LineChart, description: "Profit y volumen" },
+  { text: "Cierre Diario", path: "/daily-close", icon: Calendar, description: "Reportes y cierres" },
+  { text: "Usuarios", path: "/users", icon: Users, description: "Gestionar operadores" },
+  { text: "Rutas Comisión", path: "/routes", icon: ReceiptSquare, description: "Márgenes por ruta" },
+  { text: "Configuración", path: "/settings", icon: Settings, description: "Reglas y márgenes" },
+  { text: "Métodos de Pago", path: "/payment-methods", icon: CreditCard, description: "Métodos por país" },
 ];
 
 const operatorMenu = [
-  { text: "Mi Dashboard", path: "/", icon: <DashboardIcon />, description: "Mis metricas" },
-  { text: "Mis Ordenes", path: "/orders", icon: <ReceiptIcon />, description: "Mis operaciones" },
-  { text: "Metricas", path: "/metrics", icon: <MetricsIcon />, description: "Mi rendimiento" },
+  { text: "Mi Dashboard", path: "/", icon: BarChart, description: "Mis métricas" },
+  { text: "Mis Órdenes", path: "/orders", icon: ReceiptSquare, description: "Mis operaciones" },
+  { text: "Métricas", path: "/metrics", icon: LineChart, description: "Mi rendimiento" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boolean, setMobileOpen: (open: boolean) => void }) {
   const pathname = usePathname();
   const router = useRouter();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const [mobileOpen, setMobileOpen] = useState(false);
   const { logout, fullName, role, token } = useAuth();
 
   const menuItems = (role === "admin" || role === "superadmin") ? adminMenu : operatorMenu;
 
   const handleNav = (path: string) => {
     router.push(path);
-    if (isMobile) setMobileOpen(false);
+    setMobileOpen(false);
   };
 
   const getInitials = (name: string | null) => {
@@ -56,180 +53,125 @@ export default function Sidebar() {
     return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
   };
 
-  const drawerContent = (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+  const SidebarContent = (
+    <div className="flex flex-col h-full bg-[#0a0f1e] border-r border-[#ffffff14] w-[264px] shrink-0">
       {/* Logo Header */}
-      <Box sx={{ p: 2.5, display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(0,229,255,0.1)" }}>
-        <Box onClick={() => handleNav("/")} sx={{ display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer", transition: "opacity 0.2s ease", "&:hover": { opacity: 0.8 } }}>
-          <Box component="img" src="/logo.png" alt="Sendmax" sx={{ height: 36, width: "auto", objectFit: "contain" }} />
-          <Stack spacing={0}>
-            <Typography variant="h6" sx={{ fontWeight: 700, color: "#00E5FF", fontSize: "1.1rem", lineHeight: 1.2, letterSpacing: "-0.01em" }}>Sendmax</Typography>
-            <Typography variant="caption" sx={{ color: "#7B2FBE", fontSize: "0.65rem", lineHeight: 1, letterSpacing: "0.05em", textTransform: "uppercase" }}>Backoffice</Typography>
-          </Stack>
-        </Box>
-        {isMobile && (<IconButton onClick={() => setMobileOpen(false)} size="small" sx={{ color: "#00E5FF" }}><CloseIcon /></IconButton>)}
-      </Box>
+      <div className="p-5 flex items-center justify-between border-b border-[#06b6d41a]">
+        <div
+          onClick={() => handleNav("/")}
+          className="flex items-center gap-3 cursor-pointer transition-opacity hover:opacity-80"
+        >
+          <img src="/logo.png" alt="Sendmax" className="h-9 w-auto object-contain" />
+          <div className="flex flex-col">
+            <h2 className="font-bold text-[#06b6d4] text-[1.1rem] leading-[1.2] tracking-tight">Sendmax</h2>
+            <span className="text-[#8b5cf6] text-[0.65rem] leading-none tracking-wider uppercase font-medium">Backoffice</span>
+          </div>
+        </div>
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="md:hidden text-[#06b6d4] hover:bg-[#06b6d41a] p-1.5 rounded-lg transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
 
       {/* Navigation Menu */}
-      <List sx={{ px: 1.5, py: 2, flex: 1 }}>
-        {menuItems.map((item) => {
-          const isActive = item.path === "/" ? pathname === "/" : pathname.startsWith(item.path);
-          return (
-            <ListItem key={item.path} disablePadding sx={{ mb: 0.5 }}>
-              <ListItemButton
-                onClick={() => handleNav(item.path)}
-                sx={{
-                  borderRadius: "12px",
-                  py: 1.25,
-                  px: 1.5,
-                  backgroundColor: isActive ? "rgba(0,229,255,0.08)" : "transparent",
-                  border: isActive ? "1px solid rgba(0,229,255,0.2)" : "1px solid transparent",
-                  "&:hover": {
-                    backgroundColor: isActive ? "rgba(0,229,255,0.12)" : "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(0,229,255,0.15)"
-                  },
-                  transition: "all 0.2s ease"
-                }}>
-                <ListItemIcon sx={{ color: isActive ? "#00E5FF" : "#888", minWidth: 36, "& .MuiSvgIcon-root": { fontSize: 20 } }}>{item.icon}</ListItemIcon>
-                <ListItemText
-                  primary={item.text}
-                  secondary={!isActive ? item.description : undefined}
-                  primaryTypographyProps={{
-                    fontSize: "0.875rem",
-                    fontWeight: isActive ? 700 : 500,
-                    color: isActive ? "#00E5FF" : "#e0e0e0",
-                    lineHeight: 1.3
-                  }}
-                  secondaryTypographyProps={{
-                    fontSize: "0.65rem",
-                    color: "#555",
-                    lineHeight: 1.2,
-                    mt: 0.25
-                  }}
-                />
-                {isActive && (<Box sx={{ width: 4, height: 24, borderRadius: 2, backgroundColor: "#00E5FF", ml: 1, boxShadow: "0 0 8px rgba(0,229,255,0.5)" }} />)}
-              </ListItemButton>
-            </ListItem>
-          );
-        })}
-      </List>
+      <div className="flex-1 overflow-y-auto px-3 py-4 custom-scrollbar">
+        <ul className="space-y-1">
+          {menuItems.map((item) => {
+            const isActive = item.path === "/" ? pathname === "/" : pathname.startsWith(item.path);
+            const Icon = item.icon;
 
-      <Divider sx={{ borderColor: "rgba(0,229,255,0.1)", mx: 2 }} />
+            return (
+              <li key={item.path}>
+                <button
+                  onClick={() => handleNav(item.path)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group text-left relative",
+                    isActive
+                      ? "bg-[#06b6d414] border border-[#06b6d433] text-[#06b6d4]"
+                      : "bg-transparent border border-transparent text-gray-300 hover:bg-[#ffffff08] hover:text-white"
+                  )}
+                >
+                  <div className={cn(
+                    "min-w-6 flex items-center justify-center transition-colors",
+                    isActive ? "text-[#06b6d4]" : "text-gray-500 group-hover:text-gray-300"
+                  )}>
+                    <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                  </div>
+
+                  <div className="flex flex-col">
+                    <span className={cn(
+                      "text-sm tracking-tight",
+                      isActive ? "font-bold" : "font-medium"
+                    )}>
+                      {item.text}
+                    </span>
+                    {!isActive && (
+                      <span className="text-[0.65rem] text-gray-500 mt-0.5 leading-[1.2]">
+                        {item.description}
+                      </span>
+                    )}
+                  </div>
+
+                  {isActive && (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-1 h-6 rounded bg-[#06b6d4] shadow-[0_0_8px_rgba(6,182,212,0.5)]" />
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <div className="mx-4 border-t border-[#06b6d41a]" />
 
       {/* User Profile Footer */}
-      <Box sx={{ p: 2, pb: 2.5 }}>
+      <div className="p-4 pb-5">
         {token && (
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<LogoutIcon />}
+          <button
             onClick={logout}
-            sx={{
-              mb: 1.5,
-              borderColor: "rgba(255,107,107,0.3)",
-              color: "#ff6b6b",
-              fontSize: "0.8rem",
-              "&:hover": {
-                borderColor: "#ff6b6b",
-                backgroundColor: "rgba(255,107,107,0.08)"
-              }
-            }}
+            className="w-full flex items-center justify-center gap-2 mb-4 px-4 py-2 border border-[#ef44444d] text-[#ef4444] rounded-xl text-sm font-medium hover:bg-[#ef444414] hover:border-[#ef4444] transition-colors"
           >
-            Cerrar Sesion
-          </Button>
+            <LogOut size={16} />
+            Cerrar Sesión
+          </button>
         )}
-        <Stack direction="row" alignItems="center" spacing={1.5}>
-          <Avatar sx={{
-            width: 32,
-            height: 32,
-            backgroundColor: "rgba(0,229,255,0.15)",
-            color: "#00E5FF",
-            fontSize: "0.75rem",
-            fontWeight: 700,
-            border: "1px solid rgba(0,229,255,0.3)"
-          }}>
+
+        <div className="flex items-center gap-3 p-2 rounded-xl bg-[#ffffff05] border border-[#ffffff0a]">
+          <div className="w-9 h-9 rounded-full bg-[#06b6d426] text-[#06b6d4] flex items-center justify-center text-xs font-bold border border-[#06b6d44d]">
             {getInitials(fullName)}
-          </Avatar>
-          <Stack spacing={0}>
-            <Typography variant="caption" sx={{ color: "#e0e0e0", fontWeight: 600, fontSize: "0.75rem", lineHeight: 1.2 }}>{fullName || "Usuario"}</Typography>
-            <Typography variant="caption" sx={{ color: "#7B2FBE", fontSize: "0.65rem", lineHeight: 1.2 }}>{role === "admin" ? "Administrador" : "Operador"}</Typography>
-          </Stack>
-        </Stack>
-        <Chip
-          label="v1.3.0"
-          size="small"
-          sx={{
-            mt: 1.5,
-            backgroundColor: "rgba(123,47,190,0.15)",
-            color: "#7B2FBE",
-            fontWeight: 600,
-            fontSize: "0.65rem",
-            height: 20,
-            border: "1px solid rgba(123,47,190,0.3)"
-          }}
-        />
-      </Box>
-    </Box>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-gray-200 font-semibold text-xs leading-[1.2]">
+              {fullName || "Usuario"}
+            </span>
+            <span className="text-[#8b5cf6] text-[0.65rem] leading-[1.2] font-medium">
+              {role === "admin" ? "Administrador" : "Operador"}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 
   return (
     <>
-      {isMobile && (
-        <IconButton
-          onClick={() => setMobileOpen(true)}
-          sx={{
-            position: "fixed",
-            top: 12,
-            left: 12,
-            zIndex: 1300,
-            backgroundColor: "#0a0a0a",
-            border: "1px solid rgba(0,229,255,0.2)",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-            "&:hover": {
-              backgroundColor: "#111",
-              borderColor: "#00E5FF"
-            }
-          }}
-        >
-          <MenuIcon sx={{ color: "#00E5FF" }} />
-        </IconButton>
+      {/* Mobile Backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          onClick={() => setMobileOpen(false)}
+        />
       )}
-      {isMobile ? (
-        <Drawer
-          variant="temporary"
-          open={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          ModalProps={{ keepMounted: true }}
-          sx={{
-            "& .MuiDrawer-paper": {
-              width: drawerWidth,
-              boxSizing: "border-box",
-              background: "linear-gradient(180deg, #0a0a0a 0%, #050505 100%)",
-              borderRight: "1px solid rgba(0,229,255,0.1)"
-            }
-          }}
-        >
-          {drawerContent}
-        </Drawer>
-      ) : (
-        <Drawer
-          variant="permanent"
-          sx={{
-            width: drawerWidth,
-            flexShrink: 0,
-            "& .MuiDrawer-paper": {
-              width: drawerWidth,
-              boxSizing: "border-box",
-              background: "linear-gradient(180deg, #0a0a0a 0%, #050505 100%)",
-              borderRight: "1px solid rgba(0,229,255,0.1)",
-              display: "flex",
-              flexDirection: "column"
-            }
-          }}
-        >
-          {drawerContent}
-        </Drawer>
-      )}
+
+      {/* Sidebar Wrapper */}
+      <aside className={cn(
+        "fixed md:sticky top-0 left-0 h-screen z-50 transition-transform duration-300 md:translate-x-0 overflow-hidden",
+        mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+      )}>
+        {SidebarContent}
+      </aside>
     </>
   );
 }

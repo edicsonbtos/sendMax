@@ -437,12 +437,26 @@ export default function Dashboard() {
                         <p className="text-sm text-purple-200">Cotizaciones</p>
                     </button>
 
-                    <button className="p-6 bg-gradient-to-br from-cyan-600 to-cyan-700 rounded-xl hover:from-cyan-500 hover:to-cyan-600 transition-all group">
+                    <button
+                        onClick={() => router.push('/ranking')}
+                        className="p-6 bg-gradient-to-br from-cyan-600 to-cyan-700 rounded-xl hover:from-cyan-500 hover:to-cyan-600 transition-all group"
+                    >
                         <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                             <Trophy className="w-6 h-6 text-white" />
                         </div>
                         <p className="font-bold text-white">Mi Ranking</p>
                         <p className="text-sm text-cyan-200">Ver posición</p>
+                    </button>
+
+                    <button
+                        onClick={() => router.push('/billetera')}
+                        className="p-6 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-xl hover:from-indigo-500 hover:to-indigo-600 transition-all group"
+                    >
+                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                            <Wallet className="w-6 h-6 text-white" />
+                        </div>
+                        <p className="font-bold text-white">Retirar</p>
+                        <p className="text-sm text-indigo-200">Cobrar ganancias</p>
                     </button>
                 </div>
             </div>
