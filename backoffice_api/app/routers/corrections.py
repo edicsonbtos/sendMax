@@ -16,8 +16,8 @@ class ProfitCorrectionIn(BaseModel):
 
 
 @router.get("/orders/{public_id}/execution")
-def get_execution_data(public_id: int, auth: dict = Depends(require_admin)):
-    row = fetch_one(
+async def get_execution_data(public_id: int, auth: dict = Depends(require_admin)):
+    row = await fetch_one(
         """
         SELECT public_id, amount_origin, payout_dest, rate_client,
                commission_pct, profit_usdt, profit_real_usdt,
@@ -34,9 +34,9 @@ def get_execution_data(public_id: int, auth: dict = Depends(require_admin)):
 
 
 @router.put("/orders/{public_id}/execution")
-def update_execution_data(public_id: int, payload: ProfitCorrectionIn, auth: dict = Depends(require_admin)):
+async def update_execution_data(public_id: int, payload: ProfitCorrectionIn, auth: dict = Depends(require_admin)):
 
-    order = fetch_one("SELECT public_id, status FROM orders WHERE public_id=%s", (public_id,))
+    order = await fetch_one("SELECT public_id, status FROM orders WHERE public_id=%s", (public_id,))
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -66,6 +66,6 @@ def update_execution_data(public_id: int, payload: ProfitCorrectionIn, auth: dic
     params.append(public_id)
 
     sql = f"UPDATE orders SET {', '.join(updates)} WHERE public_id = %s RETURNING public_id"
-    result = fetch_one(sql, tuple(params), rw=True)
+    result = await fetch_one(sql, tuple(params), rw=True)
 
     return {"ok": True, "public_id": public_id, "updated_fields": len(updates) - 1}

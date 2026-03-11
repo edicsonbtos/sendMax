@@ -187,7 +187,7 @@ async def get_earnings_by_country(user_id: int = Depends(get_current_operator), 
             await cur.execute("""
                 SELECT dest_country, SUM(profit_real_usdt) as earnings, COUNT(*) as order_count
                 FROM orders WHERE operator_user_id = %s
-                AND created_at >= CURRENT_DATE - INTERVAL '%s days'
+                AND created_at >= CURRENT_DATE - %s * INTERVAL '1 day'
                 AND status IN ('COMPLETADA', 'ORIGEN_CONFIRMADO')
                 GROUP BY dest_country ORDER BY earnings DESC
             """, (user_id, days))

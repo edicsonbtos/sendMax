@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/health")
-def health():
+async def health():
     """
     Health check con verificación de conectividad a la base de datos y secretos.
     """
@@ -18,7 +18,7 @@ def health():
     db_error = None
 
     try:
-        result = fetch_one("SELECT 1 AS ok")
+        result = await fetch_one("SELECT 1 AS ok")
         db_ok = result is not None and result.get("ok") == 1
     except Exception as e:
         db_error = str(e)

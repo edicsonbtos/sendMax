@@ -79,12 +79,12 @@ def _iso(x):
     return x.isoformat() if x else None
 
 
-def _calc_current_balance(d: _date, origin_country: str, fiat_currency: str) -> float:
+async def _calc_current_balance(d: _date, origin_country: str, fiat_currency: str) -> float:
     """
     Balance REAL = SUM(todos los receipts hasta d) - SUM(todos los sweeps hasta d).
     No depende de cierres diarios. Nunca pierde balance acumulado.
     """
-    row = fetch_one(
+    row = await fetch_one(
         """
         SELECT
           COALESCE((SELECT SUM(amount_fiat) FROM origin_receipts_daily
@@ -145,14 +145,14 @@ def _check_not_closed(cur, d: _date, origin_country: str, fiat_currency: str):
 # ============================================================
 
 @router.get("/daily-close")
-def daily_close(day: str = Query(...), auth: dict = Depends(require_admin)):
+async def daily_close(day: str = Query(...), auth: dict = Depends(require_admin)):
     d = _parse_day(day)
     start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=VET)
     end_local = start_local + timedelta(days=1)
     start_utc = start_local.astimezone(timezone.utc)
     end_utc = end_local.astimezone(timezone.utc)
 
-    row = fetch_one(
+    row = await fetch_one(
         """
         SELECT
           COUNT(*) FILTER (WHERE status='CREADA') AS creadas,
@@ -168,7 +168,7 @@ def daily_close(day: str = Query(...), auth: dict = Depends(require_admin)):
         (start_utc, end_utc),
     )
 
-    row2 = fetch_one(
+    row2 = await fetch_one(
         """
         SELECT COALESCE(SUM(profit_usdt), 0) AS profit_usdt
         FROM orders
@@ -177,7 +177,7 @@ def daily_close(day: str = Query(...), auth: dict = Depends(require_admin)):
         (start_utc, end_utc),
     )
 
-    rows3 = fetch_all(
+    rows3 = await fetch_all(
         """
         SELECT origin_country, COALESCE(SUM(amount_origin),0) AS total_amount_origin
         FROM orders
@@ -206,10 +206,10 @@ def daily_close(day: str = Query(...), auth: dict = Depends(require_admin)):
 # ============================================================
 
 @router.get("/origin-wallets/daily")
-def origin_wallets_daily(day: str = Query(...), auth: dict = Depends(require_admin)):
+async def origin_wallets_daily(day: str = Query(...), auth: dict = Depends(require_admin)):
     d = _parse_day(day)
 
-    totals = fetch_all(
+    totals = await fetch_all(
         """
         SELECT origin_country, fiat_currency,
                COALESCE(SUM(amount_fiat),0) AS total_amount_fiat,
@@ -222,7 +222,7 @@ def origin_wallets_daily(day: str = Query(...), auth: dict = Depends(require_adm
         (d,),
     )
 
-    moves = fetch_all(
+    moves = await fetch_all(
         """
         SELECT day, origin_country, fiat_currency, amount_fiat,
                ref_order_public_id,
@@ -260,9 +260,9 @@ def origin_wallets_daily(day: str = Query(...), auth: dict = Depends(require_adm
 # ============================================================
 
 @router.get("/origin-wallets/balance")
-def origin_wallets_balance(day: str = Query(...), auth: dict = Depends(require_admin)):
+async def origin_wallets_balance(day: str = Query(...), auth: dict = Depends(require_admin)):
     d = _parse_day(day)
-    rows = fetch_all(
+    rows = await fetch_all(
         """
         WITH ins AS (
           SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS in_amount
@@ -295,10 +295,10 @@ def origin_wallets_balance(day: str = Query(...), auth: dict = Depends(require_a
 # ============================================================
 
 @router.post("/origin-wallets/sweeps")
-def create_origin_sweep(payload: OriginSweepIn, auth: dict = Depends(require_admin)):
+async def create_origin_sweep(payload: OriginSweepIn, auth: dict = Depends(require_admin)):
     d = _parse_day(payload.day)
 
-    def _atomic(cur):
+    async def _atomic(cur):
         _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
         _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
 
@@ -321,7 +321,7 @@ def create_origin_sweep(payload: OriginSweepIn, auth: dict = Depends(require_adm
         )
         return cur.fetchone()
 
-    result = run_in_transaction(_atomic)
+    result = await run_in_transaction(_atomic)
     return {"ok": True, "id": result["id"] if result else None}
 
 
@@ -330,7 +330,7 @@ def create_origin_sweep(payload: OriginSweepIn, auth: dict = Depends(require_adm
 # ============================================================
 
 @router.get("/origin-wallets/sweeps")
-def list_origin_sweeps(day: str = Query(...), origin_country: str | None = Query(None), auth: dict = Depends(require_admin)):
+async def list_origin_sweeps(day: str = Query(...), origin_country: str | None = Query(None), auth: dict = Depends(require_admin)):
     sql = """
         SELECT id, day, origin_country, fiat_currency, amount_fiat, created_at,
                created_by_telegram_id, note, external_ref
@@ -341,7 +341,7 @@ def list_origin_sweeps(day: str = Query(...), origin_country: str | None = Query
         sql += " AND origin_country = %s"
         params.append(origin_country)
     sql += " ORDER BY created_at DESC LIMIT 200"
-    rows = fetch_all(sql, tuple(params))
+    rows = await fetch_all(sql, tuple(params))
     return {"ok": True, "day": day, "count": len(rows), "sweeps": rows}
 
 
@@ -350,9 +350,9 @@ def list_origin_sweeps(day: str = Query(...), origin_country: str | None = Query
 # ============================================================
 
 @router.get("/origin-wallets/close-report")
-def origin_wallets_close_report(day: str = Query(...), auth: dict = Depends(require_admin)):
+async def origin_wallets_close_report(day: str = Query(...), auth: dict = Depends(require_admin)):
     d = _parse_day(day)
-    balances = fetch_all(
+    balances = await fetch_all(
         """
         WITH ins AS (
           SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS in_amount
@@ -373,7 +373,7 @@ def origin_wallets_close_report(day: str = Query(...), auth: dict = Depends(requ
         (d, d),
     )
 
-    pending = fetch_all(
+    pending = await fetch_all(
         """
         SELECT origin_country, COUNT(*) AS cnt FROM orders
         WHERE status='ORIGEN_VERIFICANDO'
@@ -384,7 +384,7 @@ def origin_wallets_close_report(day: str = Query(...), auth: dict = Depends(requ
     )
     pending_map = {r["origin_country"]: int(r["cnt"]) for r in pending}
 
-    closures = fetch_all(
+    closures = await fetch_all(
         "SELECT origin_country, fiat_currency, closed_at, closed_by_telegram_id, note, net_amount_at_close FROM origin_wallet_closures WHERE day=%s",
         (d,),
     )
@@ -414,10 +414,10 @@ def origin_wallets_close_report(day: str = Query(...), auth: dict = Depends(requ
 # ============================================================
 
 @router.post("/origin-wallets/close")
-def origin_wallets_close(payload: OriginCloseIn, auth: dict = Depends(require_admin)):
+async def origin_wallets_close(payload: OriginCloseIn, auth: dict = Depends(require_admin)):
     d = _parse_day(payload.day)
 
-    def _atomic(cur):
+    async def _atomic(cur):
         # Lock especifico para cierre
         cur.execute(
             "SELECT pg_advisory_xact_lock(hashtext(%s))",
@@ -487,7 +487,7 @@ def origin_wallets_close(payload: OriginCloseIn, auth: dict = Depends(require_ad
                 "reopened_and_reclosed": False,
             }
 
-    result = run_in_transaction(_atomic)
+    result = await run_in_transaction(_atomic)
     return {"ok": True, **result}
 
 
@@ -496,12 +496,12 @@ def origin_wallets_close(payload: OriginCloseIn, auth: dict = Depends(require_ad
 # ============================================================
 
 @router.post("/origin-wallets/withdraw")
-def origin_wallets_withdraw(payload: OriginWithdrawIn, auth: dict = Depends(require_admin)):
+async def origin_wallets_withdraw(payload: OriginWithdrawIn, auth: dict = Depends(require_admin)):
     d = _parse_day(payload.day)
     if payload.amount_fiat <= 0:
         raise HTTPException(status_code=400, detail="amount_fiat must be > 0")
 
-    def _atomic(cur):
+    async def _atomic(cur):
         _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
         _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
 
@@ -529,7 +529,7 @@ def origin_wallets_withdraw(payload: OriginWithdrawIn, auth: dict = Depends(requ
             "current_balance_before": current_balance,
         }
 
-    result = run_in_transaction(_atomic)
+    result = await run_in_transaction(_atomic)
     return {"ok": True, "withdrawn": payload.amount_fiat, **result}
 
 
@@ -538,10 +538,10 @@ def origin_wallets_withdraw(payload: OriginWithdrawIn, auth: dict = Depends(requ
 # ============================================================
 
 @router.post("/origin-wallets/empty")
-def origin_wallets_empty(payload: OriginEmptyIn, auth: dict = Depends(require_admin)):
+async def origin_wallets_empty(payload: OriginEmptyIn, auth: dict = Depends(require_admin)):
     d = _parse_day(payload.day)
 
-    def _atomic(cur):
+    async def _atomic(cur):
         _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
         _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
 
@@ -563,7 +563,7 @@ def origin_wallets_empty(payload: OriginEmptyIn, auth: dict = Depends(require_ad
         ins_row = cur.fetchone()
         return {"emptied": current_balance, "id": ins_row["id"] if ins_row else None}
 
-    result = run_in_transaction(_atomic)
+    result = await run_in_transaction(_atomic)
     return {"ok": True, **result}
 
 
@@ -572,13 +572,13 @@ def origin_wallets_empty(payload: OriginEmptyIn, auth: dict = Depends(require_ad
 # ============================================================
 
 @router.post("/origin-wallets/deposit")
-def create_origin_deposit(payload: OriginDepositIn, auth: dict = Depends(require_admin)):
+async def create_origin_deposit(payload: OriginDepositIn, auth: dict = Depends(require_admin)):
     """Registra un DEPOSITO manual de fondos en la billetera de origen."""
     d = _parse_day(payload.day)
     if payload.amount_fiat <= 0:
         raise HTTPException(status_code=400, detail="amount_fiat must be > 0")
 
-    def _atomic(cur):
+    async def _atomic(cur):
         _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
         _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
 
@@ -594,7 +594,7 @@ def create_origin_deposit(payload: OriginDepositIn, auth: dict = Depends(require
         row = cur.fetchone()
         return {"id": row["id"] if row else None}
 
-    result = run_in_transaction(_atomic)
+    result = await run_in_transaction(_atomic)
     return {"ok": True, "deposited": payload.amount_fiat, **result}
 
 
@@ -603,8 +603,8 @@ def create_origin_deposit(payload: OriginDepositIn, auth: dict = Depends(require
 # ============================================================
 
 @router.get("/origin-wallets/current-balances")
-def origin_wallets_current_balances(auth: dict = Depends(require_admin)):
-    rows = fetch_all(
+async def origin_wallets_current_balances(auth: dict = Depends(require_admin)):
+    rows = await fetch_all(
         """
         WITH ins AS (
           SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS total_in
@@ -636,10 +636,10 @@ def origin_wallets_current_balances(auth: dict = Depends(require_admin)):
 # ============================================================
 
 @router.get("/origin-wallets/balances2")
-def origin_wallets_balances2(day: str = Query(...), auth: dict = Depends(require_admin)):
+async def origin_wallets_balances2(day: str = Query(...), auth: dict = Depends(require_admin)):
     d = _parse_day(day)
     prev = d - timedelta(days=1)
-    rows = fetch_all(
+    rows = await fetch_all(
         """
         WITH historical_in AS (
           SELECT origin_country, fiat_currency,

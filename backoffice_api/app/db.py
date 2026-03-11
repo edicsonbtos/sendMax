@@ -8,13 +8,13 @@ Retry con backoff exponencial ante fallos transitorios de Neon.
 from __future__ import annotations
 
 import os
-import time
+import asyncio
 import logging
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 import psycopg
 from psycopg.rows import dict_row
-from psycopg_pool import ConnectionPool
+from psycopg_pool import AsyncConnectionPool
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -64,12 +64,12 @@ def get_db_url_rw() -> str:
 
 # -- Pool management --
 
-_pool_ro: ConnectionPool | None = None
-_pool_rw: ConnectionPool | None = None
+_pool_ro: AsyncConnectionPool | None = None
+_pool_rw: AsyncConnectionPool | None = None
 
 
-def _make_pool(dsn: str, *, min_size: int, max_size: int) -> ConnectionPool:
-    return ConnectionPool(
+def _make_pool(dsn: str, *, min_size: int, max_size: int) -> AsyncConnectionPool:
+    return AsyncConnectionPool(
         dsn,
         min_size=min_size,
         max_size=max_size,
@@ -81,7 +81,7 @@ def _make_pool(dsn: str, *, min_size: int, max_size: int) -> ConnectionPool:
     )
 
 
-def _get_pool_ro() -> ConnectionPool:
+def _get_pool_ro() -> AsyncConnectionPool:
     global _pool_ro
     if _pool_ro is None:
         _pool_ro = _make_pool(get_db_url_ro(), min_size=1, max_size=5)
@@ -89,7 +89,7 @@ def _get_pool_ro() -> ConnectionPool:
     return _pool_ro
 
 
-def _get_pool_rw() -> ConnectionPool:
+def _get_pool_rw() -> AsyncConnectionPool:
     global _pool_rw
     if _pool_rw is None:
         _pool_rw = _make_pool(get_db_url_rw(), min_size=1, max_size=3)
@@ -114,7 +114,7 @@ def _backoff_delay(attempt: int) -> float:
 
 # -- Query helpers --
 
-def fetch_one(
+async def fetch_one(
     sql: str,
     params: tuple = (),
     *,
@@ -125,18 +125,18 @@ def fetch_one(
 
     for attempt in range(_MAX_ATTEMPTS):
         try:
-            with pool.connection() as conn:
+            async with pool.connection() as conn:
                 try:
-                    with conn.cursor(row_factory=dict_row) as cur:
-                        cur.execute(sql, params)
-                        row = cur.fetchone()
+                    async with conn.cursor(row_factory=dict_row) as cur:
+                        await cur.execute(sql, params)
+                        row = await cur.fetchone()
                         if rw:
-                            conn.commit()
+                            await conn.commit()
                         return row
                 except Exception:
                     if rw:
                         try:
-                            conn.rollback()
+                            await conn.rollback()
                         except Exception:
                             pass
                     raise
@@ -148,7 +148,7 @@ def fetch_one(
                     "DB transient error (attempt %d/%d, retry in %.1fs): %s",
                     attempt + 1, _MAX_ATTEMPTS, delay, e,
                 )
-                time.sleep(delay)
+                await asyncio.sleep(delay)
                 continue
             logger.exception("fetch_one failed (rw=%s, attempt %d): %s", rw, attempt + 1, e)
             raise
@@ -156,16 +156,16 @@ def fetch_one(
     raise last_exc
 
 
-def fetch_all(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
+async def fetch_all(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
     pool = _get_pool_ro()
     last_exc: Exception | None = None
 
     for attempt in range(_MAX_ATTEMPTS):
         try:
-            with pool.connection() as conn:
-                with conn.cursor(row_factory=dict_row) as cur:
-                    cur.execute(sql, params)
-                    return list(cur.fetchall())
+            async with pool.connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cur:
+                    await cur.execute(sql, params)
+                    return list(await cur.fetchall())
         except Exception as e:
             last_exc = e
             if attempt < _MAX_ATTEMPTS - 1 and _is_transient(e):
@@ -174,7 +174,7 @@ def fetch_all(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
                     "DB transient error (attempt %d/%d, retry in %.1fs): %s",
                     attempt + 1, _MAX_ATTEMPTS, delay, e,
                 )
-                time.sleep(delay)
+                await asyncio.sleep(delay)
                 continue
             logger.exception("fetch_all failed (attempt %d): %s", attempt + 1, e)
             raise
@@ -182,12 +182,12 @@ def fetch_all(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
     raise last_exc
 
 
-def close_pools() -> None:
+async def close_pools() -> None:
     global _pool_ro, _pool_rw
     for label, pool in [("RO", _pool_ro), ("RW", _pool_rw)]:
         if pool is not None:
             try:
-                pool.close()
+                await pool.close()
                 logger.info("DB pool %s cerrado", label)
             except Exception as e:
                 logger.warning("Error cerrando pool %s: %s", label, e)
@@ -196,35 +196,28 @@ def close_pools() -> None:
 
 # ============================================================
 # Transaccion atomica RW con advisory lock support
-# Agregado por fix de integridad financiera del ledger
 # ============================================================
 
-from typing import Callable, TypeVar
 _T = TypeVar('_T')
 
-
-def run_in_transaction(fn, *, attempts=_MAX_ATTEMPTS):
-    """
-    Ejecuta fn(cursor) dentro de una unica transaccion RW atomica.
-
-    - Advisory locks adquiridos dentro de fn se liberan al COMMIT/ROLLBACK.
-    - Retry con backoff ante errores transitorios de red.
-    - HTTPException se propaga sin loguear como error de DB.
-    """
+async def run_in_transaction(fn: Callable[[psycopg.AsyncCursor], _T], *, attempts=_MAX_ATTEMPTS) -> _T:
     pool = _get_pool_rw()
     last_exc = None
 
     for attempt in range(attempts):
         try:
-            with pool.connection() as conn:
+            async with pool.connection() as conn:
                 try:
-                    with conn.cursor(row_factory=dict_row) as cur:
-                        result = fn(cur)
-                        conn.commit()
+                    async with conn.cursor(row_factory=dict_row) as cur:
+                        if asyncio.iscoroutinefunction(fn):
+                            result = await fn(cur)
+                        else:
+                            result = fn(cur)
+                        await conn.commit()
                         return result
                 except Exception:
                     try:
-                        conn.rollback()
+                        await conn.rollback()
                     except Exception:
                         pass
                     raise
@@ -236,7 +229,7 @@ def run_in_transaction(fn, *, attempts=_MAX_ATTEMPTS):
                     "run_in_transaction retry %d/%d in %.1fs: %s",
                     attempt + 1, attempts, delay, e,
                 )
-                time.sleep(delay)
+                await asyncio.sleep(delay)
                 continue
             if isinstance(e, psycopg.OperationalError):
                 logger.exception(

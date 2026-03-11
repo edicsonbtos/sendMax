@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/admin/daily-close", tags=["daily-close"])
 
 VET = timezone(timedelta(hours=-4))
 
-def _parse_date_range(d: date):
+async def _parse_date_range(d: date):
     # Start of day in local time (VET)
     start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=VET)
     end_local = start_local + timedelta(days=1)
@@ -32,13 +32,13 @@ async def execute_daily_closure(
     start_utc, end_utc = _parse_date_range(d)
 
     # 1. Check if already exists
-    existing = fetch_one("SELECT id FROM daily_closures WHERE closure_date = %s", (d,))
+    existing = await fetch_one("SELECT id FROM daily_closures WHERE closure_date = %s", (d,))
     if existing and not payload.force:
         raise HTTPException(status_code=409, detail=f"Cierre para el día {d} ya existe. Use 'force' para sobrescribir.")
 
     # 2. Gather Metrics
     # Orders metrics: Completadas vs Canceladas
-    counts = fetch_one(
+    counts = await fetch_one(
         """
         SELECT 
             COUNT(*) FILTER (WHERE status = 'COMPLETADA') as completed_count,
@@ -56,7 +56,7 @@ async def execute_daily_closure(
     success_rate = (counts['completed_count'] / total_orders * 100) if total_orders > 0 else 100
 
     # Best Operator
-    best_op = fetch_one(
+    best_op = await fetch_one(
         """
         SELECT u.id, u.alias, COUNT(o.id) as order_count
         FROM orders o
@@ -70,23 +70,23 @@ async def execute_daily_closure(
     )
 
     # Best Countries
-    best_origin = fetch_one(
+    best_origin = await fetch_one(
         "SELECT origin_country, COUNT(*) as cnt FROM orders WHERE status = 'COMPLETADA' AND paid_at >= %s AND paid_at < %s GROUP BY origin_country ORDER BY cnt DESC LIMIT 1",
         (start_utc, end_utc)
     )
-    best_dest = fetch_one(
+    best_dest = await fetch_one(
         "SELECT dest_country, COUNT(*) as cnt FROM orders WHERE status = 'COMPLETADA' AND paid_at >= %s AND paid_at < %s GROUP BY dest_country ORDER BY cnt DESC LIMIT 1",
         (start_utc, end_utc)
     )
 
     # Withdrawals
-    withdrawals = fetch_one(
+    withdrawals = await fetch_one(
         "SELECT COUNT(*) as cnt, COALESCE(SUM(amount_usdt), 0) as total FROM withdrawals WHERE status = 'SOLICITADA'"
     )
 
     # Snapshots
-    vaults = fetch_all("SELECT name, vault_type, balance, currency FROM vaults WHERE is_active = true")
-    wallets = fetch_all(
+    vaults = await fetch_all("SELECT name, vault_type, balance, currency FROM vaults WHERE is_active = true")
+    wallets = await fetch_all(
         """
         SELECT u.alias, w.balance_usdt 
         FROM wallets w 
@@ -126,10 +126,10 @@ async def execute_daily_closure(
         return cur.fetchone()
 
     import json
-    def import_json_if_needed(data):
+    async def import_json_if_needed(data):
         return json.dumps(data, default=str)
 
-    new_record = run_in_transaction(_create_record)
+    new_record = await run_in_transaction(_create_record)
     return new_record
 
 @router.get("/history", response_model=List[DailyClosureResponse])
@@ -137,7 +137,7 @@ async def get_closure_history(
     limit: int = Query(30, ge=1, le=100),
     auth: dict = Depends(require_admin)
 ):
-    rows = fetch_all("SELECT * FROM daily_closures ORDER BY closure_date DESC LIMIT %s", (limit,))
+    rows = await fetch_all("SELECT * FROM daily_closures ORDER BY closure_date DESC LIMIT %s", (limit,))
     return rows
 
 @router.get("/{closure_date}", response_model=DailyClosureResponse)
@@ -145,7 +145,7 @@ async def get_closure_details(
     closure_date: date,
     auth: dict = Depends(require_admin)
 ):
-    row = fetch_one("SELECT * FROM daily_closures WHERE closure_date = %s", (closure_date,))
+    row = await fetch_one("SELECT * FROM daily_closures WHERE closure_date = %s", (closure_date,))
     if not row:
         raise HTTPException(status_code=404, detail="Cierre no encontrado")
     return row
@@ -155,7 +155,7 @@ async def export_closure_csv(
     closure_date: date,
     auth: dict = Depends(require_admin)
 ):
-    row = fetch_one("SELECT * FROM daily_closures WHERE closure_date = %s", (closure_date,))
+    row = await fetch_one("SELECT * FROM daily_closures WHERE closure_date = %s", (closure_date,))
     if not row:
         raise HTTPException(status_code=404, detail="Cierre no encontrado")
 

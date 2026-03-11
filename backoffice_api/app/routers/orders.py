@@ -19,14 +19,14 @@ def _operator_filter(auth: dict):
     return " AND o.operator_user_id = %s", (user_id,)
 
 
-def _verify_order_access(public_id: int, auth: dict):
+async def _verify_order_access(public_id: int, auth: dict):
     """Verifica que el usuario tiene acceso a esta orden."""
     if auth.get("role") in ("admin", "ADMIN") or auth.get("auth") == "api_key":
         return
     user_id = auth.get("user_id")
     if not user_id:
         raise HTTPException(status_code=403, detail="user_id no encontrado en token")
-    order = fetch_one(
+    order = await fetch_one(
         "SELECT public_id FROM orders WHERE public_id = %s AND operator_user_id = %s",
         (public_id, user_id),
     )
@@ -35,9 +35,9 @@ def _verify_order_access(public_id: int, auth: dict):
 
 
 @router.get("/orders")
-def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depends(require_operator_or_admin)):
+async def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depends(require_operator_or_admin)):
     where_extra, params_extra = _operator_filter(auth)
-    rows = fetch_all(
+    rows = await fetch_all(
         f"""
         SELECT
           o.public_id, o.created_at, o.status, o.awaiting_paid_proof,
@@ -71,17 +71,17 @@ def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depends(req
 
 
 @router.get("/orders/{public_id}")
-def order_detail(public_id: int, auth: dict = Depends(require_operator_or_admin)):
+async def order_detail(public_id: int, auth: dict = Depends(require_operator_or_admin)):
     _verify_order_access(public_id, auth)
     where_extra, params_extra = _operator_filter(auth)
-    order = fetch_one(
+    order = await fetch_one(
         f"SELECT * FROM orders o WHERE o.public_id=%s {where_extra} LIMIT 1",
         (public_id,) + params_extra,
     )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    ledger_rows = fetch_all(
+    ledger_rows = await fetch_all(
         """
         SELECT user_id, amount_usdt, type, ref_order_public_id, memo, created_at
         FROM wallet_ledger
@@ -101,7 +101,7 @@ def order_detail(public_id: int, auth: dict = Depends(require_operator_or_admin)
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
         })
 
-    trows = fetch_all(
+    trows = await fetch_all(
         """
         SELECT id, side, fiat_currency, fiat_amount, price, usdt_amount,
                fee_usdt, source, external_ref, note, created_at
@@ -165,9 +165,9 @@ class OrderTradeIn(BaseModel):
 
 
 @router.get("/orders/{public_id}/trades")
-def get_order_trades(public_id: int, auth: dict = Depends(require_operator_or_admin)):
+async def get_order_trades(public_id: int, auth: dict = Depends(require_operator_or_admin)):
     _verify_order_access(public_id, auth)
-    rows = fetch_all(
+    rows = await fetch_all(
         """
         SELECT id, order_public_id, side, fiat_currency, fiat_amount, price,
                usdt_amount, fee_usdt, source, external_ref, note,
@@ -199,7 +199,7 @@ def get_order_trades(public_id: int, auth: dict = Depends(require_operator_or_ad
 
 
 @router.post("/orders/{public_id}/trades")
-def create_order_trade(public_id: int, payload: OrderTradeIn, auth: dict = Depends(require_operator_or_admin)):
+async def create_order_trade(public_id: int, payload: OrderTradeIn, auth: dict = Depends(require_operator_or_admin)):
     _verify_order_access(public_id, auth)
 
     side = (payload.side or "").upper().strip()
@@ -211,7 +211,7 @@ def create_order_trade(public_id: int, payload: OrderTradeIn, auth: dict = Depen
         raise HTTPException(status_code=403, detail="user_id requerido para crear trade")
 
     # Verificar que la orden existe
-    order_check = fetch_one(
+    order_check = await fetch_one(
         "SELECT public_id, status FROM orders WHERE public_id = %s",
         (public_id,),
     )
@@ -220,7 +220,7 @@ def create_order_trade(public_id: int, payload: OrderTradeIn, auth: dict = Depen
 
     # CTE atomico: INSERT trade + recalcular profit en UNA transaccion
     # Resuelve race condition: no hay ventana entre INSERT y UPDATE
-    result = fetch_one(
+    result = await fetch_one(
         """
         WITH new_trade AS (
             INSERT INTO order_trades (

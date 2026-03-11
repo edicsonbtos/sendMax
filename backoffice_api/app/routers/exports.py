@@ -51,7 +51,7 @@ def _stream_csv(rows: list[dict], columns: list[str], filename: str):
 # ============================================================
 
 @router.get("/origin-wallets/export")
-def export_wallet_closures(
+async def export_wallet_closures(
     date_from: str | None = Query(None, description="YYYY-MM-DD"),
     date_to: str | None = Query(None, description="YYYY-MM-DD"),
     origin_country: str | None = Query(None),
@@ -73,7 +73,7 @@ def export_wallet_closures(
 
     where = (" AND " + " AND ".join(conditions)) if conditions else ""
 
-    rows = fetch_all(
+    rows = await fetch_all(
         f"""
         SELECT
             c.day,
@@ -125,7 +125,7 @@ def export_wallet_closures(
 # ============================================================
 
 @router.get("/metrics/export-orders")
-def export_orders(
+async def export_orders(
     date_from: str | None = Query(None, description="YYYY-MM-DD"),
     date_to: str | None = Query(None, description="YYYY-MM-DD"),
     origin_country: str | None = Query(None),
@@ -151,7 +151,7 @@ def export_orders(
 
     where = (" AND " + " AND ".join(conditions)) if conditions else ""
 
-    rows = fetch_all(
+    rows = await fetch_all(
         f"""
         SELECT
             o.public_id,

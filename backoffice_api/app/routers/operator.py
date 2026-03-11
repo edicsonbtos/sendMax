@@ -41,7 +41,7 @@ def _rows(rows) -> list[dict]:
 # ——————————————————————————————————————————
 
 @router.get("/me/dashboard")
-def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
+async def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
     """
     Dashboard personal del operador autenticado.
     Los datos siempre son filtrados por user_id del JWT (cada operador ve solo los suyos).
@@ -51,7 +51,7 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
         raise HTTPException(status_code=403, detail="user_id no encontrado en token")
 
     # ── Datos del usuario y saldo de billetera ──────────────────────────────
-    user = fetch_one(
+    user = await fetch_one(
         """
         SELECT u.id, u.alias, u.full_name, u.email, u.role,
                u.payout_country, u.created_at,
@@ -66,7 +66,7 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
         raise HTTPException(status_code=404, detail="Operador no encontrado")
 
     # ── Métricas de ganancias (hoy / mes / referidos) ──────────────────────
-    metrics = fetch_one(
+    metrics = await fetch_one(
         """
         SELECT
             COALESCE((
@@ -93,7 +93,7 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
     )
 
     # ── Ganancias desglosadas por país de origen ───────────────────────────
-    profit_by_country = fetch_all(
+    profit_by_country = await fetch_all(
         """
         SELECT origin_country,
                COALESCE(SUM(profit_usdt), 0) AS total_profit_usdt,
@@ -107,7 +107,7 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
     )
 
     # ── Últimas 15 órdenes ─────────────────────────────────────────────────
-    recent_orders = fetch_all(
+    recent_orders = await fetch_all(
         """
         SELECT public_id, origin_country, dest_country,
                amount_origin, payout_dest, profit_usdt,
@@ -121,7 +121,7 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
     )
 
     # ── Últimos 10 retiros ─────────────────────────────────────────────────
-    withdrawals = fetch_all(
+    withdrawals = await fetch_all(
         """
         SELECT id, amount_usdt, status, dest_text, country,
                fiat, fiat_amount, reject_reason,
@@ -135,7 +135,7 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
     )
 
     # ── Últimas 10 entradas del ledger ─────────────────────────────────────
-    ledger = fetch_all(
+    ledger = await fetch_all(
         """
         SELECT id, amount_usdt, type, ref_order_public_id, memo, created_at
         FROM wallet_ledger
@@ -147,13 +147,13 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
     )
 
     # ── Referidos (count) ──────────────────────────────────────────────────
-    ref_row = fetch_one(
+    ref_row = await fetch_one(
         "SELECT COUNT(*) AS cnt FROM users WHERE sponsor_id = %s",
         (user_id,),
     )
 
     # ── Top 5 clientes frecuentes (gamificación) ───────────────────────────
-    top_clients = fetch_all(
+    top_clients = await fetch_all(
         """
         SELECT beneficiary_text,
                COUNT(*) AS order_count,
@@ -172,20 +172,20 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
     )
 
     # ── Meta mensual (configurable en settings) ────────────────────────────
-    goal_row = fetch_one(
+    goal_row = await fetch_one(
         "SELECT value FROM settings WHERE key = 'monthly_goal_usdt' LIMIT 1"
     )
     monthly_goal = float(goal_row["value"]) if goal_row and goal_row.get("value") else 500.0
 
     # ── Trust Score del operador ───────────────────────────────────────────
-    ts_row = fetch_one(
+    ts_row = await fetch_one(
         "SELECT COALESCE(trust_score, 50) AS trust_score FROM users WHERE id = %s",
         (user_id,),
     )
     trust_score = float(ts_row["trust_score"]) if ts_row else 50.0
 
     # ── Leaderboard: Top 10 operadores por trust_score ─────────────────────
-    leaderboard = fetch_all(
+    leaderboard = await fetch_all(
         """
         SELECT u.id, u.alias, u.full_name,
                COALESCE(u.trust_score, 50) AS trust_score,
@@ -208,7 +208,7 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
     )
 
     # ── Órdenes completadas hoy ────────────────────────────────────────────
-    orders_today_row = fetch_one(
+    orders_today_row = await fetch_one(
         """
         SELECT COUNT(*) AS cnt FROM orders
         WHERE operator_user_id = %s AND status = 'PAGADA'
@@ -219,7 +219,7 @@ def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)):
     orders_today = int(orders_today_row["cnt"]) if orders_today_row else 0
 
     # ── Actividad 24h (para line chart) ────────────────────────────────────
-    activity_24h = fetch_all(
+    activity_24h = await fetch_all(
         """
         SELECT date_trunc('hour', created_at) AS hour,
                COUNT(*) AS order_count

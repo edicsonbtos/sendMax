@@ -59,9 +59,9 @@ def _row(r: dict) -> dict:
 # ─── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("")
-def list_vaults(auth: dict = Depends(require_operator_or_admin)):
+async def list_vaults(auth: dict = Depends(require_operator_or_admin)):
     """Lista todas las bóvedas activas con su saldo actual."""
-    rows = fetch_all(
+    rows = await fetch_all(
         """
         SELECT id, name, vault_type, currency, balance, description,
                is_active, updated_at,
@@ -74,12 +74,12 @@ def list_vaults(auth: dict = Depends(require_operator_or_admin)):
 
 
 @router.get("/radar")
-def vault_radar(auth: dict = Depends(require_operator_or_admin)):
+async def vault_radar(auth: dict = Depends(require_operator_or_admin)):
     """
     Snapshot de liquidez total agrupado por tipo de bóveda.
     Útil para el panel de control del admin.
     """
-    rows = fetch_all(
+    rows = await fetch_all(
         """
         SELECT vault_type,
                currency,
@@ -91,7 +91,7 @@ def vault_radar(auth: dict = Depends(require_operator_or_admin)):
         ORDER BY vault_type, currency
         """
     )
-    total_row = fetch_one(
+    total_row = await fetch_one(
         "SELECT COALESCE(SUM(balance), 0) AS grand_total FROM vaults WHERE is_active = true AND currency = 'USD'"
     )
     return {
@@ -102,13 +102,13 @@ def vault_radar(auth: dict = Depends(require_operator_or_admin)):
 
 
 @router.post("")
-def create_vault(body: VaultCreate, auth: dict = Depends(require_admin)):
+async def create_vault(body: VaultCreate, auth: dict = Depends(require_admin)):
     """Crea una nueva bóveda (solo admin)."""
-    existing = fetch_one("SELECT id FROM vaults WHERE name = %s LIMIT 1", (body.name,))
+    existing = await fetch_one("SELECT id FROM vaults WHERE name = %s LIMIT 1", (body.name,))
     if existing:
         raise HTTPException(status_code=409, detail=f"Ya existe una bóveda con nombre '{body.name}'")
 
-    row = fetch_one(
+    row = await fetch_one(
         """
         INSERT INTO vaults (name, vault_type, currency, balance, description)
         VALUES (%s, %s, %s, %s, %s)
@@ -120,16 +120,16 @@ def create_vault(body: VaultCreate, auth: dict = Depends(require_admin)):
 
 
 @router.put("/{vault_id}/adjust")
-def adjust_vault(vault_id: int, body: VaultAdjust, auth: dict = Depends(require_admin)):
+async def adjust_vault(vault_id: int, body: VaultAdjust, auth: dict = Depends(require_admin)):
     """
     Ajusta manualmente el balance de una bóveda.
     Usado para conciliar efectivo real vs saldo en sistema.
     """
-    existing = fetch_one("SELECT id, name FROM vaults WHERE id = %s LIMIT 1", (vault_id,))
+    existing = await fetch_one("SELECT id, name FROM vaults WHERE id = %s LIMIT 1", (vault_id,))
     if not existing:
         raise HTTPException(status_code=404, detail="Bóveda no encontrada")
 
-    row = fetch_one(
+    row = await fetch_one(
         """
         UPDATE vaults
         SET balance = %s,
@@ -148,12 +148,12 @@ def adjust_vault(vault_id: int, body: VaultAdjust, auth: dict = Depends(require_
 
 
 @router.get("/provider-liquidation")
-def provider_liquidation(auth: dict = Depends(require_admin)):
+async def provider_liquidation(auth: dict = Depends(require_admin)):
     """
     Suma los provider_fee_usdt acumulados por proveedor de cuenta.
     Muestra cuánto debe Sendmax a cada proveedor (fees de órdenes cerradas).
     """
-    rows = fetch_all(
+    rows = await fetch_all(
         """
         SELECT
             u.id AS provider_id,

@@ -107,7 +107,7 @@ class ToggleResponse(BaseModel):
 
 
 @router.get("")
-def list_users(
+async def list_users(
     search: Optional[str] = Query(None, description="Buscar por alias, nombre o email"),
     auth=Depends(require_admin),
 ):
@@ -133,17 +133,17 @@ def list_users(
             AND (u.alias ILIKE %s OR u.full_name ILIKE %s OR u.email ILIKE %s)
             ORDER BY u.created_at DESC
         """
-        rows = fetch_all(sql, (term, term, term))
+        rows = await fetch_all(sql, (term, term, term))
     else:
         sql = base_sql + " ORDER BY u.created_at DESC"
-        rows = fetch_all(sql)
+        rows = await fetch_all(sql)
 
     return {"count": len(rows or []), "users": _ser_list(rows)}
 
 
 @router.get("/{user_id}")
-def get_user_detail(user_id: int, auth=Depends(require_admin)):
-    user = fetch_one(
+async def get_user_detail(user_id: int, auth=Depends(require_admin)):
+    user = await fetch_one(
         """
         SELECT u.id, u.telegram_user_id, u.alias, u.full_name, u.email,
                u.phone, u.address_short, u.role, u.is_active, u.sponsor_id,
@@ -161,7 +161,7 @@ def get_user_detail(user_id: int, auth=Depends(require_admin)):
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    metrics = fetch_one(
+    metrics = await fetch_one(
         """
         SELECT
             COALESCE((
@@ -183,7 +183,7 @@ def get_user_detail(user_id: int, auth=Depends(require_admin)):
         (user_id, user_id, user_id),
     )
 
-    ledger = fetch_all(
+    ledger = await fetch_all(
         """
         SELECT id, amount_usdt, type, ref_order_public_id, memo, created_at
         FROM wallet_ledger
@@ -194,7 +194,7 @@ def get_user_detail(user_id: int, auth=Depends(require_admin)):
         (user_id,),
     )
 
-    withdrawals = fetch_all(
+    withdrawals = await fetch_all(
         """
         SELECT id, amount_usdt, status, dest_text, country,
                fiat, fiat_amount, reject_reason,
@@ -207,12 +207,12 @@ def get_user_detail(user_id: int, auth=Depends(require_admin)):
         (user_id,),
     )
 
-    ref_row = fetch_one(
+    ref_row = await fetch_one(
         "SELECT COUNT(*) AS cnt FROM users WHERE sponsor_id = %s",
         (user_id,),
     )
 
-    orders = fetch_all(
+    orders = await fetch_all(
         """
         SELECT public_id, origin_country, dest_country,
                amount_origin, payout_dest, profit_usdt,
@@ -240,8 +240,8 @@ def get_user_detail(user_id: int, auth=Depends(require_admin)):
 
 
 @router.post("")
-def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
-    existing = fetch_one("SELECT id FROM users WHERE LOWER(email) = LOWER(%s)", (data.email,))
+async def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
+    existing = await fetch_one("SELECT id FROM users WHERE LOWER(email) = LOWER(%s)", (data.email,))
     if existing:
         raise HTTPException(status_code=400, detail="Email ya registrado")
 
@@ -253,7 +253,7 @@ def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
 
     # Si se envia un tg_id, verificar que no exista ya
     if tg_id is not None:
-        tg_exists = fetch_one(
+        tg_exists = await fetch_one(
             "SELECT id FROM users WHERE telegram_user_id = %s",
             (tg_id,),
         )
@@ -264,7 +264,7 @@ def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
             )
 
     # Insert directo - NULL es valido en la columna nullable
-    row = fetch_one(
+    row = await fetch_one(
         """
         INSERT INTO users
             (telegram_user_id, alias, full_name, email,
@@ -279,8 +279,8 @@ def create_operator(data: CreateOperatorRequest, auth=Depends(require_admin)):
 
 
 @router.put("/{user_id}/toggle")
-def toggle_user(user_id: int, auth=Depends(require_admin)):
-    row = fetch_one(
+async def toggle_user(user_id: int, auth=Depends(require_admin)):
+    row = await fetch_one(
         """
         UPDATE users SET is_active = NOT is_active, updated_at = now()
         WHERE id = %s
@@ -295,10 +295,10 @@ def toggle_user(user_id: int, auth=Depends(require_admin)):
 
 
 @router.put("/{user_id}/password")
-def reset_password(user_id: int, auth=Depends(require_admin)):
+async def reset_password(user_id: int, auth=Depends(require_admin)):
     temp_pass = secrets.token_urlsafe(10)
     hashed = get_password_hash(temp_pass)
-    row = fetch_one(
+    row = await fetch_one(
         "UPDATE users SET hashed_password = %s, updated_at = now() WHERE id = %s RETURNING id",
         (hashed, user_id),
         rw=True,

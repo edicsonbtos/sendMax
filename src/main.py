@@ -204,6 +204,24 @@ async def security_headers_middleware(request: Request, call_next):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
+# --- Unified Logging & Security: Error Handler ---
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    from fastapi.responses import JSONResponse
+    from fastapi.exceptions import HTTPException
+    
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"ok": False, "detail": exc.detail},
+        )
+    
+    logger.error(f"Unhandled Server Error: {request.method} {request.url.path} -> {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"ok": False, "detail": "Error interno del servidor"}
+    )
+
 app.include_router(internal_rates.router)
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 

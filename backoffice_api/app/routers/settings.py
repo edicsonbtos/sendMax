@@ -154,15 +154,15 @@ class SettingsUpdate(BaseModel):
 # --------------- SETTINGS GENERICOS ---------------
 
 @router.get("/admin/settings")
-def get_admin_settings(auth: dict = Depends(require_admin)):
-    rows = fetch_all("SELECT key, value_json, updated_at, updated_by FROM settings ORDER BY key")
+async def get_admin_settings(auth: dict = Depends(require_admin)):
+    rows = await fetch_all("SELECT key, value_json, updated_at, updated_by FROM settings ORDER BY key")
     return {"items": rows}
 
 
 @router.get("/admin/settings/{key}")
-def get_admin_setting_by_key(key: str, auth: dict = Depends(require_admin)):
+async def get_admin_setting_by_key(key: str, auth: dict = Depends(require_admin)):
     k = _validate_key(key)
-    row = fetch_one("SELECT key, value_json, updated_at, updated_by FROM settings WHERE key=%s", (k,))
+    row = await fetch_one("SELECT key, value_json, updated_at, updated_by FROM settings WHERE key=%s", (k,))
     if not row:
         raise HTTPException(status_code=404, detail=f"Setting '{k}' not found")
     return {"ok": True, "key": row["key"], "value_json": _normalize_json(row["value_json"])}
@@ -170,7 +170,7 @@ def get_admin_setting_by_key(key: str, auth: dict = Depends(require_admin)):
 
 
 @router.put("/admin/settings/{key}")
-def put_admin_settings(
+async def put_admin_settings(
     key: str,
     payload: SettingsUpdate,
     request: Request,
@@ -187,14 +187,14 @@ def put_admin_settings(
     _validate_payload_size(payload.value_json)
     _validate_setting_value(k, payload.value_json)
 
-    before = fetch_one("SELECT key, value_json FROM settings WHERE key=%s", (k,))
+    before = await fetch_one("SELECT key, value_json FROM settings WHERE key=%s", (k,))
     before_json = _normalize_json(before["value_json"]) if before else None
 
     updated_by = _get_updated_by(auth, request)
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
 
-    fetch_one(
+    await fetch_one(
         """
         INSERT INTO settings(key, value_json, updated_at, updated_by)
         VALUES (%s, %s::jsonb, now(), %s)
@@ -208,10 +208,10 @@ def put_admin_settings(
         rw=True,
     )
 
-    after = fetch_one("SELECT key, value_json FROM settings WHERE key=%s", (k,))
+    after = await fetch_one("SELECT key, value_json FROM settings WHERE key=%s", (k,))
     after_json = _normalize_json(after["value_json"]) if after else None
 
-    fetch_one(
+    await fetch_one(
         """
         INSERT INTO audit_log(
             actor_user_id, action, entity_type, entity_id,
@@ -239,8 +239,8 @@ def put_admin_settings(
 # --------------- PAYMENT METHODS ---------------
 
 @router.get("/admin/payment-methods")
-def get_payment_methods(auth: dict = Depends(require_admin)):
-    row = fetch_one("SELECT value_json FROM settings WHERE key=%s", ("payment_methods",))
+async def get_payment_methods(auth: dict = Depends(require_admin)):
+    row = await fetch_one("SELECT value_json FROM settings WHERE key=%s", ("payment_methods",))
     data = _normalize_json(row["value_json"]) if row and row["value_json"] else {}
     if not isinstance(data, dict):
         data = {}
@@ -258,7 +258,7 @@ def get_payment_methods(auth: dict = Depends(require_admin)):
 
 
 @router.put("/admin/payment-methods")
-def put_payment_methods(
+async def put_payment_methods(
     payload: SettingsUpdate,
     request: Request,
     auth: dict = Depends(require_admin),
@@ -330,14 +330,14 @@ def put_payment_methods(
 
         data[country] = {"methods": validated_methods}
 
-    before = fetch_one("SELECT value_json FROM settings WHERE key=%s", ("payment_methods",))
+    before = await fetch_one("SELECT value_json FROM settings WHERE key=%s", ("payment_methods",))
     before_json = _normalize_json(before["value_json"]) if before else None
 
     updated_by = _get_updated_by(auth, request)
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
 
-    fetch_one(
+    await fetch_one(
         """
         INSERT INTO settings(key, value_json, updated_at, updated_by)
         VALUES (%s, %s::jsonb, now(), %s)
@@ -351,7 +351,7 @@ def put_payment_methods(
         rw=True,
     )
 
-    fetch_one(
+    await fetch_one(
         """
         INSERT INTO audit_log(
             actor_user_id, action, entity_type, entity_id,

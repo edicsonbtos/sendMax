@@ -32,8 +32,8 @@ class LoginResponse(BaseModel):
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(data: LoginRequest):
-    user = fetch_one(
+async def login(data: LoginRequest):
+    user = await fetch_one(
         """
         SELECT id, email, hashed_password, role, is_active, full_name, alias
         FROM users

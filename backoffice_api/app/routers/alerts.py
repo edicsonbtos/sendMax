@@ -20,7 +20,7 @@ def alerts_stuck(auth: dict = Depends(require_operator_or_admin)):
 
 
 @router.get("/alerts/stuck-30m")
-def alerts_stuck_30m(
+async def alerts_stuck_30m(
     minutes: int = Query(default=30, ge=5, le=1440),
     limit: int = Query(default=200, ge=10, le=1000),
     auth: dict = Depends(require_operator_or_admin),
@@ -28,7 +28,7 @@ def alerts_stuck_30m(
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(minutes=minutes)
 
-    total_origin = fetch_one(
+    total_origin = await fetch_one(
         """
         SELECT COUNT(*) AS cnt
         FROM orders
@@ -38,7 +38,7 @@ def alerts_stuck_30m(
         (cutoff,),
     )
 
-    total_pay = fetch_one(
+    total_pay = await fetch_one(
         """
         SELECT COUNT(*) AS cnt
         FROM orders
@@ -49,7 +49,7 @@ def alerts_stuck_30m(
         (cutoff,),
     )
 
-    origin_rows = fetch_all(
+    origin_rows = await fetch_all(
         """
         SELECT public_id, origin_country, dest_country, status,
                created_at, updated_at
@@ -62,7 +62,7 @@ def alerts_stuck_30m(
         (cutoff, limit),
     )
 
-    pay_rows = fetch_all(
+    pay_rows = await fetch_all(
         """
         SELECT public_id, origin_country, dest_country, status,
                awaiting_paid_proof_at, updated_at
@@ -79,7 +79,7 @@ def alerts_stuck_30m(
     def iso(x: Any) -> Optional[str]:
         return x.isoformat() if x else None
 
-    def minutes_since(ts: Any) -> Optional[int]:
+    async def minutes_since(ts: Any) -> Optional[int]:
         if not ts:
             return None
         try:

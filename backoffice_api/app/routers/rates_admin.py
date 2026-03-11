@@ -18,7 +18,7 @@ class RegenerateRequest(BaseModel):
     reason: str = "Regeneración desde Backoffice"
     activate: bool = True
 
-def _get_updated_by(auth: dict, request: Request) -> str:
+async def _get_updated_by(auth: dict, request: Request) -> str:
     uid = auth.get("user_id")
     if uid:
         return f"admin:{uid}"
@@ -64,7 +64,7 @@ async def regenerate_rates(
         version_id = data.get("version_id")
 
         # Log en auditoría
-        def _log_audit(cur):
+        async def _log_audit(cur):
             cur.execute(
                 """
                 INSERT INTO audit_log(actor_user_id, action, entity_type, entity_id, after_json, user_agent, ip)
@@ -83,7 +83,7 @@ async def regenerate_rates(
                 )
             )
 
-        run_in_transaction(_log_audit)
+        await run_in_transaction(_log_audit)
         return data
 
     except HTTPException:
@@ -102,7 +102,7 @@ async def get_active_version(auth: dict = Depends(require_admin)):
         ORDER BY effective_from DESC
         LIMIT 1;
     """
-    version = fetch_one(sql)
+    version = await fetch_one(sql)
     if not version:
         return {"ok": False, "detail": "No hay versión activa"}
     return {"ok": True, "version": version}
@@ -116,5 +116,5 @@ async def list_versions(limit: int = Query(default=20, ge=1, le=100), auth: dict
         ORDER BY created_at DESC
         LIMIT %s;
     """
-    versions = fetch_all(sql, (limit,))
+    versions = await fetch_all(sql, (limit,))
     return {"ok": True, "count": len(versions), "versions": versions}

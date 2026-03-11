@@ -4,9 +4,9 @@ from datetime import date, timedelta
 from .db import fetch_one, fetch_all
 
 
-def get_profit_daily(days: int = 30):
+async def get_profit_daily(days: int = 30):
     """Profit por dia en los ultimos N dias (rellena dias sin datos con 0)."""
-    rows = fetch_all(
+    rows = await fetch_all(
         """
         SELECT
             DATE(paid_at) AS day,
@@ -50,13 +50,13 @@ def get_profit_daily(days: int = 30):
     return out
 
 
-def get_operators_ranking(days: int = 7):
+async def get_operators_ranking(days: int = 7):
     """Ranking de operadores por profit y cantidad de ordenes pagadas.
 
     Usa origin_verified_by_telegram_id como identificador del operador
     que verifico y proceso la orden.
     """
-    rows = fetch_all(
+    rows = await fetch_all(
         """
         SELECT
             origin_verified_by_telegram_id AS telegram_id,
@@ -100,9 +100,9 @@ def get_operators_ranking(days: int = 7):
     return out
 
 
-def get_corridors(days: int = 30):
+async def get_corridors(days: int = 30):
     """Analisis por corredor (origin->dest) con profit y volumen."""
-    rows = fetch_all(
+    rows = await fetch_all(
         """
         SELECT
             origin_country,
@@ -145,9 +145,9 @@ def get_corridors(days: int = 30):
     return out
 
 
-def get_stuck_orders():
+async def get_stuck_orders():
     """Ordenes antiguas en estados intermedios."""
-    stuck_origin = fetch_one(
+    stuck_origin = await fetch_one(
         """
         SELECT COUNT(*) AS count
         FROM orders
@@ -156,7 +156,7 @@ def get_stuck_orders():
         """
     )
 
-    stuck_payment = fetch_one(
+    stuck_payment = await fetch_one(
         """
         SELECT COUNT(*) AS count
         FROM orders

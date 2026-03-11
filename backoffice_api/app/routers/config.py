@@ -60,29 +60,29 @@ def _get_updated_by(auth: dict, request: Request) -> str:
     return f"admin:{request.client.host if request.client else 'unknown'}"
 
 @router.get("/commissions")
-def get_all_commissions(auth: dict = Depends(require_admin)):
+async def get_all_commissions(auth: dict = Depends(require_admin)):
     """Lista todas las configuraciones de comisiÃ³n."""
     configs = {}
 
     # Rutas especÃ­ficas
-    routes = fetch_one("SELECT value_json FROM settings WHERE key='commission_routes'")
+    routes = await fetch_one("SELECT value_json FROM settings WHERE key='commission_routes'")
     if routes:
         configs["routes"] = json.loads(routes["value_json"]) if isinstance(routes["value_json"], str) else routes["value_json"]
 
     # Defaults
     for key in ["margin_default", "margin_dest_venez", "margin_route_usa_venez", "profit_split"]:
-        row = fetch_one("SELECT value_json FROM settings WHERE key=%s", (key,))
+        row = await fetch_one("SELECT value_json FROM settings WHERE key=%s", (key,))
         if row:
             configs[key] = json.loads(row["value_json"]) if isinstance(row["value_json"], str) else row["value_json"]
 
     return configs
 
 @router.put("/commission/route")
-def update_commission_route(body: CommissionRouteUpdate, request: Request, auth: dict = Depends(require_admin)):
+async def update_commission_route(body: CommissionRouteUpdate, request: Request, auth: dict = Depends(require_admin)):
     """Actualiza comisiÃ³n para ruta especÃ­fica."""
     updated_by = _get_updated_by(auth, request)
     user_id = auth.get("user_id")
-    def _update(cur):
+    async def _update(cur):
         # Leer actual
         cur.execute("SELECT value_json FROM settings WHERE key='commission_routes' FOR UPDATE")
         row = cur.fetchone()
@@ -114,17 +114,17 @@ def update_commission_route(body: CommissionRouteUpdate, request: Request, auth:
             (user_id, "ROUTE_COMMISSION_UPDATED", "settings", "commission_routes", before_json, after_json, request.headers.get("user-agent"), request.client.host if request.client else None)
         )
 
-    run_in_transaction(_update)
+    await run_in_transaction(_update)
     return {"ok": True, "route": body.route, "percent": body.percent}
 
 @router.delete("/commission/route/{route}")
-def delete_commission_route(route: str, request: Request, auth: dict = Depends(require_admin)):
+async def delete_commission_route(route: str, request: Request, auth: dict = Depends(require_admin)):
     """Elimina la comisiÃ³n especÃ­fica para una ruta."""
     updated_by = _get_updated_by(auth, request)
     user_id = auth.get("user_id")
     route_upper = route.upper()
 
-    def _delete(cur):
+    async def _delete(cur):
         cur.execute("SELECT value_json FROM settings WHERE key='commission_routes' FOR UPDATE")
         row = cur.fetchone()
         routes = _json_obj(row["value_json"] if row else None, default={})
@@ -157,14 +157,14 @@ def delete_commission_route(route: str, request: Request, auth: dict = Depends(r
         )
         return True
 
-    deleted = run_in_transaction(_delete)
+    deleted = await run_in_transaction(_delete)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Ruta {route_upper} no encontrada")
 
     return {"ok": True, "deleted": route_upper}
 
 @router.put("/profit-split")
-def update_profit_split(body: ProfitSplitUpdate, request: Request, auth: dict = Depends(require_admin)):
+async def update_profit_split(body: ProfitSplitUpdate, request: Request, auth: dict = Depends(require_admin)):
     """Actualiza distribuciÃ³n de profit."""
     # Validar que sume sentido (op + sp â‰¤ 1)
     if body.operator_with_sponsor + body.sponsor > 1:
@@ -172,7 +172,7 @@ def update_profit_split(body: ProfitSplitUpdate, request: Request, auth: dict = 
 
     updated_by = _get_updated_by(auth, request)
     user_id = auth.get("user_id")
-    def _update(cur):
+    async def _update(cur):
         cur.execute("SELECT value_json FROM settings WHERE key='profit_split'")
         before = cur.fetchone()
 
@@ -198,7 +198,7 @@ def update_profit_split(body: ProfitSplitUpdate, request: Request, auth: dict = 
             (user_id, "PROFIT_SPLIT_UPDATED", "settings", "profit_split", json.dumps(before["value_json"]) if before else None, after_json, request.headers.get("user-agent"), request.client.host if request.client else None)
         )
 
-    run_in_transaction(_update)
+    await run_in_transaction(_update)
     return {"ok": True, "split": body.model_dump(mode='json')}
 
 @router.post("/margins")
@@ -211,7 +211,7 @@ async def update_margins(
     updated_by = _get_updated_by(auth, request)
     user_id = auth.get("user_id")
 
-    def _update_db(cur):
+    async def _update_db(cur):
         changes = {}
         for key in ["margin_default", "margin_dest_venez", "margin_route_usa_venez"]:
             val = getattr(body, key)
@@ -249,7 +249,7 @@ async def update_margins(
             )
         return changes
 
-    run_in_transaction(_update_db)
+    await run_in_transaction(_update_db)
 
     regen_result = None
     if body.regenerate:

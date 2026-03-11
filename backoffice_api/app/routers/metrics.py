@@ -58,10 +58,10 @@ def _op_filter(auth: dict):
 # ============================================================
 
 @router.get("/metrics/overview")
-def metrics_overview(auth: dict = Depends(require_operator_or_admin)):
+async def metrics_overview(auth: dict = Depends(require_operator_or_admin)):
     wh, prm = _op_filter(auth)
 
-    row = fetch_one(
+    row = await fetch_one(
         f"""
         SELECT
           COUNT(*) AS total_orders,
@@ -159,13 +159,13 @@ def metrics_corridors(days: int = Query(default=30, le=90), auth: dict = Depends
 # ============================================================
 
 @router.get("/metrics/p2p-prices")
-def metrics_p2p_prices(
+async def metrics_p2p_prices(
     country: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     auth: dict = Depends(require_operator_or_admin),
 ):
     if country:
-        rows = fetch_all(
+        rows = await fetch_all(
             """
             SELECT p.country, p.fiat, p.buy_price, p.sell_price,
                    p.source, p.is_verified, p.methods_used, p.amount_ref,
@@ -179,7 +179,7 @@ def metrics_p2p_prices(
             (country.strip().upper(), limit),
         )
     else:
-        rows = fetch_all(
+        rows = await fetch_all(
             """
             SELECT p.country, p.fiat, p.buy_price, p.sell_price,
                    p.source, p.is_verified, p.methods_used, p.amount_ref,
@@ -225,12 +225,12 @@ def metrics_p2p_prices(
 # ============================================================
 
 @router.get("/metrics/operator-leaderboard")
-def metrics_operator_leaderboard(
+async def metrics_operator_leaderboard(
     limit: int = Query(default=10, ge=1, le=50),
     auth: dict = Depends(require_operator_or_admin),
 ):
     """Top operadores por trust_score + volumen mensual."""
-    rows = fetch_all(
+    rows = await fetch_all(
         """
         SELECT u.id, u.alias, u.full_name,
                COALESCE(u.trust_score, 50) AS trust_score,
@@ -284,7 +284,7 @@ def metrics_operator_leaderboard(
 # ============================================================
 
 @router.get("/metrics/company-overview")
-def metrics_company_overview(
+async def metrics_company_overview(
     date_from: str | None = Query(None, description="YYYY-MM-DD"),
     date_to: str | None = Query(None, description="YYYY-MM-DD"),
     origin_country: str | None = Query(None),
@@ -309,7 +309,7 @@ def metrics_company_overview(
     combined_prm = prm + tuple(extra_params)
 
     # --- Query 1: conteos + profit ---
-    row = fetch_one(
+    row = await fetch_one(
         f"""
         SELECT
           COUNT(*) AS total_orders,
@@ -327,7 +327,7 @@ def metrics_company_overview(
     ) or {}
 
     # --- Query 2: volumen por dest_currency (siempre) ---
-    v_rows = fetch_all(
+    v_rows = await fetch_all(
         f"""
         SELECT dest_currency, COALESCE(SUM(payout_dest),0) AS vol, COUNT(*) AS cnt
         FROM orders
@@ -362,7 +362,7 @@ def metrics_company_overview(
     origin_wallets_data = None
 
     if admin:
-        w_rows = fetch_all(
+        w_rows = await fetch_all(
             """
             WITH ins AS (
               SELECT origin_country, fiat_currency, COALESCE(SUM(amount_fiat),0) AS total_in
@@ -433,7 +433,7 @@ def metrics_company_overview(
 # ============================================================
 
 @router.get("/admin/metrics/vault")
-def admin_metrics_vault(auth: dict = Depends(require_operator_or_admin)):
+async def admin_metrics_vault(auth: dict = Depends(require_operator_or_admin)):
     """
     Motor Central de Bóveda (Vault Master).
     Calcula de manera transaccional:
@@ -443,13 +443,13 @@ def admin_metrics_vault(auth: dict = Depends(require_operator_or_admin)):
         raise HTTPException(status_code=403, detail="Solo administradores pueden ver la bóveda central")
 
     # Profit Histórico Total (Órdenes)
-    row_profit = fetch_one(
+    row_profit = await fetch_one(
         "SELECT COALESCE(SUM(profit_real_usdt), 0) AS total_profit FROM orders WHERE status = 'PAGADA'"
     )
     total_profit = float(row_profit["total_profit"] if row_profit else 0)
 
     # Retiros Totales (Withdrawals pagados)
-    row_withdraw = fetch_one(
+    row_withdraw = await fetch_one(
         "SELECT COALESCE(SUM(amount), 0) AS total_withdrawals FROM withdrawals WHERE status ILIKE '%%PAID%%' OR status ILIKE '%%PAGADO%%'"
     )
     total_withdrawals = float(row_withdraw["total_withdrawals"] if row_withdraw else 0)
