@@ -67,10 +67,10 @@ async def operator_login(credentials: OperatorLoginRequest, request: Request):
                 rows = await cur.fetchall()
                 row = rows[0] if rows else None
     except Exception as e:
-        _logger.exception(f"DB error during login query: {e}")
+        _logger.exception("DB error during login query: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error de base de datos: {str(e)}"
+            detail="Error interno del servidor. Intente nuevamente.",
         )
     
     # Verificar que el usuario existe

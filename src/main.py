@@ -1,7 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import os
+import secrets
 import logging
 import warnings
 from contextlib import asynccontextmanager
@@ -170,11 +171,16 @@ async def lifespan(app: FastAPI):
     if settings.WEBHOOK_URL:
         webhook_url = settings.WEBHOOK_URL.rstrip("/")
         url = f"{webhook_url}/webhook"
-        print(f"\n--- SETTING WEBHOOK ---")
-        print(f"URL: {url}")
-        logger.info(f"Setting webhook to: {url}")
-        await bot_app.bot.set_webhook(url=url, allowed_updates=["message", "callback_query"])
-        logger.info(f"Webhook set: {url}")
+        # Generar o leer webhook secret para verificar que los updates vienen de Telegram
+        global _webhook_secret_token
+        _webhook_secret_token = os.environ.get("WEBHOOK_SECRET_TOKEN") or secrets.token_urlsafe(32)
+        logger.info("Setting webhook to: %s (with secret_token verification)", url)
+        await bot_app.bot.set_webhook(
+            url=url,
+            allowed_updates=["message", "callback_query"],
+            secret_token=_webhook_secret_token,
+        )
+        logger.info("Webhook set: %s", url)
 
     await bot_app.start()
     logger.info("Bot started successfully")
@@ -189,6 +195,9 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error stopping PTB: {e}")
     await close_pool()
 
+
+# Webhook secret token (se genera en lifespan, se verifica en /webhook)
+_webhook_secret_token: str | None = None
 
 IS_PRODUCTION = os.environ.get("RAILWAY_ENVIRONMENT") == "production" or bool(os.environ.get("WEBHOOK_URL"))
 
@@ -256,11 +265,18 @@ async def health():
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
-    """Endpoint to receive Telegram updates."""
+    """Endpoint to receive Telegram updates (con verificación de firma)."""
+    # Verificar que el request viene de Telegram (secret_token header)
+    if _webhook_secret_token:
+        incoming_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if incoming_token != _webhook_secret_token:
+            logger.warning("Webhook request con secret_token inválido (posible spoofing)")
+            return Response(status_code=403)
+
     data = await request.json()
     try:
         upd_id = data.get("update_id")
-        logger.info(f"[WEBHOOK] update_id={upd_id}")
+        logger.info("[WEBHOOK] update_id=%s", upd_id)
     except Exception:
         pass
 
