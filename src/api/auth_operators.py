@@ -1,7 +1,7 @@
 """
 Endpoints de autenticación para operadores
 """
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr
 from src.utils.crypto import verify_password
 from src.utils.jwt import create_access_token
@@ -43,10 +43,10 @@ class OperatorLoginResponse(BaseModel):
     email: str
 
 @router.post("/login", response_model=OperatorLoginResponse)
-async def operator_login(credentials: OperatorLoginRequest, request: Request):
+async def operator_login(credentials: OperatorLoginRequest, request: Request, response: Response):
     """
     Login para operadores con email y contraseña.
-    Retorna JWT válido por 7 días.
+    Retorna JWT válido por 24h.
     """
     # Rate limit: 5 intentos/minuto por IP
     client_ip = request.client.host if request.client else "unknown"
@@ -105,8 +105,23 @@ async def operator_login(credentials: OperatorLoginRequest, request: Request):
     
     # Generar JWT
     access_token = create_access_token(
-        data={"sub": str(user_id), "type": "operator"},
-        expires_delta=timedelta(days=7)
+        data={
+            "sub": str(user_id),
+            "email": email,
+            "role": "operator",
+            "type": "operator"
+        },
+        expires_delta=timedelta(hours=24)
+    )
+    
+    # Configurar cookie con flags de seguridad (HttpOnly, Secure, Lax)
+    response.set_cookie(
+        key="auth_token",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=24 * 3600  # 24 horas en segundos
     )
     
     return OperatorLoginResponse(

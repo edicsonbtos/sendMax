@@ -7,7 +7,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # --- Secrets ---
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY")
 BACKOFFICE_API_KEY = os.getenv("BACKOFFICE_API_KEY")
 
 # --- JWT ---

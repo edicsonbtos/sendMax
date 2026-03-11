@@ -51,10 +51,13 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
+        # Estándar unificado: sub = user_id (string), email = email (string)
+        email: str = payload.get("email") or payload.get("sub") # Fallback for old tokens
         role: str = payload.get("role")
-        user_id: int = payload.get("user_id")
-        if email is None:
+        user_id_str = payload.get("sub")
+        user_id = int(payload.get("user_id", user_id_str)) if user_id_str else None
+        
+        if email is None or user_id is None:
             raise credentials_exception
         return {"email": email, "role": role, "user_id": user_id}
     except InvalidTokenError:

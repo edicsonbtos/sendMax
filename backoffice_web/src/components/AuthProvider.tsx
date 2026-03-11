@@ -7,9 +7,6 @@ interface AuthContextType {
   token: string | null;
   role: string | null;
   fullName: string | null;
-  apiKey: string | null;
-  setApiKey: (key: string) => void;
-  clearApiKey: () => void;
   login: (token: string, role: string, name: string) => void;
   logout: () => void;
   isReady: boolean;
@@ -19,9 +16,6 @@ const AuthContext = createContext<AuthContextType>({
   token: null,
   role: null,
   fullName: null,
-  apiKey: null,
-  setApiKey: () => { },
-  clearApiKey: () => { },
   login: () => { },
   logout: () => { },
   isReady: false,
@@ -37,18 +31,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
-  const [apiKey, setApiKeyState] = useState<string | null>(null);
 
   useEffect(() => {
     const storedToken = localStorage.getItem('auth_token') || localStorage.getItem('token') || localStorage.getItem('admin_token');
     const storedRole = localStorage.getItem('auth_role');
     const storedName = localStorage.getItem('auth_name');
-    const storedApiKey = localStorage.getItem('BACKOFFICE_API_KEY') || localStorage.getItem('api_key');
 
     setToken(storedToken);
     setRole(storedRole);
     setFullName(storedName);
-    setApiKeyState(storedApiKey);
     setIsReady(true);
 
     if (typeof window !== 'undefined') {
@@ -87,22 +78,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/login');
   };
 
-  const setApiKey = (key: string) => {
-    localStorage.setItem('BACKOFFICE_API_KEY', key);
-    localStorage.setItem('api_key', key);
-    setApiKeyState(key);
-  };
-
-  const clearApiKey = () => {
-    localStorage.removeItem('BACKOFFICE_API_KEY');
-    localStorage.removeItem('api_key');
-    setApiKeyState(null);
-    logout(); // Generally, clearing api key triggers logout flow in this app
-  };
-
   const value = useMemo(
-    () => ({ token, role, fullName, apiKey, setApiKey, clearApiKey, login, logout, isReady }),
-    [token, role, fullName, apiKey, isReady]
+    () => ({ token, role, fullName, login, logout, isReady }),
+    [token, role, fullName, isReady]
   );
 
   if (!isReady) {

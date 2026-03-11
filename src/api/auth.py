@@ -87,7 +87,12 @@ async def login(req: LoginRequest):
 
     # Generar JWT firmado (expira en 8 horas)
     access_token = create_access_token(
-        data={"sub": str(user_id), "type": "admin", "role": role},
+        data={
+            "sub": str(user_id), 
+            "email": user_email,
+            "role": role,
+            "type": "admin"
+        },
         expires_delta=timedelta(hours=8),
     )
 
