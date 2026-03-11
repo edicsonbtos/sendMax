@@ -84,8 +84,8 @@ async def update_commission_route(body: CommissionRouteUpdate, request: Request,
     user_id = auth.get("user_id")
     async def _update(cur):
         # Leer actual
-        cur.execute("SELECT value_json FROM settings WHERE key='commission_routes' FOR UPDATE")
-        row = cur.fetchone()
+        await cur.execute("SELECT value_json FROM settings WHERE key='commission_routes' FOR UPDATE")
+        row = await cur.fetchone()
         routes = _json_obj(row["value_json"] if row else None, default={})
 
         before_json = json.dumps(routes)
@@ -94,7 +94,7 @@ async def update_commission_route(body: CommissionRouteUpdate, request: Request,
         after_json = json.dumps(routes)
 
         # Guardar
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO settings (key, value_json, updated_at, updated_by)
             VALUES ('commission_routes', %s::json, NOW(), %s)
@@ -106,7 +106,7 @@ async def update_commission_route(body: CommissionRouteUpdate, request: Request,
             (after_json, updated_by)
         )
 
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO audit_log(actor_user_id, action, entity_type, entity_id, before_json, after_json, user_agent, ip)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -125,8 +125,8 @@ async def delete_commission_route(route: str, request: Request, auth: dict = Dep
     route_upper = route.upper()
 
     async def _delete(cur):
-        cur.execute("SELECT value_json FROM settings WHERE key='commission_routes' FOR UPDATE")
-        row = cur.fetchone()
+        await cur.execute("SELECT value_json FROM settings WHERE key='commission_routes' FOR UPDATE")
+        row = await cur.fetchone()
         routes = _json_obj(row["value_json"] if row else None, default={})
 
         if route_upper not in routes:
@@ -136,7 +136,7 @@ async def delete_commission_route(route: str, request: Request, auth: dict = Dep
         del routes[route_upper]
         after_json = json.dumps(routes)
 
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO settings (key, value_json, updated_at, updated_by)
             VALUES ('commission_routes', %s::json, NOW(), %s)
@@ -148,7 +148,7 @@ async def delete_commission_route(route: str, request: Request, auth: dict = Dep
             (after_json, updated_by)
         )
 
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO audit_log(actor_user_id, action, entity_type, entity_id, before_json, after_json, user_agent, ip)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -173,12 +173,12 @@ async def update_profit_split(body: ProfitSplitUpdate, request: Request, auth: d
     updated_by = _get_updated_by(auth, request)
     user_id = auth.get("user_id")
     async def _update(cur):
-        cur.execute("SELECT value_json FROM settings WHERE key='profit_split'")
-        before = cur.fetchone()
+        await cur.execute("SELECT value_json FROM settings WHERE key='profit_split'")
+        before = await cur.fetchone()
 
         after_json = json.dumps(body.model_dump(mode='json'))
 
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO settings (key, value_json, updated_at, updated_by)
             VALUES ('profit_split', %s::json, NOW(), %s)
@@ -190,7 +190,7 @@ async def update_profit_split(body: ProfitSplitUpdate, request: Request, auth: d
             (after_json, updated_by)
         )
 
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO audit_log(actor_user_id, action, entity_type, entity_id, before_json, after_json, user_agent, ip)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -217,10 +217,10 @@ async def update_margins(
             val = getattr(body, key)
             if val is not None:
                 # Leer valor actual para auditorÃ­a
-                cur.execute("SELECT value_json FROM settings WHERE key=%s", (key,))
-                before = cur.fetchone()
+                await cur.execute("SELECT value_json FROM settings WHERE key=%s", (key,))
+                before = await cur.fetchone()
 
-                cur.execute(
+                await cur.execute(
                     """
                     INSERT INTO settings (key, value_json, updated_at, updated_by)
                     VALUES (%s, %s::json, NOW(), %s)
@@ -234,7 +234,7 @@ async def update_margins(
                 changes[key] = {"before": before["value_json"] if before else None, "after": {"percent": val}}
 
         if changes:
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO audit_log(actor_user_id, action, entity_type, entity_id, before_json, after_json, user_agent, ip)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)

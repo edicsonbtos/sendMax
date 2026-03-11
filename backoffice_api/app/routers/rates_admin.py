@@ -65,7 +65,7 @@ async def regenerate_rates(
 
         # Log en auditoría
         async def _log_audit(cur):
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO audit_log(actor_user_id, action, entity_type, entity_id, after_json, user_agent, ip)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)

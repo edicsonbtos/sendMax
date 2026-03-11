@@ -100,9 +100,9 @@ async def _calc_current_balance(d: _date, origin_country: str, fiat_currency: st
     return float(row["current_balance"] or 0) if row else 0.0
 
 
-def _calc_balance_atomic(cur, d: _date, origin_country: str, fiat_currency: str) -> float:
+async def _calc_balance_atomic(cur, d: _date, origin_country: str, fiat_currency: str) -> float:
     """Misma logica que _calc_current_balance pero usando cursor existente (dentro de transaccion)."""
-    cur.execute(
+    await cur.execute(
         """
         SELECT
           COALESCE((SELECT SUM(amount_fiat) FROM origin_receipts_daily
@@ -115,25 +115,25 @@ def _calc_balance_atomic(cur, d: _date, origin_country: str, fiat_currency: str)
         (d, origin_country, fiat_currency,
          d, origin_country, fiat_currency),
     )
-    row = cur.fetchone()
+    row = await cur.fetchone()
     return float(row["current_balance"] or 0) if row else 0.0
 
 
-def _acquire_wallet_lock(cur, origin_country: str, fiat_currency: str):
+async def _acquire_wallet_lock(cur, origin_country: str, fiat_currency: str):
     """Advisory lock por wallet. Se libera automaticamente al COMMIT/ROLLBACK."""
-    cur.execute(
+    await cur.execute(
         "SELECT pg_advisory_xact_lock(hashtext(%s))",
         (f"ow:{origin_country}:{fiat_currency}",),
     )
 
 
-def _check_not_closed(cur, d: _date, origin_country: str, fiat_currency: str):
+async def _check_not_closed(cur, d: _date, origin_country: str, fiat_currency: str):
     """Rechaza operaciones en dias ya cerrados."""
-    cur.execute(
+    await cur.execute(
         "SELECT 1 FROM origin_wallet_closures WHERE day=%s AND origin_country=%s AND fiat_currency=%s",
         (d, origin_country, fiat_currency),
     )
-    if cur.fetchone():
+    if await cur.fetchone():
         raise HTTPException(
             status_code=409,
             detail=f"Day {d} already closed for {origin_country}/{fiat_currency}. Cannot add movements.",
@@ -299,10 +299,10 @@ async def create_origin_sweep(payload: OriginSweepIn, auth: dict = Depends(requi
     d = _parse_day(payload.day)
 
     async def _atomic(cur):
-        _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
-        _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
+        await _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
+        await _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
 
-        current_balance = _calc_balance_atomic(cur, d, payload.origin_country, payload.fiat_currency)
+        current_balance = await _calc_balance_atomic(cur, d, payload.origin_country, payload.fiat_currency)
 
         if payload.amount_fiat > current_balance:
             raise HTTPException(
@@ -310,7 +310,7 @@ async def create_origin_sweep(payload: OriginSweepIn, auth: dict = Depends(requi
                 detail=f"Insufficient funds. current_balance={current_balance}",
             )
 
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO origin_sweeps (day, origin_country, fiat_currency, amount_fiat,
                                        created_by_telegram_id, note, external_ref)
@@ -319,7 +319,7 @@ async def create_origin_sweep(payload: OriginSweepIn, auth: dict = Depends(requi
             (d, payload.origin_country, payload.fiat_currency, payload.amount_fiat,
              payload.created_by_telegram_id, payload.note, payload.external_ref),
         )
-        return cur.fetchone()
+        return await cur.fetchone()
 
     result = await run_in_transaction(_atomic)
     return {"ok": True, "id": result["id"] if result else None}
@@ -419,13 +419,13 @@ async def origin_wallets_close(payload: OriginCloseIn, auth: dict = Depends(requ
 
     async def _atomic(cur):
         # Lock especifico para cierre
-        cur.execute(
+        await cur.execute(
             "SELECT pg_advisory_xact_lock(hashtext(%s))",
             (f"owclose:{d}:{payload.origin_country}:{payload.fiat_currency}",),
         )
 
         # Calcular net_amount dentro de la transaccion
-        cur.execute(
+        await cur.execute(
             """
             SELECT
               COALESCE((SELECT SUM(amount_fiat) FROM origin_receipts_daily
@@ -438,19 +438,19 @@ async def origin_wallets_close(payload: OriginCloseIn, auth: dict = Depends(requ
             (d, payload.origin_country, payload.fiat_currency,
              d, payload.origin_country, payload.fiat_currency),
         )
-        net_row = cur.fetchone()
+        net_row = await cur.fetchone()
         net_amount = float(net_row["net_amount"]) if net_row and net_row["net_amount"] is not None else 0.0
 
         # Verificar si ya existe un cierre para este dia/pais/moneda
-        cur.execute(
+        await cur.execute(
             "SELECT id FROM origin_wallet_closures WHERE day=%s AND origin_country=%s AND fiat_currency=%s FOR UPDATE",
             (d, payload.origin_country, payload.fiat_currency),
         )
-        existing = cur.fetchone()
+        existing = await cur.fetchone()
 
         if existing:
             # Ya existe: actualizar con valores frescos
-            cur.execute(
+            await cur.execute(
                 """
                 UPDATE origin_wallet_closures
                 SET net_amount_at_close = %s,
@@ -462,7 +462,7 @@ async def origin_wallets_close(payload: OriginCloseIn, auth: dict = Depends(requ
                 """,
                 (net_amount, payload.closed_by_telegram_id, payload.note, existing["id"]),
             )
-            row = cur.fetchone()
+            row = await cur.fetchone()
             return {
                 "id": row["id"],
                 "net_amount_at_close": float(row["net_amount_at_close"]),
@@ -470,7 +470,7 @@ async def origin_wallets_close(payload: OriginCloseIn, auth: dict = Depends(requ
             }
         else:
             # No existe: insertar nuevo cierre
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO origin_wallet_closures
                     (day, origin_country, fiat_currency, closed_by_telegram_id, note, net_amount_at_close)
@@ -480,7 +480,7 @@ async def origin_wallets_close(payload: OriginCloseIn, auth: dict = Depends(requ
                 (d, payload.origin_country, payload.fiat_currency,
                  payload.closed_by_telegram_id, payload.note, net_amount),
             )
-            row = cur.fetchone()
+            row = await cur.fetchone()
             return {
                 "id": row["id"],
                 "net_amount_at_close": float(row["net_amount_at_close"]),
@@ -502,10 +502,10 @@ async def origin_wallets_withdraw(payload: OriginWithdrawIn, auth: dict = Depend
         raise HTTPException(status_code=400, detail="amount_fiat must be > 0")
 
     async def _atomic(cur):
-        _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
-        _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
+        await _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
+        await _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
 
-        current_balance = _calc_balance_atomic(cur, d, payload.origin_country, payload.fiat_currency)
+        current_balance = await _calc_balance_atomic(cur, d, payload.origin_country, payload.fiat_currency)
 
         if payload.amount_fiat > current_balance:
             raise HTTPException(
@@ -513,7 +513,7 @@ async def origin_wallets_withdraw(payload: OriginWithdrawIn, auth: dict = Depend
                 detail=f"Insufficient funds. current_balance={current_balance}",
             )
 
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO origin_sweeps
                 (day, origin_country, fiat_currency, amount_fiat,
@@ -523,7 +523,7 @@ async def origin_wallets_withdraw(payload: OriginWithdrawIn, auth: dict = Depend
             (d, payload.origin_country, payload.fiat_currency, payload.amount_fiat,
              payload.created_by_telegram_id, payload.note, payload.external_ref),
         )
-        ins_row = cur.fetchone()
+        ins_row = await cur.fetchone()
         return {
             "id": ins_row["id"] if ins_row else None,
             "current_balance_before": current_balance,
@@ -542,15 +542,15 @@ async def origin_wallets_empty(payload: OriginEmptyIn, auth: dict = Depends(requ
     d = _parse_day(payload.day)
 
     async def _atomic(cur):
-        _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
-        _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
+        await _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
+        await _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
 
-        current_balance = _calc_balance_atomic(cur, d, payload.origin_country, payload.fiat_currency)
+        current_balance = await _calc_balance_atomic(cur, d, payload.origin_country, payload.fiat_currency)
 
         if current_balance <= 0:
             return {"emptied": 0.0, "message": "Already empty", "id": None}
 
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO origin_sweeps
                 (day, origin_country, fiat_currency, amount_fiat,
@@ -560,7 +560,7 @@ async def origin_wallets_empty(payload: OriginEmptyIn, auth: dict = Depends(requ
             (d, payload.origin_country, payload.fiat_currency, current_balance,
              payload.created_by_telegram_id, payload.note, payload.external_ref),
         )
-        ins_row = cur.fetchone()
+        ins_row = await cur.fetchone()
         return {"emptied": current_balance, "id": ins_row["id"] if ins_row else None}
 
     result = await run_in_transaction(_atomic)
@@ -579,10 +579,10 @@ async def create_origin_deposit(payload: OriginDepositIn, auth: dict = Depends(r
         raise HTTPException(status_code=400, detail="amount_fiat must be > 0")
 
     async def _atomic(cur):
-        _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
-        _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
+        await _acquire_wallet_lock(cur, payload.origin_country, payload.fiat_currency)
+        await _check_not_closed(cur, d, payload.origin_country, payload.fiat_currency)
 
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO origin_receipts_daily
                 (day, origin_country, fiat_currency, amount_fiat, created_by_telegram_id, note)
@@ -591,7 +591,7 @@ async def create_origin_deposit(payload: OriginDepositIn, auth: dict = Depends(r
             (d, payload.origin_country, payload.fiat_currency, payload.amount_fiat,
              payload.created_by_telegram_id, payload.note or 'Deposito manual via Backoffice'),
         )
-        row = cur.fetchone()
+        row = await cur.fetchone()
         return {"id": row["id"] if row else None}
 
     result = await run_in_transaction(_atomic)

@@ -96,11 +96,11 @@ async def execute_daily_closure(
     )
 
     # 3. Create Record
-    def _create_record(cur):
+    async def _create_record(cur):
         if existing:
-            cur.execute("DELETE FROM daily_closures WHERE closure_date = %s", (d,))
+            await cur.execute("DELETE FROM daily_closures WHERE closure_date = %s", (d,))
         
-        cur.execute(
+        await cur.execute(
             """
             INSERT INTO daily_closures (
                 closure_date, total_orders_count, total_volume_origin, 
@@ -123,7 +123,7 @@ async def execute_daily_closure(
                 payload.notes, auth['user_id']
             )
         )
-        return cur.fetchone()
+        return await cur.fetchone()
 
     import json
     async def import_json_if_needed(data):
