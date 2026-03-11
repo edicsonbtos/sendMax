@@ -46,37 +46,6 @@ async def lifespan(app: FastAPI):
         await asyncio.wait_for(wait_db_ready(), timeout=30.0)
         logger.info("Database connected successfully")
 
-        # FIX DB: Asegurar base para sprint 4
-        from src.db.connection import get_async_conn
-        async with get_async_conn() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("ALTER TABLE vaults ADD COLUMN IF NOT EXISTS type VARCHAR(50);")
-                await cur.execute("ALTER TABLE vaults ADD COLUMN IF NOT EXISTS tipo VARCHAR(50);")
-                
-                # Inyección de Emergencia: Crear tabla clients (Sprint 5)
-                await cur.execute("""
-                    CREATE TABLE IF NOT EXISTS clients (
-                        id SERIAL PRIMARY KEY,
-                        operator_user_id INTEGER NOT NULL,
-                        full_name VARCHAR(255) NOT NULL,
-                        total_orders INTEGER DEFAULT 0,
-                        total_volume NUMERIC(16, 2) DEFAULT 0,
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                    );
-                """)
-                # Asegurar UNIQUE para UPSERT: Telegram ID o (operator_user_id, full_name)
-                # Al no tener el UUID de telegram de los emisores, unificamos con operator_user_id
-                # En PostgreSQL podemos usar ADD CONSTRAINT IF NOT EXISTS pero eso requiere versión >= 9.6, lo es
-                try:
-                    await cur.execute('ALTER TABLE clients ADD CONSTRAINT unq_operator_client UNIQUE(operator_user_id, full_name);')
-                except Exception:
-                    pass # Ignore if unique constraint already exists
-
-                # Migración de ordenes
-                await cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL;")
-        logger.info("Migración automática de tabla vaults, clients y orders ejecutada correctamente.")
-
     except asyncio.TimeoutError:
         logger.warning("Database connection timeout - bot will start anyway")
     except Exception as e:

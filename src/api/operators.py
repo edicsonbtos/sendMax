@@ -627,28 +627,52 @@ async def create_order_web(
                     detail="El monto máximo por orden es $10,000 USD"
                 )
             
-            # 3. Crear la orden
-            order_id = str(uuid4())
+            # 3. Obtener Tasa Activa y Calcular Payout
+            rv = await rates_repo.get_active_rate_version(conn)
+            if not rv:
+                raise HTTPException(status_code=500, detail="No hay tasas activas configuradas. Contacta al admin.")
+                
+            origin_country = "US"  # Corredor predeterminado (Zelle)
+            dest_country = "VE"
+            
+            rr = await rates_repo.get_route_rate(rate_version_id=rv.id, origin_country=origin_country, dest_country=dest_country)
+            rate_client = rr.rate_client if rr else Decimal("1.0")
+            commission_pct = Decimal("0.0")
+            payout_dest = Decimal(req.amount_usd) * rate_client
+            
+            beneficiary_text = f"{beneficiary[1]} | {beneficiary[2]} | {beneficiary[3]} | {req.notes}"
+            
+            from src.db.repositories.orders_repo import next_public_id
+            public_id = await next_public_id(cur)
+            
+            # 4. Crear la orden (Esquema estricto Alembic)
             await cur.execute(
                 """
                 INSERT INTO orders (
-                    id, user_id, client_id, beneficiary_id, amount_usd,
-                    payment_method, status, notes, created_at
+                    public_id, operator_user_id, client_id, origin_country, dest_country,
+                    amount_origin, rate_version_id, commission_pct, rate_client, payout_dest,
+                    beneficiary_text, origin_payment_proof_file_id, status, created_at, updated_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                 RETURNING id
                 """,
                 (
-                    order_id,
+                    public_id,
                     user_id,
                     req.client_id,
-                    req.beneficiary_id,
+                    origin_country,
+                    dest_country,
                     req.amount_usd,
-                    req.payment_method,
-                    "PENDING_APPROVAL",  # Requiere aprobación de admin
-                    req.notes
+                    rv.id,
+                    commission_pct,
+                    rate_client,
+                    payout_dest,
+                    beneficiary_text,
+                    f"web_{req.payment_method}", # Placeholder for web proofs
+                    "CREADA"
                 )
             )
+            order_id = (await cur.fetchone())[0]
             
             # Actualizar métricas del cliente
             await cur.execute(
