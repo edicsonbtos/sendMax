@@ -215,7 +215,7 @@ async def run_in_transaction(fn: Callable[[psycopg.AsyncCursor], _T], *, attempt
                             result = fn(cur)
                         await conn.commit()
                         return result
-                except Exception:
+                except BaseException:
                     try:
                         await conn.rollback()
                     except Exception:

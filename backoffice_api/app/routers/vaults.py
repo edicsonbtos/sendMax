@@ -32,11 +32,15 @@ class VaultCreate(BaseModel):
     currency: str = Field("USD", max_length=10)
     balance: Decimal = Field(Decimal("0"), ge=0)
     description: Optional[str] = None
+    type: Optional[str] = None
+    tipo: Optional[str] = None
 
 
 class VaultAdjust(BaseModel):
     new_balance: Decimal = Field(..., ge=0)
     note: Optional[str] = None
+    type: Optional[str] = None
+    tipo: Optional[str] = None
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────────

@@ -8,20 +8,16 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
   timeout: 30000,
+  withCredentials: true,
 });
 
 let isRedirecting = false;
 
-// Request Interceptor: Inject tokens
+// Request Interceptor: Inject API Key if present
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
       const apiKey = localStorage.getItem('api_key');
-
-      if (token && config.headers) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
       if (apiKey && config.headers) {
         config.headers['X-API-KEY'] = apiKey;
       }
