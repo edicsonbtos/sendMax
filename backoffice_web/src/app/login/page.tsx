@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -32,7 +32,7 @@ export default function LoginPage() {
       login(data.access_token, data.role, data.full_name);
 
       if (data.role === 'admin' || data.role === 'superadmin') {
-        router.push('/');
+        router.push('/admin');
       } else {
         router.push('/operator-office');
       }
@@ -50,41 +50,42 @@ export default function LoginPage() {
       <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-cyan-500/20 blur-[120px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-500/20 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03] mix-blend-overlay pointer-events-none"></div>
 
       <div className="w-full max-w-[440px] z-10">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-[#ffffff05] border border-[#ffffff1a] mb-4 shadow-[0_0_30px_rgba(6,182,212,0.15)]">
-            <Image src="/logo.png" alt="Sendmax Logo" width={48} height={48} className="w-12 h-12 object-contain" />
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-[#ffffff05] border border-[#ffffff1a] mb-5 shadow-[0_0_30px_rgba(6,182,212,0.2)] transition-transform hover:scale-105">
+            <Image src="/logo.png" alt="Sendmax Logo" width={56} height={56} className="w-14 h-14 object-contain" />
           </div>
-          <h1 className="text-3xl font-black text-white tracking-tight mb-2">Backoffice</h1>
-          <p className="text-sm text-gray-400 font-medium">Panel de Administración de Sendmax</p>
+          <h1 className="text-4xl font-black text-white tracking-tighter mb-2 bg-gradient-to-r from-white via-white to-white/40 bg-clip-text">
+            Backoffice <span className="text-cyan-400">10x</span>
+          </h1>
+          <p className="text-sm text-gray-400 font-semibold uppercase tracking-[0.2em] opacity-80">Sendmax Global Admin</p>
         </div>
 
-        <div className="card-glass p-6 sm:p-8 space-y-6">
+        <div className="card-glass p-8 sm:p-10 space-y-8 shadow-[0_20px_50px_rgba(0,0,0,0.3)] border-white/10">
           <div className="text-center">
-            <h2 className="text-xl font-bold text-white">Iniciar Sesión</h2>
-            <p className="text-sm text-gray-500 mt-1">Ingresa tus credenciales para acceder</p>
+            <h2 className="text-2xl font-black text-white tracking-tight">Acceso Seguro</h2>
+            <p className="text-xs text-gray-500 mt-2 font-bold uppercase tracking-widest">Credenciales del Sistema</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm font-medium flex items-center gap-2 animate-shake">
-                <AlertCircle size={16} className="shrink-0" />
+              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold flex items-center gap-3 animate-shake">
+                <AlertCircle size={18} className="shrink-0" />
                 <p>{error}</p>
               </div>
             )}
 
-            <div className="space-y-3">
+            <div className="space-y-5">
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-500 group-focus-within:text-cyan-400 transition-colors">
-                  <Mail size={18} />
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-cyan-400 transition-colors z-10">
+                  <Mail size={20} strokeWidth={2.5} />
                 </div>
                 <input
                   type="email"
                   required
                   placeholder="Correo electrónico"
-                  className="input-glass pl-10 w-full"
+                  className="input-glass pl-12 w-full py-4 text-sm font-medium transition-all group-focus-within:bg-white/5"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
@@ -93,14 +94,14 @@ export default function LoginPage() {
               </div>
 
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-500 group-focus-within:text-cyan-400 transition-colors">
-                  <Lock size={18} />
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-cyan-400 transition-colors z-10">
+                  <Lock size={20} strokeWidth={2.5} />
                 </div>
                 <input
                   type="password"
                   required
                   placeholder="Contraseña"
-                  className="input-glass pl-10 w-full"
+                  className="input-glass pl-12 w-full py-4 text-sm font-medium transition-all group-focus-within:bg-white/5"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
@@ -111,24 +112,21 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !email || !password}
-              className="w-full relative overflow-hidden group flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full relative overflow-hidden group flex items-center justify-center gap-3 py-4 bg-gradient-to-r from-cyan-600 to-purple-700 hover:from-cyan-500 hover:to-purple-600 text-white font-black text-xs uppercase tracking-[0.2em] rounded-xl transition-all shadow-[0_10px_30px_rgba(6,182,212,0.3)] active:scale-[0.98] disabled:opacity-50"
             >
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform" />
-              <span className="relative flex items-center gap-2">
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <>
-                    Ingresar <ArrowRight size={18} />
-                  </>
-                )}
-              </span>
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  Entrar <ArrowRight size={18} />
+                </>
+              )}
             </button>
           </form>
         </div>
 
-        <div className="text-center mt-8 text-[11px] text-gray-500 font-medium">
-          <p>© {new Date().getFullYear()} Sendmax Global. Todos los derechos reservados.</p>
+        <div className="text-center mt-12 text-[10px] text-gray-600 font-bold uppercase tracking-[0.3em]">
+          <p>© {new Date().getFullYear()} Sendmax Global • Retroceso Seguro v1.2</p>
         </div>
       </div>
     </div>

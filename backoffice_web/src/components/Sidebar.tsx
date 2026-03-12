@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -19,7 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const adminMenu = [
-  { text: "Overview", path: "/", icon: BarChart, description: "Dashboard principal" },
+  { text: "Overview", path: "/admin", icon: BarChart, description: "Dashboard principal" },
   { text: "Órdenes", path: "/orders", icon: Receipt, description: "Gestionar órdenes" },
   { text: "Billeteras Origen", path: "/origin", icon: Wallet, description: "Entradas y sweeps" },
   { text: "Métricas", path: "/metrics", icon: LineChart, description: "Profit y volumen" },
@@ -54,29 +54,31 @@ export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boo
   };
 
   const SidebarContent = (
-    <div className="flex flex-col h-full bg-[#0a0f1e] border-r border-[#ffffff14] w-[264px] shrink-0">
+    <div className="flex flex-col h-full sidebar w-64 flex-col shrink-0">
       {/* Logo Header */}
-      <div className="p-5 flex items-center justify-between border-b border-[#06b6d41a]">
+      <div className="p-6 border-b border-white/10">
         <div
           onClick={() => handleNav("/")}
-          className="flex items-center gap-3 cursor-pointer transition-opacity hover:opacity-80"
+          className="flex items-center gap-3 cursor-pointer transition-transform hover:scale-[1.02]"
         >
-          <img src="/logo.png" alt="Sendmax" className="h-9 w-auto object-contain" />
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <BarChart className="text-white w-6 h-6" />
+          </div>
           <div className="flex flex-col">
-            <h2 className="font-bold text-[#06b6d4] text-[1.1rem] leading-[1.2] tracking-tight">Sendmax</h2>
-            <span className="text-[#8b5cf6] text-[0.65rem] leading-none tracking-wider uppercase font-medium">Backoffice</span>
+            <h2 className="font-bold text-white text-lg leading-tight tracking-tight">SendMax</h2>
+            <span className="text-blue-400 text-[10px] uppercase tracking-widest font-bold opacity-80">Backoffice</span>
           </div>
         </div>
         <button
           onClick={() => setMobileOpen(false)}
-          className="md:hidden text-[#06b6d4] hover:bg-[#06b6d41a] p-1.5 rounded-lg transition-colors"
+          className="lg:hidden text-white/60 hover:text-white p-1.5 rounded-lg transition-colors"
         >
           <X size={20} />
         </button>
       </div>
 
       {/* Navigation Menu */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto py-6 custom-scrollbar">
         <ul className="space-y-1">
           {menuItems.map((item) => {
             const isActive = item.path === "/" ? pathname === "/" : pathname.startsWith(item.path);
@@ -87,36 +89,12 @@ export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boo
                 <button
                   onClick={() => handleNav(item.path)}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group text-left relative",
-                    isActive
-                      ? "bg-[#06b6d414] border border-[#06b6d433] text-[#06b6d4]"
-                      : "bg-transparent border border-transparent text-gray-300 hover:bg-[#ffffff08] hover:text-white"
+                    "sidebar-item w-full flex items-center gap-3",
+                    isActive ? "active" : ""
                   )}
                 >
-                  <div className={cn(
-                    "min-w-6 flex items-center justify-center transition-colors",
-                    isActive ? "text-[#06b6d4]" : "text-gray-500 group-hover:text-gray-300"
-                  )}>
-                    <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                  </div>
-
-                  <div className="flex flex-col">
-                    <span className={cn(
-                      "text-sm tracking-tight",
-                      isActive ? "font-bold" : "font-medium"
-                    )}>
-                      {item.text}
-                    </span>
-                    {!isActive && (
-                      <span className="text-[0.65rem] text-gray-500 mt-0.5 leading-[1.2]">
-                        {item.description}
-                      </span>
-                    )}
-                  </div>
-
-                  {isActive && (
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-1 h-6 rounded bg-[#06b6d4] shadow-[0_0_8px_rgba(6,182,212,0.5)]" />
-                  )}
+                  <Icon className="w-5 h-5" />
+                  <span>{item.text}</span>
                 </button>
               </li>
             );
@@ -124,29 +102,27 @@ export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boo
         </ul>
       </div>
 
-      <div className="mx-4 border-t border-[#06b6d41a]" />
-
       {/* User Profile Footer */}
-      <div className="p-4 pb-5">
+      <div className="p-4 border-t border-white/10">
         {token && (
           <button
             onClick={logout}
-            className="w-full flex items-center justify-center gap-2 mb-4 px-4 py-2 border border-[#ef44444d] text-[#ef4444] rounded-xl text-sm font-medium hover:bg-[#ef444414] hover:border-[#ef4444] transition-colors"
+            className="sidebar-item w-full text-red-400 hover:bg-red-500/10 mb-4"
           >
             <LogOut size={16} />
-            Cerrar Sesión
+            <span>Cerrar Sesión</span>
           </button>
         )}
 
-        <div className="flex items-center gap-3 p-2 rounded-xl bg-[#ffffff05] border border-[#ffffff0a]">
-          <div className="w-9 h-9 rounded-full bg-[#06b6d426] text-[#06b6d4] flex items-center justify-center text-xs font-bold border border-[#06b6d44d]">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+          <div className="w-9 h-9 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold border border-blue-500/30">
             {getInitials(fullName)}
           </div>
           <div className="flex flex-col">
-            <span className="text-gray-200 font-semibold text-xs leading-[1.2]">
+            <span className="text-white font-medium text-xs">
               {fullName || "Usuario"}
             </span>
-            <span className="text-[#8b5cf6] text-[0.65rem] leading-[1.2] font-medium">
+            <span className="text-gray-500 text-[10px] font-medium uppercase tracking-wider">
               {role === "admin" ? "Administrador" : "Operador"}
             </span>
           </div>
@@ -155,21 +131,30 @@ export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boo
     </div>
   );
 
+
   return (
     <>
       {/* Mobile Backdrop */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
+      <div
+        className={cn(
+          "fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300",
+          mobileOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+        onClick={() => setMobileOpen(false)}
+      />
 
-      {/* Sidebar Wrapper */}
-      <aside className={cn(
-        "fixed md:sticky top-0 left-0 h-screen z-50 transition-transform duration-300 md:translate-x-0 overflow-hidden",
-        mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
-      )}>
+      {/* Sidebar Desktop */}
+      <aside className="fixed top-0 left-0 z-50 h-screen transition-transform -translate-x-full lg:translate-x-0 lg:static">
+        {SidebarContent}
+      </aside>
+
+      {/* Sidebar Mobile */}
+      <aside
+        className={cn(
+          "fixed top-0 left-0 z-50 w-64 h-screen transition-transform duration-300 lg:hidden",
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
         {SidebarContent}
       </aside>
     </>

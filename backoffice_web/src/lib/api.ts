@@ -62,3 +62,27 @@ export const apiDelete = <T = any>(url: string, config = {}) =>
 
 export const apiPatch = <T = any>(url: string, data?: any, config = {}) =>
   api.patch<T>(url, data, config);
+
+/**
+ * Legacy/Compatible helper that returns data directly.
+ * Matches original functional logic of restored pages.
+ */
+export async function apiRequest<T = any>(url: string, options: any = {}): Promise<T> {
+  const method = (options.method || 'GET').toLowerCase();
+  const config = {
+    ...options,
+    method,
+  };
+  
+  // If options.body exists (from fetch-style calls), move to config.data for axios
+  if (options.body && !config.data) {
+    config.data = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+  }
+
+  const response = await api.request<T>({
+    url,
+    ...config,
+  });
+  
+  return response.data;
+}

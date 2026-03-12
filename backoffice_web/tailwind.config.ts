@@ -11,6 +11,14 @@ const config: Config = {
             colors: {
                 background: "var(--background)",
                 foreground: "var(--foreground)",
+                primary: {
+                    900: "var(--primary-900)",
+                    800: "var(--primary-800)",
+                    700: "var(--primary-700)",
+                    600: "var(--primary-600)",
+                    500: "var(--primary-500)",
+                    400: "var(--primary-400)",
+                },
             },
             animation: {
                 'slide-up': 'slideUp 0.5s ease-out',

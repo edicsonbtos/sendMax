@@ -1,4 +1,6 @@
 import React, { useEffect } from 'react';
+import { cn } from '@/lib/utils';
+import { X } from 'lucide-react';
 
 interface ModalProps {
     isOpen: boolean;
@@ -40,45 +42,47 @@ export default function Modal({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
+                className="fixed inset-0 bg-primary-900/80 backdrop-blur-md transition-opacity animate-fade-in"
                 onClick={onClose}
                 aria-hidden="true"
             />
 
             {/* Modal panel */}
             <div
-                className={`relative w-full ${maxWidthClasses[maxWidth]} bg-slate-900 border border-slate-800 rounded-xl shadow-[0_0_40px_rgba(0,0,0,0.5)] transform transition-all flex flex-col max-h-[90vh]`}
+                className={cn(
+                    "relative w-full shadow-2xl transition-all flex flex-col max-h-[90vh] animate-scale-in",
+                    "bg-primary-900 border border-white/10 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]",
+                    maxWidthClasses[maxWidth]
+                )}
                 onClick={e => e.stopPropagation()}
             >
                 {/* Header */}
-                {title && (
-                    <div className="flex items-start justify-between p-5 border-b border-slate-800">
-                        <h3 className="text-xl font-semibold text-white">
+                <div className="flex items-center justify-between p-6 border-b border-white/10">
+                    {title ? (
+                        <h3 className="text-xl font-bold text-white tracking-tight">
                             {title}
                         </h3>
-                        <button
-                            onClick={onClose}
-                            className="text-slate-400 bg-transparent hover:bg-slate-800 hover:text-white rounded-lg text-sm w-8 h-8 ml-auto inline-flex justify-center items-center transition-colors"
-                        >
-                            <svg className="w-3 h-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14">
-                                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6" />
-                            </svg>
-                            <span className="sr-only">Cerrar modal</span>
-                        </button>
-                    </div>
-                )}
+                    ) : <div />}
+                    <button
+                        onClick={onClose}
+                        className="p-2 text-gray-400 bg-white/5 hover:bg-white/10 hover:text-white rounded-xl transition-all duration-200"
+                    >
+                        <X size={20} />
+                        <span className="sr-only">Cerrar modal</span>
+                    </button>
+                </div>
 
                 {/* Body */}
-                <div className="p-5 overflow-y-auto flex-1 custom-scrollbar">
+                <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
                     {children}
                 </div>
 
                 {/* Footer */}
                 {footer && (
-                    <div className="flex items-center justify-end p-5 border-t border-slate-800 space-x-3 rounded-b-xl">
+                    <div className="flex items-center justify-end p-6 border-t border-white/10 space-x-3 bg-white/5">
                         {footer}
                     </div>
                 )}
@@ -86,3 +90,4 @@ export default function Modal({
         </div>
     );
 }
+

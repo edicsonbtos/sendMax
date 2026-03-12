@@ -1,7 +1,8 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from 'react-hot-toast';
+import LayoutShell from "@/components/LayoutShell";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -27,21 +28,28 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {children}
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-primary-900`}>
+        <LayoutShell>
+          {children}
+        </LayoutShell>
         <Toaster
           position="top-right"
           toastOptions={{
             style: {
-              background: '#1a2332',
+              background: 'rgba(15, 35, 65, 0.9)',
               color: '#fff',
+              backdropFilter: 'blur(10px)',
               border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontWeight: 500
             },
           }}
         />
       </body>
     </html>
   );
+
 }
 
 export const dynamic = 'force-dynamic';

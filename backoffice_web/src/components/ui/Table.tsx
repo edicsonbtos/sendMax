@@ -1,4 +1,5 @@
 import React from 'react';
+import { cn } from '@/lib/utils';
 
 interface Column<T> {
     key: string;
@@ -23,42 +24,42 @@ export default function Table<T extends Record<string, any>>({
 }: TableProps<T>) {
     if (loading) {
         return (
-            <div className={`flex justify-center items-center p-8 space-x-2 w-full ${className}`}>
-                <div className="w-3 h-3 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-                <div className="w-3 h-3 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></div>
-                <div className="w-3 h-3 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></div>
+            <div className={cn("flex justify-center items-center p-12 space-x-2 w-full", className)}>
+                <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></div>
+                <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></div>
             </div>
         );
     }
 
     if (data.length === 0) {
         return (
-            <div className={`p-8 text-center text-slate-400 border border-dashed border-slate-700 rounded-lg ${className}`}>
+            <div className={cn("p-12 text-center text-gray-500 border border-dashed border-white/10 rounded-2xl bg-white/5", className)}>
                 {emptyMessage}
             </div>
         );
     }
 
     return (
-        <div className={`overflow-x-auto rounded-lg border border-slate-800 ${className}`}>
+        <div className={cn("overflow-x-auto rounded-2xl border border-white/10 bg-primary-800/20 backdrop-blur-sm shadow-xl", className)}>
             <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-400 uppercase bg-slate-900/80 border-b border-slate-800">
+                <thead className="text-[11px] text-gray-400 uppercase tracking-widest bg-primary-900/50 border-b border-white/10">
                     <tr>
                         {columns.map((col, index) => (
-                            <th key={col.key || index} scope="col" className="px-6 py-3 font-medium">
+                            <th key={col.key || index} scope="col" className="px-6 py-4 font-bold">
                                 {col.header}
                             </th>
                         ))}
                     </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-white/5">
                     {data.map((row, rowIndex) => (
                         <tr
                             key={rowIndex}
-                            className="bg-slate-900/20 border-b border-slate-800/50 hover:bg-slate-800/50 transition-colors"
+                            className="hover:bg-white/5 transition-colors group"
                         >
                             {columns.map((col, colIndex) => (
-                                <td key={colIndex} className="px-6 py-4">
+                                <td key={colIndex} className="px-6 py-4 text-gray-300 font-medium group-hover:text-white transition-colors">
                                     {col.render ? col.render(row) : row[col.key]}
                                 </td>
                             ))}
@@ -69,3 +70,4 @@ export default function Table<T extends Record<string, any>>({
         </div>
     );
 }
+
