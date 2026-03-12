@@ -307,14 +307,14 @@ export default function DailyClosePage() {
                         type="date"
                         label="Fecha del Cierre"
                         value={selectedDate}
-                        onChange={setSelectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
                         max={format(subDays(new Date(), 1), 'yyyy-MM-dd')}
                     />
 
                     <Input
                         label="Notas (opcional)"
                         value={notes}
-                        onChange={setNotes}
+                        onChange={(e) => setNotes(e.target.value)}
                         placeholder="Ej: Ajuste manual por orden #1234"
                     />
 

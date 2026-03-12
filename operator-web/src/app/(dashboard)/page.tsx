@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '@/lib/api'; // FIXED: Importar cliente API para autorizar peticiones
 import { safeToFixed } from '@/lib/utils';
 import {
@@ -78,6 +79,7 @@ export default function Dashboard() {
     const [stats, setStats] = useState<Stats | null>(null);
     const [ranking, setRanking] = useState<RankingEntry[]>([]);
     const [loading, setLoading] = useState(true);
+    const router = useRouter();
 
     useEffect(() => {
         let mounted = true;

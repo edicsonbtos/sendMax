@@ -11,7 +11,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # Inyección para invalidar la caché de Railway (Fase 4 clean build)
-ARG CACHEBUST=20260311_v1
+ARG CACHEBUST=20260311_v2_grandprix
 ENV CACHEBUST=$CACHEBUST
 
 # Instalación reproducible con npm ci (no npm install)

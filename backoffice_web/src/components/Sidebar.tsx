@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import {
   BarChart,
-  ReceiptSquare,
+  Receipt,
   Wallet,
   Settings,
   LineChart,
@@ -20,19 +20,19 @@ import { cn } from "@/lib/utils";
 
 const adminMenu = [
   { text: "Overview", path: "/", icon: BarChart, description: "Dashboard principal" },
-  { text: "Órdenes", path: "/orders", icon: ReceiptSquare, description: "Gestionar órdenes" },
+  { text: "Órdenes", path: "/orders", icon: Receipt, description: "Gestionar órdenes" },
   { text: "Billeteras Origen", path: "/origin", icon: Wallet, description: "Entradas y sweeps" },
   { text: "Métricas", path: "/metrics", icon: LineChart, description: "Profit y volumen" },
   { text: "Cierre Diario", path: "/daily-close", icon: Calendar, description: "Reportes y cierres" },
   { text: "Usuarios", path: "/users", icon: Users, description: "Gestionar operadores" },
-  { text: "Rutas Comisión", path: "/routes", icon: ReceiptSquare, description: "Márgenes por ruta" },
+  { text: "Rutas Comisión", path: "/routes", icon: Receipt, description: "Márgenes por ruta" },
   { text: "Configuración", path: "/settings", icon: Settings, description: "Reglas y márgenes" },
   { text: "Métodos de Pago", path: "/payment-methods", icon: CreditCard, description: "Métodos por país" },
 ];
 
 const operatorMenu = [
   { text: "Mi Dashboard", path: "/", icon: BarChart, description: "Mis métricas" },
-  { text: "Mis Órdenes", path: "/orders", icon: ReceiptSquare, description: "Mis operaciones" },
+  { text: "Mis Órdenes", path: "/orders", icon: Receipt, description: "Mis operaciones" },
   { text: "Métricas", path: "/metrics", icon: LineChart, description: "Mi rendimiento" },
 ];
 
