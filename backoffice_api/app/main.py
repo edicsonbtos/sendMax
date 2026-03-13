@@ -14,7 +14,7 @@ from .routers import (
     diagnostics, metrics, orders, origin_wallets,
     settings, alerts, corrections, auth, users,
     config, rates_admin, exports, operator, vaults,
-    daily_closure,
+    daily_closure, executive,
 )
 from .db import close_pools
 from .config import validate_config, IS_PRODUCTION, ALLOWED_ORIGINS
@@ -133,3 +133,4 @@ app.include_router(exports.router)
 app.include_router(operator.router)
 app.include_router(vaults.router)
 app.include_router(daily_closure.router)
+app.include_router(executive.router)

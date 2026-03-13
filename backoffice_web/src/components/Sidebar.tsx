@@ -19,21 +19,51 @@ import {
 } from "lucide-react";
 
 const adminMenu = [
-  { text: "Overview", path: "/admin", icon: BarChart, description: "Dashboard principal" },
-  { text: "Órdenes", path: "/orders", icon: Receipt, description: "Gestionar órdenes" },
-  { text: "Billeteras Origen", path: "/origin", icon: Wallet, description: "Entradas y sweeps" },
-  { text: "Métricas", path: "/metrics", icon: LineChart, description: "Profit y volumen" },
-  { text: "Cierre Diario", path: "/daily-close", icon: Calendar, description: "Reportes y cierres" },
-  { text: "Usuarios", path: "/users", icon: Users, description: "Gestionar operadores" },
-  { text: "Rutas Comisión", path: "/routes", icon: Receipt, description: "Márgenes por ruta" },
-  { text: "Configuración", path: "/settings", icon: Settings, description: "Reglas y márgenes" },
-  { text: "Métodos de Pago", path: "/payment-methods", icon: CreditCard, description: "Métodos por país" },
+  { 
+    category: "Control Ejecutivo",
+    items: [
+      { text: "Control Center", path: "/control-center", icon: BarChart, description: "Dashboard estratégico" },
+      { text: "Riesgo Operativo", path: "/risk", icon: LineChart, description: "Monitor de anomalías" },
+      { text: "Auditoría Log", path: "/audit", icon: Receipt, description: "Feed de eventos" },
+    ]
+  },
+  {
+    category: "Operación",
+    items: [
+      { text: "Órdenes", path: "/orders", icon: Receipt, description: "Gestión de remesas" },
+      { text: "Usuarios", path: "/users", icon: Users, description: "Operadores y perfiles" },
+      { text: "Métodos de Pago", path: "/payment-methods", icon: CreditCard, description: "Configuración local" },
+    ]
+  },
+  {
+    category: "Tesorería",
+    items: [
+      { text: "Billeteras Origen", path: "/origin", icon: Wallet, description: "Entradas y sweeps" },
+      { text: "Tesorería Central", path: "/treasury", icon: Wallet, description: "Balances corporativos" },
+      { text: "Bóvedas / Vaults", path: "/vaults", icon: Wallet, description: "Radar de liquidez" },
+    ]
+  },
+  {
+    category: "Configuración",
+    items: [
+      { text: "Métricas", path: "/metrics", icon: LineChart, description: "KPIs históricos" },
+      { text: "Cierre Diario", path: "/daily-close", icon: Calendar, description: "Snapshots legales" },
+      { text: "Rutas Comisión", path: "/routes", icon: Receipt, description: "Márgenes" },
+      { text: "Ajustes", path: "/settings", icon: Settings, description: "Sistema" },
+      { text: "Overview Original", path: "/admin", icon: BarChart, description: "Admin legacy" },
+    ]
+  }
 ];
 
 const operatorMenu = [
-  { text: "Mi Dashboard", path: "/", icon: BarChart, description: "Mis métricas" },
-  { text: "Mis Órdenes", path: "/orders", icon: Receipt, description: "Mis operaciones" },
-  { text: "Métricas", path: "/metrics", icon: LineChart, description: "Mi rendimiento" },
+  { 
+    category: "Mi Operativa",
+    items: [
+      { text: "Escritorio", path: "/", icon: BarChart, description: "Mis números" },
+      { text: "Tablero Órdenes", path: "/orders", icon: Receipt, description: "Operaciones" },
+      { text: "Mis Métricas", path: "/metrics", icon: LineChart, description: "Rendimiento" },
+    ]
+  }
 ];
 
 export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boolean, setMobileOpen: (open: boolean) => void }) {
@@ -79,27 +109,43 @@ export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boo
 
       {/* Navigation Menu */}
       <div className="flex-1 overflow-y-auto py-6 custom-scrollbar">
-        <ul className="space-y-1">
-          {menuItems.map((item) => {
-            const isActive = item.path === "/" ? pathname === "/" : pathname.startsWith(item.path);
-            const Icon = item.icon;
+        <nav className="px-3 space-y-8">
+          {menuItems.map((group) => (
+            <div key={group.category} className="space-y-2">
+              <h3 className="px-4 text-[10px] font-black text-white/20 uppercase tracking-[0.2em]">
+                {group.category}
+              </h3>
+              <ul className="space-y-1">
+                {group.items.map((item) => {
+                  const isActive = item.path === "/" ? pathname === "/" : pathname.startsWith(item.path);
+                  const Icon = item.icon;
 
-            return (
-              <li key={item.path}>
-                <button
-                  onClick={() => handleNav(item.path)}
-                  className={cn(
-                    "sidebar-item w-full flex items-center gap-3",
-                    isActive ? "active" : ""
-                  )}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.text}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                  return (
+                    <li key={item.path}>
+                      <button
+                        onClick={() => handleNav(item.path)}
+                        className={cn(
+                          "sidebar-item w-full flex items-center gap-3 py-2 px-4 rounded-xl text-sm font-semibold transition-all duration-200",
+                          isActive 
+                            ? "bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.1)]" 
+                            : "text-white/40 hover:text-white hover:bg-white/5 border border-transparent"
+                        )}
+                      >
+                        <div className={cn(
+                          "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                          isActive ? "bg-blue-500/20 text-blue-400" : "text-white/20 group-hover:text-white/40"
+                        )}>
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <span>{item.text}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
       </div>
 
       {/* User Profile Footer */}
