@@ -2,13 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  IconButton,
-  Tooltip,
-  MenuItem,
-  Select,
-  FormControl,
-} from '@mui/material';
 import { useAuth } from '@/components/AuthProvider';
 import api from '@/lib/api';
 import Card from '@/components/ui/Card';
@@ -240,18 +233,18 @@ export default function OrdersPage() {
       header: 'Acciones',
       render: (o: Order) => (
         <div className="flex justify-center">
-          <Tooltip title="Ver detalle">
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                router.push(`/orders/${o.public_id}`);
-              }}
-              className="text-white/40 hover:text-blue-400 hover:bg-white/5"
-            >
-              <Eye size={16} />
-            </IconButton>
-          </Tooltip>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push(`/orders/${o.public_id}`);
+            }}
+            className="text-white/40 hover:text-blue-400 hover:bg-white/5 p-1"
+            title="Ver detalle"
+          >
+            <Eye size={16} />
+          </Button>
         </div>
       )
     }
@@ -312,61 +305,39 @@ export default function OrdersPage() {
         </div>
 
         <div className="w-full lg:w-48">
-          <FormControl fullWidth size="small" variant="outlined" className="group">
-            <label className="block text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-2 ml-1">Estado</label>
-            <Select
+          <div className="flex flex-col gap-2">
+            <label className="block text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] ml-1">Estado</label>
+            <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-white/5 border-white/10 text-white rounded-xl h-10 text-sm"
-              MenuProps={{
-                PaperProps: {
-                  className: "bg-primary-900 border border-white/10 text-white rounded-xl shadow-2xl"
-                }
-              }}
-              sx={{
-                color: 'white',
-                '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.1) !important' },
-                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3b82f6 !important' },
-                '.MuiSvgIcon-root': { color: 'rgba(255,255,255,0.4)' }
-              }}
+              className="bg-white/5 border border-white/10 text-white rounded-xl h-10 px-3 text-sm focus:ring-blue-500/20 outline-none w-full"
             >
-              <MenuItem value="all">Todos los Estados</MenuItem>
+              <option value="all" className="bg-primary-900 font-bold">Todos los Estados</option>
               {uniqueStatuses.map(status => (
-                <MenuItem key={status} value={status}>
+                <option key={status} value={status} className="bg-primary-900 font-bold">
                   {statusLabels[status] || status}
-                </MenuItem>
+                </option>
               ))}
-            </Select>
-          </FormControl>
+            </select>
+          </div>
         </div>
 
         <div className="w-full lg:w-48">
-          <FormControl fullWidth size="small" variant="outlined" className="group">
-            <label className="block text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-2 ml-1">País</label>
-            <Select
+          <div className="flex flex-col gap-2">
+            <label className="block text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] ml-1">País</label>
+            <select
               value={countryFilter}
               onChange={(e) => setCountryFilter(e.target.value)}
-              className="bg-white/5 border-white/10 text-white rounded-xl h-10 text-sm"
-              MenuProps={{
-                PaperProps: {
-                  className: "bg-primary-900 border border-white/10 text-white rounded-xl shadow-2xl"
-                }
-              }}
-              sx={{
-                color: 'white',
-                '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.1) !important' },
-                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3b82f6 !important' },
-                '.MuiSvgIcon-root': { color: 'rgba(255,255,255,0.4)' }
-              }}
+              className="bg-white/5 border border-white/10 text-white rounded-xl h-10 px-3 text-sm focus:ring-blue-500/20 outline-none w-full"
             >
-              <MenuItem value="all">Todos los Países</MenuItem>
+              <option value="all" className="bg-primary-900 font-bold">Todos los Países</option>
               {uniqueCountries.map(country => (
-                <MenuItem key={country} value={country}>
+                <option key={country} value={country} className="bg-primary-900 font-bold">
                   {country}
-                </MenuItem>
+                </option>
               ))}
-            </Select>
-          </FormControl>
+            </select>
+          </div>
         </div>
 
         <div className="w-full lg:w-24">

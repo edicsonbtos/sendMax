@@ -1,13 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, ReactElement } from 'react';
-import {
-  Tooltip,
-  IconButton,
-  MenuItem,
-  Select,
-  FormControl,
-} from '@mui/material';
 import { useAuth } from '@/components/AuthProvider';
 import api from '@/lib/api';
 import Card from '@/components/ui/Card';
@@ -161,6 +154,7 @@ export default function OriginPage() {
             variant="secondary"
             icon={<Send size={14} />}
             onClick={() => openSweepDialog(m.country, m.currency)}
+            title="Registrar Sweep"
           >
             Sweep
           </Button>
