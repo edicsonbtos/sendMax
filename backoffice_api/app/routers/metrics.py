@@ -457,11 +457,49 @@ async def admin_metrics_vault(auth: dict = Depends(require_operator_or_admin)):
     vault_balance = total_profit - total_withdrawals
 
     import datetime
+# ============================================================
+# GET /metrics/control-center (AGREGADOR FASE 3)
+# ============================================================
+
+@router.get("/metrics/control-center")
+async def metrics_control_center(auth: dict = Depends(require_operator_or_admin)):
+    """
+    Agregador Maestro (M10 hardened).
+    Combina Overview, Vault y Leaderboard en un solo payload para el Admin.
+    Reduce latencia y número de peticiones desde el frontend.
+    """
+    import asyncio
+    import datetime
+
+    # Ejecutar llamadas concurrentes para máxima eficiencia
+    tasks = [
+        metrics_overview(auth),
+        metrics_operator_leaderboard(limit=5, auth=auth)
+    ]
+    
+    # Solo admin ve la bóveda central
+    if _is_admin(auth):
+        tasks.append(admin_metrics_vault(auth))
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    overview_res = results[0] if not isinstance(results[0], Exception) else {}
+    leaderboard_res = results[1] if not isinstance(results[1], Exception) else {"leaderboard": []}
+    
+    vault_res = None
+    if _is_admin(auth) and len(results) > 2:
+        vault_res = results[2] if not isinstance(results[2], Exception) else None
+
     return {
         "ok": True,
-        "vault_balance": vault_balance,
-        "total_profit": total_profit,
-        "total_withdrawals": total_withdrawals,
-        "currency": "USDT",
-        "last_updated": datetime.datetime.utcnow().isoformat() + "Z"
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data": {
+            "overview": overview_res,
+            "leaderboard": leaderboard_res.get("leaderboard", []),
+            "vault": vault_res,
+            "config": {
+                "role": auth.get("role"),
+                "is_admin": _is_admin(auth)
+            }
+        }
     }
