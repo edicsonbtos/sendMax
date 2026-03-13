@@ -1,6 +1,6 @@
 """
-Router: Executive Aggregators (Phase 4)
-Consolida vistas de Control Center, Treasury, Vaults, Risk y Audit.
+Router: Executive Aggregators - Evolution (Phase 5)
+Consolida vistas de Control Center, Treasury, Vaults, Risk y Audit con logs de actividad.
 """
 
 from __future__ import annotations
@@ -25,20 +25,17 @@ async def executive_control_center(auth: dict = Depends(require_operator_or_admi
     """Vista de alto nivel del sistema."""
     is_admin_user = _is_admin(auth)
     
-    # Tareas base (Overview y Leaderboard)
     tasks = [
         metrics_overview(auth),
         metrics_operator_leaderboard(limit=5, auth=auth)
     ]
     
-    # Solo admin ve Vault y Alertas de riesgo
     if is_admin_user:
         tasks.append(admin_metrics_vault(auth))
         tasks.append(get_stuck_orders())
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
-    # Procesar resultados
     overview = results[0] if not isinstance(results[0], Exception) else {}
     leaderboard = results[1] if not isinstance(results[1], Exception) else {"leaderboard": []}
     
@@ -48,7 +45,6 @@ async def executive_control_center(auth: dict = Depends(require_operator_or_admi
         vault = results[2] if len(results) > 2 and not isinstance(results[2], Exception) else None
         risk_summary = results[3] if len(results) > 3 and not isinstance(results[3], Exception) else None
 
-    # Fetch recent orders (real activity)
     recent_orders = await fetch_all(
         "SELECT public_id, status, created_at, amount_origin, origin_country, dest_country "
         "FROM orders ORDER BY created_at DESC LIMIT 10"
@@ -79,14 +75,12 @@ async def executive_treasury(auth: dict = Depends(require_admin)):
     """Vista consolidada de tesorería origen."""
     orig_balances = await origin_wallets_current_balances(auth)
     
-    # Agregado por país
     by_country = {}
     for item in orig_balances.get("items", []):
         country = item["origin_country"]
         if country not in by_country:
             by_country[country] = {"country": country, "total_balance_usd": 0.0, "currencies": []}
         
-        # En una versión real se usaría tasa de cambio, aquí asumimos balance o agregamos balances
         by_country[country]["currencies"].append(item)
         by_country[country]["total_balance_usd"] += float(item["current_balance"])
 
@@ -124,7 +118,7 @@ async def executive_vaults(auth: dict = Depends(require_admin)):
 
 @router.get("/risk")
 async def executive_risk(auth: dict = Depends(require_admin)):
-    """Monitor de riesgo operativo."""
+    """Monitor de riesgo operativo y checks de integridad (Fase 5)."""
     stuck = await get_stuck_orders()
     
     # Retiros pendientes
@@ -132,10 +126,28 @@ async def executive_risk(auth: dict = Depends(require_admin)):
         "SELECT COUNT(*) as count, SUM(amount_usdt) as total FROM withdrawals WHERE status = 'SOLICITADA'"
     )
     
-    # Anomalías: Órdenes con profit negativo (si existieran) o cancelaciones masivas recientes
+    # Anomalías severas
     anomalies = await fetch_all(
-        "SELECT public_id, status, profit_usdt FROM orders WHERE profit_usdt < 0 OR (status = 'CANCELADA' AND updated_at > NOW() - INTERVAL '2 hours') LIMIT 10"
+        "SELECT public_id, status, profit_usdt FROM orders WHERE profit_usdt < 0 OR (status = 'CANCELADA' AND updated_at > NOW() - INTERVAL '4 hours') LIMIT 10"
     )
+
+    # Check de integridad de Ledger (lectura simple)
+    # Detectar si hay wallets con balance != suma de ledger (si aplica)
+    # Por ahora detectamos balances negativos anómalos en ledger
+    ledger_anomalies = await fetch_all(
+        "SELECT wallet_id, SUM(amount_usdt) as balance FROM wallet_ledger GROUP BY wallet_id HAVING SUM(amount_usdt) < -0.01 LIMIT 5"
+    )
+
+    # Detección de liquidez estacionada (> 48h sin sweep en origin)
+    stagnant_liquidity = await fetch_all(
+        "SELECT origin_country, current_balance FROM origin_wallets WHERE current_balance > 100 AND (last_sweep_at < NOW() - INTERVAL '48 hours' OR last_sweep_at IS NULL)"
+    )
+
+    health_score = 100
+    health_score -= (int(stuck.get("stuck_origin_verification_count", 0)) * 2)
+    health_score -= (len(anomalies) * 5)
+    health_score -= (len(ledger_anomalies) * 10)
+    health_score = max(0, health_score)
 
     return {
         "ok": True,
@@ -146,7 +158,11 @@ async def executive_risk(auth: dict = Depends(require_admin)):
                 "amount": float(pending_withdrawals["total"]) if pending_withdrawals and pending_withdrawals["total"] else 0.0
             },
             "anomalies": anomalies,
-            "health_score": 100 - (int(stuck.get("stuck_origin_verification_count", 0)) * 2) - (len(anomalies) * 5)
+            "integrity": {
+                "ledger_anomalies": ledger_anomalies,
+                "stagnant_liquidity": stagnant_liquidity
+            },
+            "health_score": health_score
         }
     }
 
@@ -156,27 +172,42 @@ async def executive_risk(auth: dict = Depends(require_admin)):
 
 @router.get("/audit")
 async def executive_audit_feed(auth: dict = Depends(require_admin)):
-    """Feed de trazabilidad ejecutiva."""
-    # Eventos: Cierres, Sweeps, Toggles de Usuarios
+    """Feed de trazabilidad ejecutiva rica (Fase 5)."""
+    # 1. Cierres
     closures = await fetch_all(
-        "SELECT closure_date as date, 'DAILY_CLOSE' as type, notes as detail, executed_by as actor FROM daily_closures ORDER BY created_at DESC LIMIT 10"
+        "SELECT closure_date as date, 'DAILY_CLOSE' as type, notes as detail, executed_by as actor, 'INFO' as severity FROM daily_closures ORDER BY created_at DESC LIMIT 10"
     )
+    # 2. Sweeps
     sweeps = await fetch_all(
-        "SELECT created_at as date, 'SWEEP' as type, note as detail, created_by_telegram_id as actor FROM origin_sweeps ORDER BY created_at DESC LIMIT 15"
+        "SELECT created_at as date, 'SWEEP' as type, note as detail, created_by_telegram_id as actor, 'INFO' as severity FROM origin_sweeps ORDER BY created_at DESC LIMIT 15"
+    )
+    # 3. Retiros (Aprobaciones/Rechazos)
+    withdrawals = await fetch_all(
+        "SELECT updated_at as date, 'WITHDRAWAL' as type, (status || ' - ' || public_id) as detail, processed_by as actor, "
+        "CASE WHEN status = 'RECHAZADA' THEN 'WARNING' ELSE 'INFO' END as severity "
+        "FROM withdrawals WHERE status != 'SOLICITADA' ORDER BY updated_at DESC LIMIT 15"
+    )
+    # 4. Usuarios (Toggles de estado)
+    user_changes = await fetch_all(
+        "SELECT updated_at as date, 'USER_CONFIG' as type, (alias || ' status changed') as detail, 'SYSTEM' as actor, 'WARNING' as severity "
+        "FROM users WHERE updated_at > NOW() - INTERVAL '7 days' ORDER BY updated_at DESC LIMIT 10"
     )
     
-    # Combinar y ordenar
     feed = []
     for c in closures:
-        feed.append({"date": c["date"].isoformat() if hasattr(c["date"], "isoformat") else str(c["date"]), "type": c["type"], "detail": c["detail"], "actor": str(c["actor"])})
+        feed.append({"date": str(c["date"]), "type": c["type"], "detail": c["detail"], "actor": str(c["actor"]), "severity": c["severity"]})
     for s in sweeps:
-        feed.append({"date": s["date"].isoformat(), "type": s["type"], "detail": s["detail"], "actor": str(s["actor"])})
+        feed.append({"date": s["date"].isoformat(), "type": s["type"], "detail": s["detail"], "actor": str(s["actor"]), "severity": s["severity"]})
+    for w in withdrawals:
+        feed.append({"date": w["date"].isoformat(), "type": w["type"], "detail": w["detail"], "actor": str(w["actor"]), "severity": w["severity"]})
+    for u in user_changes:
+        feed.append({"date": u["date"].isoformat(), "type": u["type"], "detail": u["detail"], "actor": u["actor"], "severity": u["severity"]})
     
     feed.sort(key=lambda x: x["date"], reverse=True)
 
     return {
         "ok": True,
         "data": {
-            "feed": feed[:20]
+            "feed": feed[:40]
         }
     }
