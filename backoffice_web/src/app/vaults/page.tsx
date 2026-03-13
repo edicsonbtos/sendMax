@@ -10,11 +10,11 @@ import MoneyCell from '@/components/ui/MoneyCell';
 import api from '@/lib/api';
 import { Database, ShieldCheck, Zap } from 'lucide-react';
 import { ApiEnvelope } from '@/types/common';
-import { ExecutiveVaultRow, ExecutiveVaultMetrics } from '@/types/executive';
+import { ExecutiveVaultRow, ExecutiveVaultMetrics, ExecutiveVaultRadar } from '@/types/executive';
 
 interface VaultsData {
   central_vault: ExecutiveVaultMetrics;
-  radar: any;
+  radar: ExecutiveVaultRadar;
   vaults: ExecutiveVaultRow[];
 }
 
@@ -39,8 +39,20 @@ export default function VaultsExecutive() {
   if (loading) return <LoadingState title="Escaneando radar de liquidez..." />;
 
   const central = data?.central_vault;
-  const radar = data?.radar || {};
+  const radar = data?.radar;
   const vaults = data?.vaults || [];
+
+  // Helper para obtener métricas del radar de forma segura
+  const getRadarMetric = (type: string) => {
+    const item = radar?.by_type?.find((i) => i.vault_type.toLowerCase() === type.toLowerCase());
+    return {
+      total: item ? Number(item.total_balance) : 0,
+      count: item ? item.count : 0
+    };
+  };
+
+  const digitalMetrics = getRadarMetric('Digital');
+  const cryptoMetrics = getRadarMetric('Crypto');
 
   return (
     <div className="p-6 lg:p-10 space-y-10 animate-fade-in">
@@ -59,17 +71,18 @@ export default function VaultsExecutive() {
         />
         <MetricCard 
           label="Custodia Digital"
-          value={<MoneyCell value={radar.by_type?.digital?.total || 0} />}
-          hint={`${radar.by_type?.digital?.count || 0} Cuentas`}
+          value={<MoneyCell value={digitalMetrics.total} />}
+          hint={`${digitalMetrics.count} Cuentas`}
           icon={<Database className="w-6 h-6 text-blue-400" />}
         />
         <MetricCard 
           label="Cripto / Stablecoins"
-          value={<MoneyCell value={radar.by_type?.crypto?.total || 0} />}
-          hint={`${radar.by_type?.crypto?.count || 0} Wallets`}
+          value={<MoneyCell value={cryptoMetrics.total} />}
+          hint={`${cryptoMetrics.count} Wallets`}
           icon={<Zap className="w-6 h-6 text-cyan-400" />}
         />
       </div>
+
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {vaults.slice(0, 4).map((v) => (

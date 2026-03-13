@@ -83,6 +83,16 @@ export interface ExecutiveRiskAnomaly {
   profit_usdt: number;
 }
 
+export interface LedgerAnomaly {
+  wallet_id: string;
+  balance: number;
+}
+
+export interface StagnantLiquidity {
+  origin_country: string;
+  current_balance: number;
+}
+
 export interface ExecutiveRiskData {
   stuck_orders: {
     stuck_origin_verification_count: number;
@@ -94,11 +104,24 @@ export interface ExecutiveRiskData {
   };
   anomalies: ExecutiveRiskAnomaly[];
   integrity: {
-    ledger_anomalies: any[];
-    stagnant_liquidity: any[];
+    ledger_anomalies: LedgerAnomaly[];
+    stagnant_liquidity: StagnantLiquidity[];
   };
   health_score: number;
 }
+
+export interface VaultRadarItem {
+  vault_type: string;
+  currency: string;
+  count: number;
+  total_balance: string | number;
+}
+
+export interface ExecutiveVaultRadar {
+  by_type: VaultRadarItem[];
+  grand_total_usd: string | number;
+}
+
 
 export interface ExecutiveAuditEvent {
   date: string;

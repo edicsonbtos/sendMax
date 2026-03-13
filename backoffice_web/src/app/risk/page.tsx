@@ -88,7 +88,7 @@ export default function RiskExecutive() {
                 <p className="text-xs font-bold text-emerald-300">No se detectan discrepancias en balances del ledger.</p>
               </div>
             ) : (
-              integrity.ledger_anomalies.map((a: any, i: number) => (
+              integrity.ledger_anomalies.map((a, i) => (
                 <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-red-500/5 border border-red-500/10">
                   <p className="text-xs font-bold text-red-300 uppercase tracking-tighter">Wallet ID: {a.wallet_id}</p>
                   <p className="text-xs font-black text-red-400"><MoneyCell value={a.balance} /></p>

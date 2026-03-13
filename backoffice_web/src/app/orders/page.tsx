@@ -6,7 +6,7 @@ import { useAuth } from '@/components/AuthProvider';
 import api from '@/lib/api';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import Table from '@/components/ui/Table';
+import DataTable from '@/components/ui/DataTable';
 import Input from '@/components/ui/Input';
 import Badge from '@/components/ui/Badge';
 import SectionHeader from '@/components/ui/SectionHeader';
@@ -180,8 +180,8 @@ export default function OrdersPage() {
         </Badge>
       )
     },
-    { key: 'origin_country', header: 'Origen' },
-    { key: 'dest_country', header: 'Destino' },
+    { key: 'origin_country', header: 'Origen', render: (o: Order) => o.origin_country },
+    { key: 'dest_country', header: 'Destino', render: (o: Order) => o.dest_country },
     { 
       key: 'amount_origin', 
       header: 'Monto Origen',
@@ -385,10 +385,11 @@ export default function OrdersPage() {
           }
         />
       ) : (
-        <Table
+        <DataTable<Order>
           columns={columns}
           data={filteredOrders}
           loading={loading}
+          rowKey={(o) => o.public_id}
           className="animate-slide-up"
         />
       )}
