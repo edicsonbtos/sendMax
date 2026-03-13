@@ -2,19 +2,20 @@
 
 import React, { useEffect, useState } from 'react';
 import SectionHeader from '@/components/ui/SectionHeader';
-import AuditFeed, { AuditFeedItem } from '@/components/ui/AuditFeed';
 import LoadingState from '@/components/ui/LoadingState';
 import api from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { ApiEnvelope } from '@/types/common';
+import { ExecutiveAuditData, ExecutiveAuditEvent } from '@/types/executive';
 
 export default function AuditExecutive() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<ExecutiveAuditData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await api.get('/executive/audit');
+        const res = await api.get<ApiEnvelope<ExecutiveAuditData>>('/executive/audit');
         if (res.data.ok) setData(res.data.data);
       } catch (err) {
         console.error('Error fetching audit data:', err);
@@ -27,18 +28,8 @@ export default function AuditExecutive() {
 
   if (loading) return <LoadingState title="Reconstruyendo trazabilidad ejecutiva de red..." />;
 
-  const feedRaw = data?.feed || [];
+  const feed: ExecutiveAuditEvent[] = data?.feed || [];
   
-  // Enriquecemos los items del feed con severidad visual
-  const items: (AuditFeedItem & { severity?: string })[] = feedRaw.map((e: any, idx: number) => ({
-    id: idx,
-    actor: e.actor || 'System',
-    action: e.type || 'Event',
-    target: e.detail || '',
-    time: e.date,
-    severity: e.severity || 'INFO'
-  }));
-
   return (
     <div className="p-6 lg:p-10 space-y-10 animate-fade-in">
       <SectionHeader 
@@ -50,15 +41,15 @@ export default function AuditExecutive() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
             <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Eventos Totales</p>
-            <p className="text-2xl font-black text-white mt-1">{items.length}</p>
+            <p className="text-2xl font-black text-white mt-1">{feed.length}</p>
           </div>
           <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
             <p className="text-[10px] font-black text-amber-400/40 uppercase tracking-widest">Warnings Recientes</p>
-            <p className="text-2xl font-black text-amber-400 mt-1">{items.filter(i => i.severity === 'WARNING').length}</p>
+            <p className="text-2xl font-black text-amber-400 mt-1">{feed.filter(i => i.severity === 'WARNING').length}</p>
           </div>
           <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
             <p className="text-[10px] font-black text-cyan-400/40 uppercase tracking-widest">Último Evento</p>
-            <p className="text-sm font-bold text-white mt-2 truncate">{items[0]?.action || 'N/A'}</p>
+            <p className="text-sm font-bold text-white mt-2 truncate">{feed[0]?.type || 'N/A'}</p>
           </div>
         </div>
 
@@ -66,8 +57,8 @@ export default function AuditExecutive() {
           <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500/20 via-white/5 to-transparent hidden sm:block" />
           
           <div className="space-y-6">
-            {items.map((item) => (
-              <div key={item.id} className="relative pl-0 sm:pl-16 group">
+            {feed.map((item, idx) => (
+              <div key={idx} className="relative pl-0 sm:pl-16 group">
                 {/* Timeline dot */}
                 <div className={cn(
                   "absolute left-[29px] top-4 w-2.5 h-2.5 rounded-full border-2 border-black z-10 hidden sm:block transition-transform group-hover:scale-125",
@@ -83,17 +74,17 @@ export default function AuditExecutive() {
                           "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter",
                           item.severity === 'WARNING' ? 'bg-amber-500/10 text-amber-400' : 'bg-blue-500/10 text-blue-400'
                         )}>
-                          {item.action}
+                          {item.type}
                         </span>
                         <span className="text-xs font-bold text-white/80">{item.actor}</span>
                       </div>
                       <p className="text-sm text-white leading-relaxed font-medium">
-                        {item.target}
+                        {item.detail}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
-                        {new Date(item.time || '').toLocaleString()}
+                        {new Date(item.date).toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -106,3 +97,4 @@ export default function AuditExecutive() {
     </div>
   );
 }
+

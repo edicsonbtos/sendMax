@@ -10,27 +10,17 @@ import CountryPill from '@/components/ui/CountryPill';
 import EmptyState from '@/components/ui/EmptyState';
 import { Landmark, Globe } from 'lucide-react';
 import api from '@/lib/api';
-
-interface Balance {
-  origin_country: string;
-  fiat_currency: string;
-  current_balance: number;
-}
-
-interface CountrySummary {
-  country: string;
-  total_balance_usd: number;
-  currencies: string[];
-}
+import { ApiEnvelope } from '@/types/common';
+import { ExecutiveTreasuryData, TreasuryBalanceRow, TreasuryCountrySummary } from '@/types/executive';
 
 export default function Treasury() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<ExecutiveTreasuryData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await api.get('/executive/treasury');
+        const res = await api.get<ApiEnvelope<ExecutiveTreasuryData>>('/executive/treasury');
         if (res.data.ok) setData(res.data.data);
       } catch (err) {
         console.error('Error fetching treasury data:', err);
@@ -43,8 +33,8 @@ export default function Treasury() {
 
   if (loading) return <LoadingState title="Consolidando balances de tesorería..." />;
 
-  const byCountry: CountrySummary[] = data?.by_country || [];
-  const balances: Balance[] = data?.balances || [];
+  const byCountry = data?.by_country || [];
+  const balances = data?.balances || [];
 
   if (balances.length === 0) {
     return (
@@ -65,7 +55,7 @@ export default function Treasury() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {byCountry.slice(0, 3).map((c) => (
+        {byCountry.slice(0, 3).map((c: TreasuryCountrySummary) => (
           <MetricCard 
             key={c.country}
             label={`Balance en ${c.country}`}
@@ -76,22 +66,22 @@ export default function Treasury() {
         ))}
       </div>
 
-      <DataTable<Balance> 
+      <DataTable<TreasuryBalanceRow> 
         title="Balances Detallados por Moneda"
         subtitle="Cálculo neto de Entradas - Salidas (Sweeps)"
         columns={[
           { 
-            key: 'country', 
+            key: 'origin_country', 
             header: 'País', 
             render: (r) => <CountryPill country={r.origin_country} /> 
           },
           { 
-            key: 'currency', 
+            key: 'fiat_currency', 
             header: 'Moneda', 
             render: (r) => <span className="font-bold">{r.fiat_currency}</span> 
           },
           { 
-            key: 'balance', 
+            key: 'current_balance', 
             header: 'Balance Líquido', 
             render: (r) => <MoneyCell value={r.current_balance} /> 
           }
@@ -114,3 +104,4 @@ export default function Treasury() {
     </div>
   );
 }
+

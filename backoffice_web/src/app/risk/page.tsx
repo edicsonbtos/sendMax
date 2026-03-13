@@ -10,21 +10,17 @@ import MoneyCell from '@/components/ui/MoneyCell';
 import StatCard from '@/components/ui/StatCard';
 import { AlertTriangle, ShieldAlert, ZapOff, Fingerprint, Database } from 'lucide-react';
 import api from '@/lib/api';
-
-interface Anomaly {
-  public_id: string;
-  status: string;
-  profit_usdt: number;
-}
+import { ApiEnvelope } from '@/types/common';
+import { ExecutiveRiskData, ExecutiveRiskAnomaly } from '@/types/executive';
 
 export default function RiskExecutive() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<ExecutiveRiskData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await api.get('/executive/risk');
+        const res = await api.get<ApiEnvelope<ExecutiveRiskData>>('/executive/risk');
         if (res.data.ok) setData(res.data.data);
       } catch (err) {
         console.error('Error fetching risk data:', err);
@@ -37,10 +33,10 @@ export default function RiskExecutive() {
 
   if (loading) return <LoadingState title="Calculando vectores de riesgo operativo e integridad..." />;
 
-  const stuck = data?.stuck_orders || {};
-  const withdrawals = data?.pending_withdrawals || {};
-  const anomalies: Anomaly[] = data?.anomalies || [];
-  const integrity = data?.integrity || {};
+  const stuck = data?.stuck_orders;
+  const withdrawals = data?.pending_withdrawals;
+  const anomalies = data?.anomalies || [];
+  const integrity = data?.integrity;
   const health = data?.health_score || 0;
 
   return (
@@ -60,14 +56,14 @@ export default function RiskExecutive() {
         />
         <MetricCard 
           label="Órdenes Estancadas"
-          value={(stuck.stuck_origin_verification_count || 0) + (stuck.stuck_payment_proof_count || 0)}
-          trend={`${stuck.stuck_origin_verification_count || 0} en Origen`}
+          value={(stuck?.stuck_origin_verification_count || 0) + (stuck?.stuck_payment_proof_count || 0)}
+          trend={`${stuck?.stuck_origin_verification_count || 0} en Origen`}
           trendDirection="down"
           icon={<AlertTriangle className="text-orange-400" />}
         />
         <MetricCard 
           label="Liquidez Estacionada"
-          value={integrity.stagnant_liquidity?.length || 0}
+          value={integrity?.stagnant_liquidity?.length || 0}
           hint="Países sin sweep > 48h"
           icon={<Database className="text-blue-400" />}
         />
@@ -86,13 +82,13 @@ export default function RiskExecutive() {
           </div>
 
           <div className="space-y-3">
-            {integrity.ledger_anomalies?.length === 0 ? (
+            {!integrity?.ledger_anomalies || integrity.ledger_anomalies.length === 0 ? (
               <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <p className="text-xs font-bold text-emerald-300">No se detectan discrepancias en balances del ledger.</p>
               </div>
             ) : (
-              integrity.ledger_anomalies?.map((a: any, i: number) => (
+              integrity.ledger_anomalies.map((a: any, i: number) => (
                 <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-red-500/5 border border-red-500/10">
                   <p className="text-xs font-bold text-red-300 uppercase tracking-tighter">Wallet ID: {a.wallet_id}</p>
                   <p className="text-xs font-black text-red-400"><MoneyCell value={a.balance} /></p>
@@ -114,20 +110,20 @@ export default function RiskExecutive() {
           </div>
 
           <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-white"><MoneyCell value={withdrawals.amount} /></span>
-            <span className="text-xs font-bold text-white/40 uppercase tracking-widest">{withdrawals.count} Solicitudes</span>
+            <span className="text-3xl font-black text-white"><MoneyCell value={withdrawals?.amount || 0} /></span>
+            <span className="text-xs font-bold text-white/40 uppercase tracking-widest">{withdrawals?.count || 0} Solicitudes</span>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-8">
-        <DataTable<Anomaly> 
+        <DataTable<ExecutiveRiskAnomaly> 
           title="Anomalías y Alertas Recientes"
           subtitle="Métricas fuera de rango o patrones atípicos"
           columns={[
-            { key: 'id', header: 'ID Orden', render: (a) => <span className="font-mono text-xs">{a.public_id}</span> },
+            { key: 'public_id', header: 'ID Orden', render: (a) => <span className="font-mono text-xs">{a.public_id}</span> },
             { key: 'status', header: 'Estado', render: (a) => <RiskBadge level={a.profit_usdt < 0 ? "critical" : "medium"} label={a.status} /> },
-            { key: 'profit', header: 'Profit', render: (a) => (
+            { key: 'profit_usdt', header: 'Profit', render: (a) => (
               <span className={a.profit_usdt < 0 ? 'text-red-400 font-bold' : 'text-white/60'}>
                 <MoneyCell value={a.profit_usdt} />
               </span>
@@ -147,3 +143,4 @@ export default function RiskExecutive() {
     </div>
   );
 }
+

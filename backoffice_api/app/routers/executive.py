@@ -36,14 +36,19 @@ async def executive_control_center(auth: dict = Depends(require_operator_or_admi
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
-    overview = results[0] if not isinstance(results[0], Exception) else {}
-    leaderboard = results[1] if not isinstance(results[1], Exception) else {"leaderboard": []}
+    # Mapeo seguro de resultados
+    overview = results[0] if len(results) > 0 and not isinstance(results[0], Exception) else {}
+    leaderboard = results[1] if len(results) > 1 and not isinstance(results[1], Exception) else {"leaderboard": []}
     
     vault = None
     risk_summary = None
+    
+    # Si es admin, los índices 2 y 3 corresponden a vault y stuck
     if is_admin_user:
-        vault = results[2] if len(results) > 2 and not isinstance(results[2], Exception) else None
-        risk_summary = results[3] if len(results) > 3 and not isinstance(results[3], Exception) else None
+        if len(results) > 2:
+            vault = results[2] if not isinstance(results[2], Exception) else None
+        if len(results) > 3:
+            risk_summary = results[3] if not isinstance(results[3], Exception) else None
 
     recent_orders = await fetch_all(
         "SELECT public_id, status, created_at, amount_origin, origin_country, dest_country "

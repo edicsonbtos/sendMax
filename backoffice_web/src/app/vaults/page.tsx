@@ -9,25 +9,23 @@ import LoadingState from '@/components/ui/LoadingState';
 import MoneyCell from '@/components/ui/MoneyCell';
 import api from '@/lib/api';
 import { Database, ShieldCheck, Zap } from 'lucide-react';
+import { ApiEnvelope } from '@/types/common';
+import { ExecutiveVaultRow, ExecutiveVaultMetrics } from '@/types/executive';
 
-interface Vault {
-  id: string | number;
-  name: string;
-  provider?: string;
-  type: string;
-  balance: number;
-  currency: string;
-  updated_at?: string;
+interface VaultsData {
+  central_vault: ExecutiveVaultMetrics;
+  radar: any;
+  vaults: ExecutiveVaultRow[];
 }
 
 export default function VaultsExecutive() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<VaultsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await api.get('/executive/vaults');
+        const res = await api.get<ApiEnvelope<VaultsData>>('/executive/vaults');
         if (res.data.ok) setData(res.data.data);
       } catch (err) {
         console.error('Error fetching vaults data:', err);
@@ -40,9 +38,9 @@ export default function VaultsExecutive() {
 
   if (loading) return <LoadingState title="Escaneando radar de liquidez..." />;
 
-  const central = data?.central_vault || {};
+  const central = data?.central_vault;
   const radar = data?.radar || {};
-  const vaults: Vault[] = data?.vaults || [];
+  const vaults = data?.vaults || [];
 
   return (
     <div className="p-6 lg:p-10 space-y-10 animate-fade-in">
@@ -54,7 +52,7 @@ export default function VaultsExecutive() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <MetricCard 
           label="Bóveda Central Líquida"
-          value={<MoneyCell value={central.vault_balance} />}
+          value={<MoneyCell value={central?.vault_balance || 0} />}
           hint="Profit Neto disponible"
           icon={<ShieldCheck className="w-6 h-6" />}
           trendDirection="up"
@@ -86,7 +84,7 @@ export default function VaultsExecutive() {
         ))}
       </div>
 
-      <DataTable<Vault> 
+      <DataTable<ExecutiveVaultRow> 
         title="Detalle de Bóvedas Activas"
         subtitle="Desglose por proveedor y tipo de custodia"
         columns={[
@@ -96,8 +94,9 @@ export default function VaultsExecutive() {
           { key: 'balance', header: 'Balance', render: (v) => <MoneyCell value={v.balance} /> }
         ]}
         data={vaults}
-        rowKey={(v) => v.id}
+        rowKey={(v) => v.id.toString()}
       />
     </div>
   );
 }
+

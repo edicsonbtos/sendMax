@@ -16,28 +16,17 @@ import {
   Briefcase
 } from 'lucide-react';
 import api from '@/lib/api';
-
-interface Order {
-  public_id: string;
-  origin_country: string;
-  dest_country: string;
-  amount_origin: number;
-  status: string;
-}
-
-interface LeaderboardItem {
-  alias: string;
-  trust_score: number;
-}
+import { ApiEnvelope } from '@/types/common';
+import { ExecutiveControlCenterData, ExecutiveRecentOrder, ExecutiveLeaderboardItem } from '@/types/executive';
 
 export default function ControlCenter() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<ExecutiveControlCenterData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await api.get('/executive/control-center');
+        const res = await api.get<ApiEnvelope<ExecutiveControlCenterData>>('/executive/control-center');
         if (res.data.ok) setData(res.data.data);
       } catch (err) {
         console.error('Error fetching control center data:', err);
@@ -50,11 +39,11 @@ export default function ControlCenter() {
 
   if (loading) return <LoadingState title="Cargando centro de mando ejecutivo..." />;
 
-  const overview = data?.overview || {};
-  const leaderboard: LeaderboardItem[] = data?.leaderboard || [];
-  const vault = data?.vault || {};
-  const recent: Order[] = data?.recent_activity || [];
-  const risk = data?.risk_alerts || {};
+  const overview = data?.overview;
+  const leaderboard = data?.leaderboard || [];
+  const vault = data?.vault;
+  const recent = data?.recent_activity || [];
+  const risk = data?.risk_alerts;
 
   return (
     <div className="p-6 lg:p-10 space-y-10 animate-fade-in">
@@ -72,40 +61,40 @@ export default function ControlCenter() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard 
           label="Profit Real (PAGADAS)"
-          value={<MoneyCell value={overview.total_profit_real_usd} />}
-          trend={`${overview.completed_orders || 0} Órdenes`}
+          value={<MoneyCell value={overview?.total_profit_real_usd || 0} />}
+          trend={`${overview?.completed_orders || 0} Órdenes`}
           trendDirection="up"
           icon={<TrendingUp className="w-6 h-6" />}
         />
         <MetricCard 
           label="Bóveda Central"
-          value={<MoneyCell value={vault.vault_balance} />}
-          hint={`Total Profit: ${(vault.total_profit || 0).toFixed(2)}`}
+          value={<MoneyCell value={vault?.vault_balance || 0} />}
+          hint={`Total Profit: ${(vault?.total_profit || 0).toFixed(2)}`}
           icon={<Database className="w-6 h-6" />}
         />
         <MetricCard 
           label="Volumen Total USD"
-          value={<MoneyCell value={overview.total_volume_usd} />}
+          value={<MoneyCell value={overview?.total_volume_usd || 0} />}
           trendDirection="neutral"
           icon={<Briefcase className="w-6 h-6" />}
         />
         <MetricCard 
           label="Órdenes Pendientes"
-          value={overview.pending_orders || 0}
-          trend={risk.stuck_origin_verification_count > 0 ? `${risk.stuck_origin_verification_count} Estancadas` : 'Flujo normal'}
-          trendDirection={risk.stuck_origin_verification_count > 0 ? 'down' : 'up'}
+          value={overview?.pending_orders || 0}
+          trend={risk && risk.stuck_origin_verification_count > 0 ? `${risk.stuck_origin_verification_count} Estancadas` : 'Flujo normal'}
+          trendDirection={risk && risk.stuck_origin_verification_count > 0 ? 'down' : 'up'}
           icon={<AlertCircle className="w-6 h-6" />}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
-          <DataTable<Order> 
+          <DataTable<ExecutiveRecentOrder> 
             title="Actividad Reciente"
             subtitle="Últimas 10 operaciones procesadas en tiempo real"
             columns={[
               { 
-                key: 'id', 
+                key: 'public_id', 
                 header: 'ID', 
                 render: (r) => <span className="text-white/40 font-mono text-xs">{r.public_id}</span> 
               },
@@ -121,14 +110,14 @@ export default function ControlCenter() {
                 )
               },
               { 
-                key: 'amount', 
+                key: 'amount_origin', 
                 header: 'Monto', 
                 render: (r) => <MoneyCell value={r.amount_origin} /> 
               },
               { 
                 key: 'status', 
                 header: 'Estado', 
-                render: (r) => <RiskBadge level={r.status === 'completed' ? 'low' : 'medium'} label={r.status} /> 
+                render: (r) => <RiskBadge level={r.status === 'PAGADA' ? 'low' : 'medium'} label={r.status} /> 
               }
             ]}
             data={recent}
@@ -137,17 +126,17 @@ export default function ControlCenter() {
         </div>
 
         <div className="space-y-6">
-          <DataTable<LeaderboardItem> 
+          <DataTable<ExecutiveLeaderboardItem> 
             title="Top Operadores"
             subtitle="Basado en Trust Score y Profit"
             columns={[
               { 
-                key: 'name', 
+                key: 'alias', 
                 header: 'Alias', 
                 render: (r) => <span className="font-bold text-sm">{r.alias}</span> 
               },
               { 
-                key: 'score', 
+                key: 'trust_score', 
                 header: 'Score', 
                 render: (r) => <span className="text-blue-400 font-black">{r.trust_score}</span> 
               }
@@ -160,3 +149,4 @@ export default function ControlCenter() {
     </div>
   );
 }
+
