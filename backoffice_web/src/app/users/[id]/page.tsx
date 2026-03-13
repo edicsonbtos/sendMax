@@ -2,46 +2,32 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Stack,
-  Grid,
-  CircularProgress,
-  Alert,
-  IconButton,
-  Button,
-  Chip,
-  Divider,
-  Paper,
-  Avatar,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Snackbar,
-  TableHead,
-  TableRow,
-  MenuItem,
-  Tooltip,
-} from '@mui/material';
-import {
-  ArrowBack as BackIcon,
-  ContentCopy as CopyIcon,
-  LockReset as ResetIcon,
-  Shield as AdminIcon,
-  SupportAgent as OperatorIcon,
-  AccountCircle as UserIcon,
-  Mail as EmailIcon,
-  Key as KeyIcon,
-  CheckCircle as ActiveIcon,
-  Cancel as InactiveIcon,
-} from '@mui/icons-material';
 import { useAuth } from '@/components/AuthProvider';
 import api from '@/lib/api';
+import { cn } from '@/lib/cn';
+
+// UI Components
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import SectionHeader from '@/components/ui/SectionHeader';
+import Badge from '@/components/ui/Badge';
+import LoadingState from '@/components/ui/LoadingState';
+import MetricCard from '@/components/ui/MetricCard';
+
+// Icons
+import { 
+  ArrowLeft, 
+  User, 
+  Mail, 
+  Shield, 
+  Activity, 
+  Calendar,
+  Wallet,
+  ArrowUpRight,
+  Lock,
+  UserX,
+  UserCheck
+} from 'lucide-react';
 
 interface UserDetail {
   id: number;
@@ -55,21 +41,15 @@ interface UserDetail {
   balance_usdt: string;
   total_orders: number;
   created_at: string;
-  sponsor_id: number | null;
-  sponsor_alias: string | null;
 }
 
 export default function UserDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, isReady } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<UserDetail | null>(null);
-
-  const [resetOpen, setResetOpen] = useState(false);
-  const [tempPass, setTempPass] = useState<string | null>(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,182 +58,117 @@ export default function UserDetailPage() {
       const res = await api.get<UserDetail>(`/users/${id}`);
       setUser(res.data);
     } catch (e: any) {
-      setError(e.message || 'Error cargando usuario');
+      setError('Error cargando usuario');
     } finally {
       setLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
-    if (token && id) load();
-  }, [token, id, load]);
-
-  const handleResetPassword = async () => {
-    try {
-      const res = await api.post<{ password_temp: string }>(`/users/${id}/reset-password`);
-      setTempPass(res.data.password_temp);
-      setResetOpen(true);
-    } catch (e: any) {
-      alert('Error en reset: ' + e.message);
-    }
-  };
-
-  const handleCopy = () => {
-    if (tempPass) {
-      navigator.clipboard.writeText(tempPass);
-      setSnackbar({ open: true, message: 'Password copiado al portapapeles' });
-    }
-  };
+    if (isReady && token && id) load();
+  }, [isReady, token, id, load]);
 
   const handleToggleActive = async () => {
     try {
       await api.put(`/users/${id}/toggle`);
       load();
     } catch (e: any) {
-      alert('Error: ' + e.message);
+      alert('Error al cambiar estado');
     }
   };
 
-  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>;
-  if (!user) return <Box sx={{ p: 4 }}><Alert severity="error">Usuario no encontrado</Alert></Box>;
+  if (!isReady || !token) return null;
+  if (loading) return <LoadingState title="Consultando perfil..." />;
+  if (!user) return <div className="p-8 text-rose-500 font-bold bg-rose-500/10 rounded-2xl">Usuario no encontrado</div>;
 
   return (
-    <Box sx={{ p: 4 }}>
-      <Button startIcon={<BackIcon />} onClick={() => router.back()} sx={{ mb: 4 }}>
-        Volver a lista
-      </Button>
+    <div className="space-y-8 pb-10">
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" onClick={() => router.back()} icon={<ArrowLeft size={20} />} />
+        <div className="flex flex-col">
+          <h1 className="text-2xl font-black text-white">{user.alias}</h1>
+          <div className="flex gap-2 mt-1">
+             <Badge color={user.role === 'admin' ? 'danger' : 'info'}>{user.role.toUpperCase()}</Badge>
+             <Badge color={user.is_active ? 'success' : 'warning'}>{user.is_active ? 'ACTIVO' : 'INACTIVO'}</Badge>
+          </div>
+        </div>
+      </div>
 
-      <Grid container spacing={4}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Profile Card */}
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Card elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 4, height: '100%' }}>
-            <CardContent sx={{ p: 4, textAlign: 'center' }}>
-              <Avatar sx={{ width: 100, height: 100, mx: 'auto', mb: 2, bgcolor: user.role === 'admin' ? '#FECACA' : '#E0E7FF', color: user.role === 'admin' ? '#B91C1C' : '#3730A3' }}>
-                <UserIcon sx={{ fontSize: 60 }} />
-              </Avatar>
-              <Typography variant="h5" sx={{ fontWeight: 800 }}>{user.alias}</Typography>
-              <Typography color="text.secondary" gutterBottom>{user.full_name || 'Sin nombre real'}</Typography>
-              
-              <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 2, mb: 3 }}>
-                <Chip 
-                  icon={user.role === 'admin' ? <AdminIcon /> : <OperatorIcon />}
-                  label={user.role.toUpperCase()} 
-                  color={user.role === 'admin' ? 'error' : 'primary'}
-                  size="small"
-                  sx={{ fontWeight: 700 }}
-                />
-                <Chip 
-                  label={user.is_active ? 'ACTIVO' : 'INACTIVO'} 
-                  variant="outlined"
-                  color={user.is_active ? 'success' : 'default'}
-                  size="small"
-                  sx={{ fontWeight: 700 }}
-                />
-              </Stack>
+        <Card className="p-8 flex flex-col items-center text-center">
+           <div className={cn(
+             "w-24 h-24 rounded-full flex items-center justify-center mb-6",
+             user.role === 'admin' ? "bg-rose-500/20 text-rose-500" : "bg-blue-500/20 text-blue-500"
+           )}>
+             <User size={48} />
+           </div>
+           
+           <h2 className="text-xl font-black text-white mb-1">{user.full_name || user.alias}</h2>
+           <p className="text-sm text-gray-500 mb-6">@{user.alias}</p>
+           
+           <div className="w-full space-y-3">
+             <Button 
+                variant="secondary" 
+                className="w-full" 
+                icon={<Lock size={16} />} 
+                onClick={() => {}}
+             >
+               Reset Password
+             </Button>
+             <Button 
+                variant={user.is_active ? "ghost" : "primary"} 
+                className={cn("w-full", user.is_active ? "text-rose-500 hover:bg-rose-500/10" : "")} 
+                icon={user.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
+                onClick={handleToggleActive}
+             >
+               {user.is_active ? 'Desactivar Cuenta' : 'Activar Cuenta'}
+             </Button>
+           </div>
+        </Card>
 
-              <Divider sx={{ my: 3 }} />
+        {/* Stats & Details */}
+        <div className="lg:col-span-2 space-y-8">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <MetricCard
+                label="Balance USDT"
+                value={`$${parseFloat(user.balance_usdt).toFixed(2)}`}
+                icon={<Wallet size={24} />}
+                hint="Fondos líquidos disponibles"
+              />
+              <MetricCard
+                label="Órdenes Totales"
+                value={user.total_orders.toString()}
+                icon={<Activity size={24} />}
+                hint="Procesadas históricamente"
+              />
+           </div>
 
-              <Stack spacing={2}>
-                <Button 
-                  fullWidth variant="contained" color="secondary" 
-                  startIcon={<ResetIcon />} sx={{ fontWeight: 700 }}
-                  onClick={handleResetPassword}
-                >
-                  Reset Password
-                </Button>
-                <Button 
-                  fullWidth variant="outlined" 
-                  color={user.is_active ? 'error' : 'success'}
-                  startIcon={user.is_active ? <InactiveIcon /> : <ActiveIcon />}
-                  onClick={handleToggleActive}
-                >
-                  {user.is_active ? 'Desactivar Cuenta' : 'Activar Cuenta'}
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Data Cards */}
-        <Grid size={{ xs: 12, md: 8 }}>
-          <Stack spacing={4}>
-            <Card elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 4 }}>
-              <CardContent sx={{ p: 4 }}>
-                <Typography variant="h6" sx={{ fontWeight: 700, mb: 3 }}>Información de Cuenta</Typography>
-                <Grid container spacing={3}>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="caption" color="text.secondary">Telegram ID</Typography>
-                    <Typography sx={{ fontWeight: 600 }}>{user.telegram_user_id}</Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="caption" color="text.secondary">Email</Typography>
-                    <Typography sx={{ fontWeight: 600 }}>{user.email || 'No configurado'}</Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="caption" color="text.secondary">KYC Status</Typography>
-                    <Typography sx={{ fontWeight: 600 }}>{user.kyc_status}</Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="caption" color="text.secondary">Fecha Registro</Typography>
-                    <Typography sx={{ fontWeight: 600 }}>{new Date(user.created_at).toLocaleDateString()}</Typography>
-                  </Grid>
-                </Grid>
-              </CardContent>
-            </Card>
-
-            <Card elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 4, bgcolor: '#F8FAFC' }}>
-              <CardContent sx={{ p: 4 }}>
-                <Typography variant="h6" sx={{ fontWeight: 700, mb: 3 }}>Estadísticas Operativas</Typography>
-                <Grid container spacing={4}>
-                  <Grid item xs={12} sm={6}>
-                    <Paper elevation={0} sx={{ p: 2, borderRadius: 3, border: '1px solid #E2E8F0' }}>
-                      <Typography variant="caption" color="text.secondary">Balance Actual</Typography>
-                      <Typography variant="h4" sx={{ fontWeight: 800, color: '#10B981' }}>
-                        ${parseFloat(user.balance_usdt).toFixed(2)}
-                      </Typography>
-                    </Paper>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Paper elevation={0} sx={{ p: 2, borderRadius: 3, border: '1px solid #E2E8F0' }}>
-                      <Typography variant="caption" color="text.secondary">Órdenes Procesadas</Typography>
-                      <Typography variant="h4" sx={{ fontWeight: 800 }}>
-                        {user.total_orders}
-                      </Typography>
-                    </Paper>
-                  </Grid>
-                </Grid>
-              </CardContent>
-            </Card>
-          </Stack>
-        </Grid>
-      </Grid>
-
-      {/* Reset Dialog */}
-      <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Password Temporal Generado</DialogTitle>
-        <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            Este password solo se mostrará <b>UNA VEZ</b>. Cópialo y envíaselo al usuario.
-          </Alert>
-          <Box sx={{
-            p: 2, bgcolor: '#F1F5F9', borderRadius: 2,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            border: '1px solid #E2E8F0'
-          }}>
-            <Typography sx={{ fontWeight: 800, fontFamily: 'monospace', fontSize: '1.2rem', color: '#1E293B' }}>
-              {tempPass}
-            </Typography>
-            <IconButton onClick={handleCopy} color="primary" size="small">
-              <CopyIcon />
-            </IconButton>
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2.5 }}>
-          <Button onClick={() => setResetOpen(false)} variant="contained" fullWidth>
-            Entendido, ya lo copié
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+           <Card className="p-6">
+              <h3 className="text-sm font-bold text-gray-400 mb-6 uppercase tracking-widest">Información de Cuenta</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                 <div className="space-y-1">
+                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Telegram ID</p>
+                   <p className="text-white font-bold font-mono">{user.telegram_user_id}</p>
+                 </div>
+                 <div className="space-y-1">
+                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Email</p>
+                   <p className="text-white font-bold">{user.email || 'No configurado'}</p>
+                 </div>
+                 <div className="space-y-1">
+                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">KYC Status</p>
+                   <Badge color={user.kyc_status === 'VERIFIED' ? 'success' : 'warning'}>{user.kyc_status}</Badge>
+                 </div>
+                 <div className="space-y-1">
+                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Miembro desde</p>
+                   <div className="flex items-center gap-2 text-white font-medium">
+                     <Calendar size={14} className="text-gray-500" /> {new Date(user.created_at).toLocaleDateString()}
+                   </div>
+                 </div>
+              </div>
+           </Card>
+        </div>
+      </div>
+    </div>
   );
 }

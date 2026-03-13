@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
@@ -8,22 +8,31 @@ import {
 } from 'recharts';
 import api from '@/lib/api';
 import { useAuth } from '@/components/AuthProvider';
-import {
-  DollarSign,
-  TrendingUp,
-  CheckCircle2,
-  AlertTriangle,
-  Download,
-  Filter,
-  RefreshCcw,
-  ShieldAlert,
-  LineChart,
-  Users,
-  BarChart as BarChartIcon
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/cn';
 import { formatCurrency, formatNumber } from '@/lib/formatters';
 import type { RealtimeMetrics, VaultBalance } from '@/types';
+import SectionHeader from '@/components/ui/SectionHeader';
+import MetricCard from '@/components/ui/MetricCard';
+import StatCard from '@/components/ui/StatCard';
+import MoneyCell from '@/components/ui/MoneyCell';
+import FilterBar from '@/components/ui/FilterBar';
+import Input from '@/components/ui/Input';
+import Button from '@/components/ui/Button';
+import LoadingState from '@/components/ui/LoadingState';
+import AuditFeed from '@/components/ui/AuditFeed';
+import { 
+  DollarSign, 
+  TrendingUp, 
+  CheckCircle2, 
+  AlertTriangle, 
+  Download, 
+  Filter, 
+  RefreshCcw, 
+  ShieldAlert, 
+  LineChart, 
+  Users, 
+  BarChart as BarChartIcon 
+} from 'lucide-react';
 
 // Types adapted to match previous backend schema
 interface CompanyOverview {
@@ -77,31 +86,6 @@ const compact = (n: number) => {
 /* -----------------------------------------------
    Components locales
 ----------------------------------------------- */
-function KPICard({
-  icon: Icon, title, value, subtitle, accentColorClass, glowColor, bgGradient
-}: {
-  icon: any, title: string, value: string | React.ReactNode, subtitle?: string, accentColorClass: string, glowColor: string, bgGradient: string
-}) {
-  return (
-    <div className={cn("relative overflow-hidden card-glass p-6 group transition-all duration-300 hover:translate-y-[-2px]")} style={{ boxShadow: `0 0 0 1px ${glowColor}15` }}>
-      <div
-        className={cn("absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 group-hover:opacity-40 transition-opacity duration-500 blur-2xl", bgGradient)}
-      />
-      <div className="relative z-10 flex flex-col h-full">
-        <div className="flex items-center gap-2 mb-4">
-          <div className={cn("p-2 rounded-xl bg-white/5", accentColorClass)}>
-            <Icon size={20} strokeWidth={2.5} />
-          </div>
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">{title}</h3>
-        </div>
-        <div className={cn("text-3xl md:text-4xl font-black tracking-tight mb-2", accentColorClass)}>
-          {value}
-        </div>
-        {subtitle && <p className="text-xs text-gray-500 font-medium leading-[1.3] truncate mt-auto">{subtitle}</p>}
-      </div>
-    </div>
-  );
-}
 
 function OperatorLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
   if (!entries.length) return <p className="text-gray-500 text-xs text-center py-8">Sin datos de operadores</p>;
@@ -368,26 +352,20 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent tracking-tight">
-            Executive Command
-          </h1>
-          <p className="text-sm font-medium text-gray-400 mt-1">
-            Revisión maestra financiera
-            {lastUpdated && <span className="ml-2 text-cyan-500 opacity-70">Sincronizado {lastUpdated}</span>}
-          </p>
-        </div>
-
-        <button
-          onClick={() => fetchData()}
-          disabled={loading}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 transition-all font-semibold text-sm disabled:opacity-50"
-        >
-          <RefreshCcw size={16} className={cn(loading && "animate-spin")} />
-          Actualizar
-        </button>
-      </div>
+      <SectionHeader
+        title="Command Center"
+        subtitle={lastUpdated ? `Sincronizado ${lastUpdated}` : "Revisión maestra financiera"}
+        rightSlot={
+          <Button
+            variant="primary"
+            icon={<RefreshCcw size={16} className={loading ? "animate-spin" : ""} />}
+            onClick={() => fetchData()}
+            loading={loading}
+          >
+            Actualizar
+          </Button>
+        }
+      />
 
       {error && (
         <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-sm font-medium flex items-center gap-3">
@@ -396,67 +374,86 @@ export default function DashboardPage() {
       )}
 
       {/* Filters */}
-      <div className="card-glass p-4 md:p-5 flex flex-wrap gap-4 items-end">
-        <div className="flex items-center gap-2 mr-2 text-gray-500">
+      <FilterBar>
+        <div className="flex items-center gap-2 mr-2 text-white/40">
           <Filter size={18} />
-          <span className="text-xs font-bold uppercase tracking-widest">Filtros</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Filtros</span>
         </div>
 
-        <div className="flex flex-col gap-1.5 flex-1 min-w-[140px] max-w-[200px]">
-          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">Desde</label>
-          <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); onFilterChange(e.target.value, dateTo, country); }}
-            className="input-glass text-sm py-2 px-3" />
+        <div className="w-full lg:w-48">
+          <Input 
+            type="date" 
+            label="Desde"
+            value={dateFrom} 
+            onChange={e => { setDateFrom(e.target.value); onFilterChange(e.target.value, dateTo, country); }}
+          />
         </div>
 
-        <div className="flex flex-col gap-1.5 flex-1 min-w-[140px] max-w-[200px]">
-          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">Hasta</label>
-          <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); onFilterChange(dateFrom, e.target.value, country); }}
-            className="input-glass text-sm py-2 px-3" />
+        <div className="w-full lg:w-48">
+          <Input 
+            type="date" 
+            label="Hasta"
+            value={dateTo} 
+            onChange={e => { setDateTo(e.target.value); onFilterChange(dateFrom, e.target.value, country); }}
+          />
         </div>
 
-        <div className="flex flex-col gap-1.5 flex-1 min-w-[140px] max-w-[200px]">
-          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">País</label>
-          <select value={country} onChange={e => { setCountry(e.target.value); onFilterChange(dateFrom, dateTo, e.target.value); }}
-            className="input-glass text-sm py-2 px-3 bg-[#0a0f1e] text-gray-200">
-            {COUNTRIES_FILTER.map(c => <option key={c} value={c}>{COUNTRY_LABEL[c] || c}</option>)}
-          </select>
+        <div className="w-full lg:w-48">
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] ml-1">Origen</label>
+            <select 
+              value={country} 
+              onChange={e => { setCountry(e.target.value); onFilterChange(dateFrom, dateTo, e.target.value); }}
+              className="bg-white/5 border border-white/10 text-white rounded-xl h-10 px-3 text-sm focus:ring-blue-500/20 outline-none"
+            >
+              {COUNTRIES_FILTER.map(c => <option key={c} value={c} className="bg-primary-900">{COUNTRY_LABEL[c] || c}</option>)}
+            </select>
+          </div>
         </div>
 
-        <div className="flex-1 min-w-[10px]" />
+        <div className="flex-1 lg:min-w-0" />
 
         <div className="flex gap-2">
-          <button className="h-10 px-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 text-cyan-400 text-xs font-bold hover:bg-cyan-500/10 transition-colors flex items-center gap-2">
-            <Download size={14} /> CSV Órdenes
-          </button>
-          <button className="h-10 px-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold hover:bg-emerald-500/10 transition-colors flex items-center gap-2">
-            <Download size={14} /> CSV Cierres
-          </button>
+          <Button variant="secondary" icon={<Download size={14} />} size="sm">Órdenes</Button>
+          <Button variant="secondary" icon={<Download size={14} />} size="sm">Cierres</Button>
         </div>
-      </div>
+      </FilterBar>
 
       {metrics && (
         <div className="animate-slide-up">
           {/* Main Financial KPIs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6">
-            <KPICard
-              icon={DollarSign} title="Volumen USDT" value={`$${compact(volumeUSD)}`}
-              subtitle={(companyOverview?.volume?.total_volume_origin || 0) > 0 ? `${compact(companyOverview!.volume.total_volume_origin!)} en la moneda origen` : ''}
-              accentColorClass="text-cyan-400" bgGradient="bg-cyan-500" glowColor="#06b6d4" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <MetricCard
+              label="Volumen USDT"
+              value={<MoneyCell value={volumeUSD} emphasize />}
+              icon={<DollarSign size={24} />}
+              hint={(companyOverview?.volume?.total_volume_origin || 0) > 0 ? `${compact(companyOverview!.volume.total_volume_origin!)} en la moneda origen` : "Suma total transada"}
+            />
 
-            <KPICard
-              icon={TrendingUp} title="Profit Neto Real" value={`$${compact(realProfit)}`}
-              subtitle={`Profit Teórico: $${compact(theoreticalProfit)}`}
-              accentColorClass="text-emerald-400" bgGradient="bg-emerald-500" glowColor="#10b981" />
+            <MetricCard
+              label="Profit Neto Real"
+              value={<MoneyCell value={realProfit} emphasize />}
+              icon={<TrendingUp size={24} />}
+              trendDirection="up"
+              hint={`Profit Teórico: $${compact(theoreticalProfit)}`}
+            />
 
-            <KPICard
-              icon={CheckCircle2} title="Completadas" value={formatNumber(completedOrders)}
-              subtitle={`${metrics.pending_orders} pendientes | ${metrics.total_orders} total históricas`}
-              accentColorClass="text-purple-400" bgGradient="bg-purple-500" glowColor="#8b5cf6" />
+            <MetricCard
+              label="Completadas"
+              value={formatNumber(completedOrders)}
+              icon={<CheckCircle2 size={24} />}
+              trendDirection="neutral"
+              hint={`${metrics.pending_orders} pendientes | ${metrics.total_orders} total`}
+            />
 
-            <KPICard
-              icon={AlertTriangle} title="Alertas Activas" value={alerts.length.toString()}
-              subtitle={alerts.length > 0 ? "Revisar órdenes congeladas" : "Flujo limpio, sin cuellos de botella."}
-              accentColorClass={alerts.length > 0 ? "text-red-500" : "text-yellow-500"} bgGradient={alerts.length > 0 ? "bg-red-500" : "bg-yellow-500"} glowColor={alerts.length > 0 ? "#ef4444" : "#f59e0b"} />
+            <MetricCard
+              label="Alertas Activas"
+              value={alerts.length.toString()}
+              icon={<AlertTriangle size={24} />}
+              trendDirection={alerts.length > 0 ? "down" : "neutral"}
+              className={alerts.length > 0 ? "border-red-500/20 shadow-red-900/10" : ""}
+              hint={alerts.length > 0 ? "Revisar órdenes congeladas" : "Flujo operativo limpio"}
+            />
           </div>
 
           {/* Central Vault Row (NEW 10x Feature) */}

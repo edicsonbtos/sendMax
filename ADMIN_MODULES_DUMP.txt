@@ -1,0 +1,4852 @@
+
+
+==========================================
+=== DASHBOARD PRINCIPAL ===
+=== Ruta: backoffice_web/src/app/admin/page.tsx ===
+==========================================
+
+'use client';
+
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, BarChart, Bar,
+} from 'recharts';
+import api from '@/lib/api';
+import { useAuth } from '@/components/AuthProvider';
+import {
+  DollarSign,
+  TrendingUp,
+  CheckCircle2,
+  AlertTriangle,
+  Download,
+  Filter,
+  RefreshCcw,
+  ShieldAlert,
+  LineChart,
+  Users,
+  BarChart as BarChartIcon
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { formatCurrency, formatNumber } from '@/lib/formatters';
+import type { RealtimeMetrics, VaultBalance } from '@/types';
+
+// Types adapted to match previous backend schema
+interface CompanyOverview {
+  ok: boolean;
+  orders: { total_orders: number; pending_orders: number; completed_orders: number };
+  profit: { total_profit_usd: number; total_profit_real_usd?: number };
+  volume: {
+    paid_usd_usdt: number;
+    total_volume_origin?: number;
+    paid_by_dest_currency: { dest_currency: string; volume: number; count?: number }[];
+  };
+}
+
+interface MetricsOverview {
+  total_orders: number; pending_orders: number; completed_orders: number;
+  total_volume_usd: number; total_profit_usd: number; total_profit_real_usd?: number;
+  status_counts: Record<string, number>;
+}
+
+interface StuckAlert { public_id: number; origin_country: string; dest_country: string; status: string; created_at: string; updated_at: string }
+interface AlertsResponse { ok: boolean; cutoff_utc: string; origin_verificando_stuck: StuckAlert[]; awaiting_paid_proof_stuck: StuckAlert[] }
+interface ProfitDayRaw { day: string; total_orders: number; total_profit: number; total_profit_real?: number; total_volume: number }
+interface ProfitDailyResponse { days: number; profit_by_day: ProfitDayRaw[] }
+interface ProfitDay { day: string; profit: number; profit_real: number; orders: number; volume: number }
+interface VaultRowData { id: number; name: string; vault_type: string; currency: string; balance: string; alert_threshold: string; is_active: boolean }
+interface LeaderboardEntry { alias: string; full_name: string; trust_score: number; profit_month: string; orders_month: number; kyc_status: string; }
+
+/* Constantes UI */
+const COUNTRY_FLAG: Record<string, string> = {
+  PERU: '????', COLOMBIA: '????', VENEZUELA: '????', CHILE: '????',
+  ARGENTINA: '????', MEXICO: '????', USA: '????', BRASIL: '????',
+};
+const HEATMAP_COUNTRIES = ['PERU', 'COLOMBIA', 'VENEZUELA', 'CHILE', 'ARGENTINA', 'MEXICO'];
+const CYAN = '#06b6d4';
+const PURPLE = '#8b5cf6';
+const CHART_COLORS = [CYAN, PURPLE, '#f59e0b', '#10b981', '#f97316', '#ef4444'];
+const COUNTRIES_FILTER = ['', 'CHILE', 'COLOMBIA', 'VENEZUELA', 'PERU', 'ARGENTINA', 'MEXICO', 'USA'];
+const COUNTRY_LABEL: Record<string, string> = { '': 'Todos', CHILE: '???? Chile', COLOMBIA: '???? Colombia', VENEZUELA: '???? Venezuela', PERU: '???? Peru', ARGENTINA: '???? Argentina', MEXICO: '???? Mexico', USA: '???? USA' };
+
+const STATUS_COLORS: Record<string, string> = {
+  PAGADA: '#10b981', CANCELADA: '#ef4444', CREADA: '#f59e0b',
+  EN_PROCESO: CYAN, ORIGEN_VERIFICANDO: PURPLE, COMPLETADA: '#10b981',
+};
+
+const compact = (n: number) => {
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toFixed(2);
+};
+
+/* -----------------------------------------------
+   Components locales
+----------------------------------------------- */
+function KPICard({
+  icon: Icon, title, value, subtitle, accentColorClass, glowColor, bgGradient
+}: {
+  icon: any, title: string, value: string | React.ReactNode, subtitle?: string, accentColorClass: string, glowColor: string, bgGradient: string
+}) {
+  return (
+    <div className={cn("relative overflow-hidden card-glass p-6 group transition-all duration-300 hover:translate-y-[-2px]")} style={{ boxShadow: `0 0 0 1px ${glowColor}15` }}>
+      <div
+        className={cn("absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 group-hover:opacity-40 transition-opacity duration-500 blur-2xl", bgGradient)}
+      />
+      <div className="relative z-10 flex flex-col h-full">
+        <div className="flex items-center gap-2 mb-4">
+          <div className={cn("p-2 rounded-xl bg-white/5", accentColorClass)}>
+            <Icon size={20} strokeWidth={2.5} />
+          </div>
+          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">{title}</h3>
+        </div>
+        <div className={cn("text-3xl md:text-4xl font-black tracking-tight mb-2", accentColorClass)}>
+          {value}
+        </div>
+        {subtitle && <p className="text-xs text-gray-500 font-medium leading-[1.3] truncate mt-auto">{subtitle}</p>}
+      </div>
+    </div>
+  );
+}
+
+function OperatorLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
+  if (!entries.length) return <p className="text-gray-500 text-xs text-center py-8">Sin datos de operadores</p>;
+  return (
+    <div className="flex flex-col gap-2">
+      {entries.slice(0, 8).map((e, i) => {
+        const isGold = i === 0;
+        const medal = i === 0 ? '??' : i === 1 ? '??' : i === 2 ? '??' : `#${i + 1}`;
+        const trustColor = e.trust_score >= 90 ? "text-cyan-400" : e.trust_score >= 75 ? "text-yellow-400" : "text-green-400";
+
+        return (
+          <div key={e.alias} className={cn(
+            "flex items-center gap-3 p-3 rounded-xl transition-all",
+            isGold ? "bg-[#eab30814] border border-[#eab3084d]" : "bg-white/5 border border-white/5 hover:bg-white/10"
+          )}>
+            <div className={cn(
+              "w-9 h-9 rounded-full shrink-0 flex items-center justify-center font-bold text-sm",
+              isGold ? "bg-gradient-to-br from-yellow-300 to-yellow-600 shadow-[0_0_15px_rgba(234,179,8,0.4)] text-black" : "bg-white/10 text-gray-400"
+            )}>
+              {medal}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={cn("m-0 text-sm font-bold truncate", isGold ? "text-yellow-400" : "text-gray-200")}>
+                {e.full_name || e.alias}
+              </p>
+              <p className="m-0 text-[10px] text-gray-500 mt-0.5">@{e.alias} � {e.orders_month} �rdenes</p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="m-0 text-sm font-bold text-emerald-400">{formatCurrency(Number(e.profit_month))}</p>
+              <p className={cn("m-0 text-[10px] font-bold mt-0.5", trustColor)}>score {e.trust_score}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CountryHeatmap({ data }: { data: { dest_currency: string; volume: number }[] }) {
+  const filtered = useMemo(() => {
+    const currencyToCountry: Record<string, string> = { PEN: 'PERU', COP: 'COLOMBIA', VES: 'VENEZUELA', CLP: 'CHILE', ARS: 'ARGENTINA', MXN: 'MEXICO', USD: 'USA' };
+    const aggregated: Record<string, number> = {};
+    if (Array.isArray(data)) {
+      data.forEach(d => {
+        const country = currencyToCountry[d.dest_currency] || d.dest_currency;
+        aggregated[country] = (aggregated[country] || 0) + d.volume;
+      });
+    }
+    return Object.entries(aggregated)
+      .filter(([c]) => HEATMAP_COUNTRIES.includes(c))
+      .sort((a, b) => b[1] - a[1])
+      .map(([country, volume], i) => ({ country, volume, color: CHART_COLORS[i % CHART_COLORS.length] }));
+  }, [data]);
+
+  const total = filtered.reduce((s, d) => s + d.volume, 0);
+
+  if (!filtered.length) return <p className="text-gray-500 text-xs text-center py-8">Sin datos de volumen</p>;
+
+  return (
+    <div className="flex gap-6 items-center flex-wrap">
+      <div className="w-40 h-40 shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={filtered.map(d => ({ name: d.country, value: d.volume, color: d.color }))}
+              cx="50%" cy="50%" innerRadius={50} outerRadius={75}
+              dataKey="value" strokeWidth={0}>
+              {filtered.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+            </Pie>
+            <RechartsTooltip
+              contentStyle={{ background: '#0a0f1e', border: `1px solid ${CYAN}33`, borderRadius: '12px', fontSize: '12px' }}
+              itemStyle={{ color: '#fff' }}
+              formatter={(v: any) => [`$${compact(Number(v))}`, '']}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="flex-1 flex flex-col gap-3">
+        {filtered.map((d) => {
+          const pct = total > 0 ? (d.volume / total) * 100 : 0;
+          return (
+            <div key={d.country}>
+              <div className="flex justify-between text-[11px] mb-1">
+                <span className="font-semibold text-gray-300">
+                  <span className="mr-1">{COUNTRY_FLAG[d.country] || '??'}</span> {d.country}
+                </span>
+                <span style={{ color: d.color }} className="font-bold">
+                  {formatCurrency(d.volume)} <span className="text-gray-500 font-medium ml-1">({pct.toFixed(0)}%)</span>
+                </span>
+              </div>
+              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-1000 ease-out"
+                  style={{ width: `${pct}%`, backgroundColor: d.color, boxShadow: `0 0 10px ${d.color}88` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function VaultRadar({ internalVaultAmount }: { internalVaultAmount: number }) {
+  const [vaults, setVaults] = useState<VaultRowData[]>([]);
+
+  useEffect(() => {
+    api.get<{ vaults: VaultRowData[] }>('/api/vaults').then(res => {
+      setVaults(Array.isArray(res.data?.vaults) ? res.data.vaults : []);
+    }).catch(() => { });
+  }, []);
+
+  const active = vaults.filter(v => v.is_active);
+  const VAULT_COLORS: Record<string, string> = { Digital: PURPLE, Physical: '#10b981', Crypto: '#f59e0b', Central: '#ef4444' };
+
+  return (
+    <div className="flex flex-wrap gap-4">
+      {/* Central Super Vault Injectada v�a Backend L�gica Especial */}
+      <div className={cn(
+        "flex-1 min-w-[200px] max-w-[300px] rounded-2xl p-5 border",
+        "bg-gradient-to-br from-[#ef444414] to-[#0a0f1e]",
+        "border-[#ef44444d] shadow-[0_0_30px_rgba(239,68,68,0.1),inset_0_0_20px_rgba(239,68,68,0.05)]"
+      )}>
+        <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#ef4444] mb-2 flex items-center gap-2">
+          <ShieldAlert size={14} /> B�VEDA CENTRAL (L�QUIDA)
+        </p>
+        <p className="text-3xl font-black font-mono text-white mb-1 shadow-[#ef4444]">
+          {compact(internalVaultAmount)} <span className="text-lg text-[#ef4444]">USDT</span>
+        </p>
+        <p className="text-xs text-red-300/80 font-medium">Net Profit - Operator Withdrawals</p>
+      </div>
+
+      {active.map(v => {
+        const bal = Number(v.balance), thr = Number(v.alert_threshold || '0');
+        const isLow = thr > 0 && bal < thr;
+        const fillPct = thr > 0 ? Math.min(100, (bal / thr) * 100) : 100;
+        const color = VAULT_COLORS[v.vault_type] || CYAN;
+
+        return (
+          <div key={v.id} className={cn(
+            "flex-1 min-w-[150px] max-w-[240px] rounded-2xl p-5 border transition-all",
+            isLow ? "animate-pulse-glow border-red-500/60 bg-red-500/5" : "border-white/10 bg-white/5"
+          )}>
+            <p className="text-[10px] font-bold tracking-[0.2em] uppercase mb-2 flex items-center justify-between" style={{ color: color }}>
+              <span>[{v.vault_type[0]}] {v.currency}</span>
+              {isLow && <span className="text-red-500 text-sm font-black animate-bounce">!</span>}
+            </p>
+            <p className={cn("text-2xl font-black font-mono mb-1", isLow ? "text-red-400" : "text-white")}>
+              {compact(bal)}
+            </p>
+            <p className="text-[10px] text-gray-500 truncate mb-3">{v.name}</p>
+            {thr > 0 && (
+              <>
+                <div className="flex justify-between text-[9px] text-gray-500 mb-1 font-bold">
+                  <span>LLENADO</span><span>{Math.round(fillPct)}%</span>
+                </div>
+                <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${fillPct}%`, backgroundColor: isLow ? '#ef4444' : color }} />
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* -----------------------------------------------
+   Page
+----------------------------------------------- */
+export default function DashboardPage() {
+  const { token, role } = useAuth();
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [country, setCountry] = useState('');
+
+  const [metrics, setMetrics] = useState<MetricsOverview | null>(null);
+  const [companyOverview, setCompanyOverview] = useState<CompanyOverview | null>(null);
+  const [alerts, setAlerts] = useState<StuckAlert[]>([]);
+  const [profitDaily, setProfitDaily] = useState<ProfitDay[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [statusCounts, setStatusCounts] = useState<{ name: string; value: number; color: string }[]>([]);
+  const [vaultData, setVaultData] = useState<VaultBalance | null>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState('');
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchData = useCallback(async (df = dateFrom, dt = dateTo, oc = country) => {
+    setLoading(true); setError('');
+    try {
+      const qp = new URLSearchParams();
+      if (df) qp.set('date_from', df);
+      if (dt) qp.set('date_to', dt);
+      if (oc) qp.set('origin_country', oc);
+      const qs = qp.toString() ? `?${qp.toString()}` : '';
+
+      // Central Vault es tra�da desde el nuevo api.ts de manera concurrente
+      const [mtx, comp, alrt, profit, lb, vaultResponse] = await Promise.allSettled([
+        api.get<MetricsOverview>('/metrics/overview'),
+        api.get<CompanyOverview>(`/metrics/company-overview${qs}`),
+        api.get<AlertsResponse>('/alerts/stuck-30m'),
+        api.get<ProfitDailyResponse>('/metrics/profit_daily?days=7'),
+        api.get<{ leaderboard: LeaderboardEntry[] }>('/metrics/operator-leaderboard?limit=8'),
+        api.get<VaultBalance>('/admin/metrics/vault').catch(() => null)
+      ]);
+
+      if (mtx.status === 'fulfilled') setMetrics(mtx.value.data);
+      if (comp.status === 'fulfilled') setCompanyOverview(comp.value.data);
+      if (lb.status === 'fulfilled') setLeaderboard(Array.isArray(lb.value.data.leaderboard) ? lb.value.data.leaderboard : []);
+      if (vaultResponse.status === 'fulfilled' && vaultResponse.value) {
+        setVaultData(vaultResponse.value.data);
+      }
+
+      const allAlerts: StuckAlert[] = [];
+      if (alrt.status === 'fulfilled') {
+        const d = alrt.value.data;
+        if (Array.isArray(d.origin_verificando_stuck)) allAlerts.push(...d.origin_verificando_stuck);
+        if (Array.isArray(d.awaiting_paid_proof_stuck)) allAlerts.push(...d.awaiting_paid_proof_stuck);
+      }
+      setAlerts(allAlerts);
+
+      if (profit.status === 'fulfilled' && Array.isArray(profit.value.data.profit_by_day)) {
+        setProfitDaily(profit.value.data.profit_by_day.map(d => ({
+          day: new Date(d.day).toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric' }),
+          profit: d.total_profit || 0,
+          profit_real: d.total_profit_real || 0,
+          orders: d.total_orders || 0,
+          volume: d.total_volume || 0,
+        })));
+      }
+
+      if (mtx.status === 'fulfilled' && mtx.value.data.status_counts) {
+        setStatusCounts(
+          Object.entries(mtx.value.data.status_counts)
+            .filter(([, v]) => (v || 0) > 0)
+            .map(([name, value]) => ({ name, value: Number(value || 0), color: STATUS_COLORS[name] || '#888' }))
+        );
+      }
+      setLastUpdated(new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err.message || 'Error updating dashboard');
+    } finally {
+      setLoading(false);
+    }
+  }, [dateFrom, dateTo, country]);
+
+  useEffect(() => { if (token) fetchData(); }, [token, fetchData]);
+
+  const onFilterChange = useCallback((df: string, dt: string, oc: string) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => fetchData(df, dt, oc), 500);
+  }, [fetchData]);
+
+  if (!token) return null;
+
+  const volumeUSD = companyOverview?.volume?.paid_usd_usdt || 0;
+  // Calculate Profit
+  const theoreticalProfit = companyOverview?.profit?.total_profit_usd || 0;
+  const realProfit = companyOverview?.profit?.total_profit_real_usd || metrics?.total_profit_real_usd || 0;
+  const completedOrders = companyOverview?.orders?.completed_orders || metrics?.completed_orders || 0;
+  const heatmapData = companyOverview?.volume?.paid_by_dest_currency || [];
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent tracking-tight">
+            Executive Command
+          </h1>
+          <p className="text-sm font-medium text-gray-400 mt-1">
+            Revisi�n maestra financiera
+            {lastUpdated && <span className="ml-2 text-cyan-500 opacity-70">Sincronizado {lastUpdated}</span>}
+          </p>
+        </div>
+
+        <button
+          onClick={() => fetchData()}
+          disabled={loading}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 transition-all font-semibold text-sm disabled:opacity-50"
+        >
+          <RefreshCcw size={16} className={cn(loading && "animate-spin")} />
+          Actualizar
+        </button>
+      </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-sm font-medium flex items-center gap-3">
+          <AlertTriangle size={18} /> {error}
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="card-glass p-4 md:p-5 flex flex-wrap gap-4 items-end">
+        <div className="flex items-center gap-2 mr-2 text-gray-500">
+          <Filter size={18} />
+          <span className="text-xs font-bold uppercase tracking-widest">Filtros</span>
+        </div>
+
+        <div className="flex flex-col gap-1.5 flex-1 min-w-[140px] max-w-[200px]">
+          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">Desde</label>
+          <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); onFilterChange(e.target.value, dateTo, country); }}
+            className="input-glass text-sm py-2 px-3" />
+        </div>
+
+        <div className="flex flex-col gap-1.5 flex-1 min-w-[140px] max-w-[200px]">
+          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">Hasta</label>
+          <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); onFilterChange(dateFrom, e.target.value, country); }}
+            className="input-glass text-sm py-2 px-3" />
+        </div>
+
+        <div className="flex flex-col gap-1.5 flex-1 min-w-[140px] max-w-[200px]">
+          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">Pa�s</label>
+          <select value={country} onChange={e => { setCountry(e.target.value); onFilterChange(dateFrom, dateTo, e.target.value); }}
+            className="input-glass text-sm py-2 px-3 bg-[#0a0f1e] text-gray-200">
+            {COUNTRIES_FILTER.map(c => <option key={c} value={c}>{COUNTRY_LABEL[c] || c}</option>)}
+          </select>
+        </div>
+
+        <div className="flex-1 min-w-[10px]" />
+
+        <div className="flex gap-2">
+          <button className="h-10 px-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 text-cyan-400 text-xs font-bold hover:bg-cyan-500/10 transition-colors flex items-center gap-2">
+            <Download size={14} /> CSV �rdenes
+          </button>
+          <button className="h-10 px-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold hover:bg-emerald-500/10 transition-colors flex items-center gap-2">
+            <Download size={14} /> CSV Cierres
+          </button>
+        </div>
+      </div>
+
+      {metrics && (
+        <div className="animate-slide-up">
+          {/* Main Financial KPIs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6">
+            <KPICard
+              icon={DollarSign} title="Volumen USDT" value={`$${compact(volumeUSD)}`}
+              subtitle={(companyOverview?.volume?.total_volume_origin || 0) > 0 ? `${compact(companyOverview!.volume.total_volume_origin!)} en la moneda origen` : ''}
+              accentColorClass="text-cyan-400" bgGradient="bg-cyan-500" glowColor="#06b6d4" />
+
+            <KPICard
+              icon={TrendingUp} title="Profit Neto Real" value={`$${compact(realProfit)}`}
+              subtitle={`Profit Te�rico: $${compact(theoreticalProfit)}`}
+              accentColorClass="text-emerald-400" bgGradient="bg-emerald-500" glowColor="#10b981" />
+
+            <KPICard
+              icon={CheckCircle2} title="Completadas" value={formatNumber(completedOrders)}
+              subtitle={`${metrics.pending_orders} pendientes | ${metrics.total_orders} total hist�ricas`}
+              accentColorClass="text-purple-400" bgGradient="bg-purple-500" glowColor="#8b5cf6" />
+
+            <KPICard
+              icon={AlertTriangle} title="Alertas Activas" value={alerts.length.toString()}
+              subtitle={alerts.length > 0 ? "Revisar �rdenes congeladas" : "Flujo limpio, sin cuellos de botella."}
+              accentColorClass={alerts.length > 0 ? "text-red-500" : "text-yellow-500"} bgGradient={alerts.length > 0 ? "bg-red-500" : "bg-yellow-500"} glowColor={alerts.length > 0 ? "#ef4444" : "#f59e0b"} />
+          </div>
+
+          {/* Central Vault Row (NEW 10x Feature) */}
+          <div className="mb-6">
+            <h2 className="text-lg font-black text-white mb-4 flex items-center gap-3">
+              <ShieldAlert className="text-red-500" /> Tesorer�a y B�vedas
+            </h2>
+            {/* The VaultRadar component pulls vaults via /api/vaults and receives the net central vault amount from the new Backend API */}
+            <VaultRadar internalVaultAmount={vaultData?.vault_balance || theoreticalProfit} />
+          </div>
+
+          {/* Chart Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            {/* Area Chart 7 days */}
+            <div className="card-glass p-5 lg:col-span-2">
+              <h2 className="text-sm font-bold text-gray-300 mb-6 uppercase tracking-widest flex items-center gap-2">
+                <LineChart size={16} className="text-emerald-400" /> Ganancia Diaria (�ltimos 7 d�as)
+              </h2>
+              <div className="h-[280px]">
+                {profitDaily.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={profitDaily} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorTheo" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="colorReal" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff0a" vertical={false} />
+                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }} tickFormatter={v => `$${compact(v)}`} />
+                      <RechartsTooltip
+                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#ffffff1a', borderRadius: '12px', padding: '12px', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)' }}
+                        itemStyle={{ fontWeight: 700 }} labelStyle={{ color: '#94a3b8', marginBottom: '8px', fontWeight: 600, fontSize: '13px' }}
+                        formatter={(val: any, name: any) => [`$${Number(val).toFixed(2)}`, name === 'profit' ? 'Te�rico' : 'Neto Real']}
+                      />
+                      <Area type="monotone" dataKey="profit" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorTheo)" activeDot={{ r: 6, strokeWidth: 0, fill: '#10b981' }} />
+                      <Area type="monotone" dataKey="profit_real" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorReal)" activeDot={{ r: 6, strokeWidth: 0, fill: '#06b6d4' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm font-medium text-gray-500 border border-dashed border-[#ffffff1a] rounded-xl">Sin datos de ingresos de semana.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Status Bars */}
+            <div className="card-glass p-5 flex flex-col">
+              <h2 className="text-sm font-bold text-gray-300 mb-6 uppercase tracking-widest flex items-center gap-2">
+                <BarChartIcon size={16} className="text-purple-400" /> Estado de �rdenes
+              </h2>
+              {statusCounts.length > 0 ? (
+                <>
+                  <div className="h-[160px] mb-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={statusCounts} layout="vertical" margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                        <XAxis type="number" hide />
+                        <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }} width={120} />
+                        <RechartsTooltip cursor={{ fill: '#ffffff0a' }} contentStyle={{ backgroundColor: '#0f172a', borderColor: '#ffffff1a', borderRadius: '12px' }} itemStyle={{ fontWeight: 700, color: '#fff' }} formatter={(val: any) => [val, '�rdenes']} />
+                        <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={16}>
+                          {statusCounts.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
+                    {statusCounts.map(s => (
+                      <div key={s.name} className="flex items-center justify-between text-xs p-2 rounded-lg bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color, boxShadow: `0 0 8px ${s.color}66` }} />
+                          <span className="font-semibold text-gray-300">{s.name}</span>
+                        </div>
+                        <span className="font-bold text-white tracking-widest">{s.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-1 items-center justify-center text-sm font-medium text-gray-500 border border-dashed border-[#ffffff1a] rounded-xl">0 �rdenes detectadas.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Leaders & Map Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div className="card-glass p-5">
+              <h2 className="text-sm font-bold text-gray-300 mb-6 uppercase tracking-widest flex items-center gap-2">
+                <AlertTriangle size={16} className="text-cyan-400" /> Rentabilidad por Pa�s
+              </h2>
+              <CountryHeatmap data={heatmapData} />
+            </div>
+
+            <div className="card-glass p-5 border-[#eab30833] relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/5 rounded-full blur-3xl" />
+              <h2 className="text-sm font-bold text-yellow-400 mb-6 uppercase tracking-widest flex items-center gap-2 relative z-10">
+                <Users size={16} className="text-yellow-400" /> �lite de Operadores
+              </h2>
+              <div className="relative z-10">
+                <OperatorLeaderboard entries={leaderboard} />
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+==========================================
+=== ORDENES ===
+=== Ruta: backoffice_web/src/app/orders/page.tsx ===
+==========================================
+
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Box,
+  Typography,
+  Card,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Chip,
+  CircularProgress,
+  Alert,
+  TextField,
+  Stack,
+  Button,
+  IconButton,
+  Tooltip,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
+  InputAdornment,
+} from '@mui/material';
+import {
+  Visibility as ViewIcon,
+  Refresh as RefreshIcon,
+  Search as SearchIcon,
+  Download as DownloadIcon,
+  TrendingUp as GainIcon,
+  Close as ClearIcon,
+} from '@mui/icons-material';
+import { useAuth } from '@/components/AuthProvider';
+import api from '@/lib/api';
+
+interface Order {
+  public_id: number | string;
+  status: string;
+  origin_country: string;
+  dest_country: string;
+  amount_origin: number;
+  origin_currency: string;
+  payout_dest: number;
+  dest_currency: string;
+  profit_usdt: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+interface OrdersResponse {
+  count: number;
+  orders: Order[];
+}
+
+const statusColors: Record<string, 'default' | 'warning' | 'info' | 'success' | 'error'> = {
+  pending_kyc: 'warning',
+  pending_origin: 'warning',
+  pending_dest: 'info',
+  completed: 'success',
+  cancelled: 'error',
+  PAGADA: 'success',
+  CANCELADA: 'error',
+  PENDIENTE: 'warning',
+  EN_PROCESO: 'info',
+};
+
+const statusLabels: Record<string, string> = {
+  pending_kyc: 'KYC Pendiente',
+  pending_origin: 'Pago Origen',
+  pending_dest: 'Pago Destino',
+  completed: 'Completada',
+  cancelled: 'Cancelada',
+  PAGADA: 'Pagada',
+  CANCELADA: 'Cancelada',
+  PENDIENTE: 'Pendiente',
+  EN_PROCESO: 'En Proceso',
+};
+
+export default function OrdersPage() {
+  const router = useRouter();
+  const { token, isReady } = useAuth();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [limit, setLimit] = useState(100);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [countryFilter, setCountryFilter] = useState('all');
+
+  const fetchOrders = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.get<OrdersResponse>(`/orders?limit=${limit}`);
+      const data = res.data;
+      const ordersArray = Array.isArray(data?.orders) ? data.orders : [];
+      setOrders(ordersArray);
+      setFilteredOrders(ordersArray);
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err.message || 'Error desconocido';
+      setError(message);
+      setOrders([]);
+      setFilteredOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [limit, token]);
+
+  useEffect(() => {
+    if (isReady && token) {
+      fetchOrders();
+    }
+  }, [isReady, token, fetchOrders]);
+
+  // Filtrado local
+  useEffect(() => {
+    let filtered = [...orders];
+
+    // Busqueda
+    if (searchTerm) {
+      filtered = filtered.filter((order) => {
+        const search = searchTerm.toLowerCase();
+        return (
+          (order.public_id?.toString() || '').includes(search) ||
+          (order.origin_country || '').toLowerCase().includes(search) ||
+          (order.dest_country || '').toLowerCase().includes(search) ||
+          (order.status || '').toLowerCase().includes(search)
+        );
+      });
+    }
+
+    // Filtro status
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((order) => order.status === statusFilter);
+    }
+
+    // Filtro pais
+    if (countryFilter !== 'all') {
+      filtered = filtered.filter(
+        (order) => order.origin_country === countryFilter || order.dest_country === countryFilter
+      );
+    }
+
+    setFilteredOrders(filtered);
+  }, [searchTerm, statusFilter, countryFilter, orders]);
+
+  const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value) || 100;
+    setLimit(val);
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setCountryFilter('all');
+  };
+
+  const exportCSV = () => {
+    const headers = ['ID', 'Estado', 'Origen', 'Destino', 'Monto Origen', 'Payout Destino', 'Ganancia', 'Fecha'];
+    const rows = filteredOrders.map(o => [
+      o.public_id,
+      o.status,
+      o.origin_country,
+      o.dest_country,
+      o.amount_origin,
+      o.payout_dest,
+      o.profit_usdt || 0,
+      new Date(o.created_at).toLocaleDateString('es-VE'),
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `ordenes_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  // Obtener valores unicos para filtros
+  const uniqueStatuses = Array.from(new Set(orders.map(o => o.status).filter(Boolean)));
+  const uniqueCountries = Array.from(
+    new Set([
+      ...orders.map(o => o.origin_country).filter(Boolean),
+      ...orders.map(o => o.dest_country).filter(Boolean),
+    ])
+  ).sort();
+
+  const totalProfit = filteredOrders.reduce((sum, o) => sum + (o.profit_usdt || 0), 0);
+
+  if (!isReady || !token) return null;
+
+  return (
+    <Box sx={{ p: 1 }} className="animate-fade-in">
+      {/* Header */}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 900, color: '#111827', tracking: '-0.02em' }}>
+            Órdenes
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5, fontWeight: 500 }}>
+            {filteredOrders.length} de {orders.length} órdenes detectadas
+            {totalProfit > 0 && ` · Ganancia acumulada: $${totalProfit.toFixed(2)}`}
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1.5}>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadIcon />}
+            onClick={exportCSV}
+            disabled={filteredOrders.length === 0}
+            sx={{ borderRadius: '12px', px: 2 }}
+          >
+            Exportar CSV
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<RefreshIcon />}
+            onClick={fetchOrders}
+            disabled={loading}
+            sx={{ borderRadius: '12px', px: 3, backgroundColor: '#4B2E83', '&:hover': { backgroundColor: '#5A37A0' } }}
+          >
+            Actualizar
+          </Button>
+        </Stack>
+      </Stack>
+
+      {/* Filters Bar */}
+      <Card sx={{ mb: 4, borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="flex-end">
+            <TextField
+              size="small"
+              placeholder="Buscar por ID, país, estado..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              sx={{ flex: 2, minWidth: 200 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ color: '#64748B', fontSize: 20 }} />
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            <FormControl size="small" sx={{ flex: 1, minWidth: 150 }}>
+              <InputLabel>Estado</InputLabel>
+              <Select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                label="Estado"
+              >
+                <MenuItem value="all">Todos los estados</MenuItem>
+                {uniqueStatuses.map(status => (
+                  <MenuItem key={status} value={status}>
+                    {statusLabels[status] || status}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ flex: 1, minWidth: 150 }}>
+              <InputLabel>País</InputLabel>
+              <Select
+                value={countryFilter}
+                onChange={(e) => setCountryFilter(e.target.value)}
+                label="País"
+              >
+                <MenuItem value="all">Todos los países</MenuItem>
+                {uniqueCountries.map(country => (
+                  <MenuItem key={country} value={country}>
+                    {country}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <TextField
+              size="small"
+              type="number"
+              label="Límite"
+              value={limit}
+              onChange={handleLimitChange}
+              sx={{ width: 90 }}
+            />
+
+            {(searchTerm || statusFilter !== 'all' || countryFilter !== 'all') && (
+              <Button
+                size="small"
+                startIcon={<ClearIcon />}
+                onClick={clearFilters}
+                sx={{ color: '#64748B', mb: 0.5, fontWeight: 700 }}
+              >
+                Limpiar
+              </Button>
+            )}
+          </Stack>
+        </CardContent>
+      </Card>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 4, borderRadius: '12px' }}>
+          {error}
+        </Alert>
+      )}
+
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 12 }}>
+          <CircularProgress sx={{ color: '#4B2E83' }} />
+        </Box>
+      ) : (
+        <Card sx={{ borderRadius: '16px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+          <TableContainer sx={{ maxHeight: 600 }}>
+            <Table stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>ID de Orden</TableCell>
+                  <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Estado</TableCell>
+                  <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Origen</TableCell>
+                  <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Destino</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Monto Origen</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Payout Destino</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Ganancia</TableCell>
+                  <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Fecha</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Acciones</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredOrders.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} align="center" sx={{ py: 10 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                        {orders.length === 0
+                          ? 'No hay órdenes registradas en el sistema'
+                          : 'No se encontraron órdenes con estos filtros'}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredOrders.map((order) => (
+                    <TableRow
+                      key={order.public_id}
+                      hover
+                      sx={{
+                        cursor: 'pointer',
+                        '&:hover': { backgroundColor: '#F8FAFF' },
+                      }}
+                      onClick={() => router.push(`/orders/${order.public_id}`)}
+                    >
+                      <TableCell>
+                        <Typography
+                          sx={{
+                            fontFamily: 'var(--font-inter), monospace',
+                            fontSize: '0.85rem',
+                            fontWeight: 800,
+                            color: '#4B2E83',
+                          }}
+                        >
+                          #{order.public_id}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={statusLabels[order.status] || order.status}
+                          color={statusColors[order.status] || 'default'}
+                          size="small"
+                          sx={{ fontWeight: 700, borderRadius: '6px' }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#334155' }}>
+                          {order.origin_country}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#334155' }}>
+                          {order.dest_country}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A' }}>
+                          {order.amount_origin?.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>
+                          {order.origin_currency}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A' }}>
+                          {order.payout_dest?.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>
+                          {order.dest_currency}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
+                          {order.profit_usdt > 0 && <GainIcon sx={{ fontSize: 16, color: '#16A34A' }} />}
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: order.profit_usdt > 0 ? '#16A34A' : '#64748B',
+                              fontWeight: 900,
+                            }}
+                          >
+                            ${(order.profit_usdt || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                          </Typography>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                          {new Date(order.created_at).toLocaleDateString('es-VE')}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#94A3B8' }}>
+                          {new Date(order.created_at).toLocaleTimeString('es-VE', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Tooltip title="Ver detalle completo">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/orders/${order.public_id}`);
+                            }}
+                            sx={{ color: '#4B2E83' }}
+                          >
+                            <ViewIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Card>
+      )}
+    </Box>
+  );
+}
+
+
+==========================================
+=== USUARIOS/OPERADORES ===
+=== Ruta: backoffice_web/src/app/users/page.tsx ===
+==========================================
+
+'use client';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import api from '@/lib/api';
+import { useAuth } from '@/components/AuthProvider';
+import {
+  Search,
+  RefreshCcw,
+  X,
+  Eye,
+  Shield,
+  ShieldAlert,
+  ToggleLeft,
+  ToggleRight,
+  AlertCircle
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { formatCurrency, formatDateTime } from '@/lib/formatters';
+
+interface User {
+  id: number;
+  telegram_user_id: number;
+  alias: string;
+  full_name: string | null;
+  email: string | null;
+  role: string;
+  is_active: boolean;
+  kyc_status: string;
+  balance_usdt: string | null;
+  total_orders: number;
+  created_at: string;
+}
+
+const KYC_MAP: Record<string, { styles: string; label: string }> = {
+  APPROVED: { styles: 'bg-[#10b9811a] text-[#10b981] border-[#10b9814d]', label: 'Aprobado' },
+  SUBMITTED: { styles: 'bg-[#f59e0b1a] text-[#f59e0b] border-[#f59e0b4d]', label: 'Enviado' },
+  REJECTED: { styles: 'bg-[#ef44441a] text-[#ef4444] border-[#ef44444d]', label: 'Rechazado' },
+  PENDING: { styles: 'bg-gray-500/10 text-gray-400 border-gray-500/30', label: 'Pendiente' },
+};
+
+export default function UsersPage() {
+  const { token } = useAuth();
+  const router = useRouter();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [users, setUsers] = useState<User[]>([]);
+  const [search, setSearch] = useState('');
+  const [activeSearch, setActiveSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const fetchUsers = useCallback(async (q: string = '') => {
+    setLoading(true);
+    setError('');
+    try {
+      const query = q.trim() ? `?search=${encodeURIComponent(q.trim())}` : '';
+      const res = await api.get<{ count: number; users: User[] }>(`/users${query}`);
+      setUsers(res.data?.users || []);
+      setActiveSearch(q.trim());
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err.message || 'Error cargando usuarios');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (token) fetchUsers();
+  }, [token, fetchUsers]);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchUsers(value), 400);
+  }, [fetchUsers]);
+
+  const handleClearSearch = useCallback(() => {
+    setSearch('');
+    setActiveSearch('');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const handleToggle = useCallback(async (userId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await api.put(`/users/${userId}/toggle`);
+      await fetchUsers(activeSearch);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err.message || 'Error al cambiar estado');
+    }
+  }, [activeSearch, fetchUsers]);
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent tracking-tight">
+            Usuarios
+          </h1>
+          <p className="text-sm font-medium text-gray-400 mt-1 flex items-center gap-2">
+            {users.length} operadores y administradores
+            {activeSearch && (
+              <span className="px-2 py-0.5 rounded-md bg-white/10 text-white text-[11px] font-bold tracking-wider">
+                Filtro: "{activeSearch}"
+              </span>
+            )}
+          </p>
+        </div>
+
+        <button
+          onClick={() => fetchUsers(activeSearch)}
+          disabled={loading}
+          className="flex items-center gap-2 px-5 py-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 transition-all text-sm font-bold disabled:opacity-50"
+        >
+          <RefreshCcw size={16} className={cn(loading && "animate-spin")} />
+          Actualizar
+        </button>
+      </div>
+
+      {/* Filters Card */}
+      <div className="card-glass p-4 md:p-5">
+        <div className="relative w-full md:w-[420px] text-gray-400 focus-within:text-cyan-400">
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Buscar por alias, nombre o email..."
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="input-glass pl-10 pr-10 text-sm py-2.5 bg-[#ffffff05] w-full"
+          />
+          {search && (
+            <button
+              onClick={handleClearSearch}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-white rounded-lg transition"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-sm font-medium flex items-center gap-3">
+          <AlertCircle size={18} /> {error}
+        </div>
+      )}
+
+      {/* Table */}
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <div className="w-10 h-10 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="card-glass overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="table-glass">
+              <thead>
+                <tr>
+                  <th className="w-16">ID</th>
+                  <th>Alias</th>
+                  <th>Nombre</th>
+                  <th>Telegram</th>
+                  <th>Rol</th>
+                  <th>KYC</th>
+                  <th className="text-right">Balance</th>
+                  <th className="text-right">�rdenes</th>
+                  <th className="text-center">Estado</th>
+                  <th className="text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="text-center py-10 text-gray-500">
+                      {activeSearch ? `Sin resultados para "${activeSearch}"` : 'No hay usuarios'}
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((u) => {
+                    const kyc = KYC_MAP[u.kyc_status] || KYC_MAP.PENDING;
+                    return (
+                      <tr
+                        key={u.id}
+                        onClick={() => router.push(`/users/${u.id}`)}
+                        className="cursor-pointer group"
+                      >
+                        <td className="font-mono text-gray-400 font-bold">{u.id}</td>
+                        <td className="font-bold text-gray-200">{u.alias}</td>
+                        <td className="text-gray-300">{u.full_name || '-'}</td>
+                        <td className="font-mono text-sm text-gray-400">{u.telegram_user_id || '-'}</td>
+                        <td>
+                          <span className={cn(
+                            "flex items-center gap-1.5 w-fit px-2.5 py-1 text-[10px] font-black tracking-widest uppercase rounded",
+                            u.role === 'admin' ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+                          )}>
+                            {u.role === 'admin' ? <ShieldAlert size={12} /> : <Shield size={12} />}
+                            {u.role}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={cn("px-2.5 py-1 text-[11px] font-bold rounded-full border whitespace-nowrap", kyc.styles)}>
+                            {kyc.label}
+                          </span>
+                        </td>
+                        <td className="text-right font-bold text-gray-200">
+                          {formatCurrency(Number(u.balance_usdt || 0))}
+                        </td>
+                        <td className="text-right font-bold text-gray-400">
+                          {u.total_orders || 0}
+                        </td>
+                        <td className="text-center">
+                          <span className={cn(
+                            "inline-flex items-center justify-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-lg border",
+                            u.is_active ? "bg-[#10b9811a] text-[#10b981] border-[#10b98133]" : "bg-gray-500/10 text-gray-400 border-gray-500/30"
+                          )}>
+                            {u.is_active ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </td>
+                        <td className="text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              className="p-1.5 text-gray-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition-colors"
+                              title="Ver detalle"
+                            >
+                              <Eye size={18} />
+                            </button>
+                            <button
+                              className={cn(
+                                "p-1.5 rounded-lg transition-colors",
+                                u.is_active ? "text-emerald-400 hover:bg-emerald-500/10" : "text-gray-500 hover:text-yellow-400 hover:bg-yellow-500/10"
+                              )}
+                              title={u.is_active ? 'Desactivar' : 'Activar'}
+                              onClick={(e) => handleToggle(u.id, e)}
+                            >
+                              {u.is_active ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+==========================================
+=== CIERRE DIARIO ===
+=== Ruta: backoffice_web/src/app/daily-close/page.tsx ===
+==========================================
+
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Stack,
+  Button,
+  TextField,
+  Alert,
+  CircularProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Divider,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+} from '@mui/material';
+import {
+  Download as DownloadIcon,
+  Lock as LockIcon,
+  CheckCircle as CheckIcon,
+  Refresh as RefreshIcon,
+  TrendingUp as InIcon,
+  TrendingDown as OutIcon,
+  AccountBalance as BalanceIcon,
+  Warning as WarningIcon,
+} from '@mui/icons-material';
+import { useAuth } from '@/components/AuthProvider';
+import api from '@/lib/api';
+
+interface CloseReportItem {
+  country: string;
+  currency: string;
+  total_in: number;
+  total_out: number;
+  net_balance: number;
+}
+
+interface CloseReportResponse {
+  report?: CloseReportItem[];
+  items?: CloseReportItem[];
+  data?: CloseReportItem[];
+}
+
+interface CloseResponse {
+  status: string;
+  day: string;
+  message: string;
+  closed_at?: string;
+}
+
+export default function DailyClosePage() {
+  const { token, isReady } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedDay, setSelectedDay] = useState('');
+  const [report, setReport] = useState<CloseReportItem[]>([]);
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [closeLoading, setCloseLoading] = useState(false);
+  const [closeResult, setCloseResult] = useState<CloseResponse | null>(null);
+
+  useEffect(() => {
+    const today = new Date();
+    today.setDate(today.getDate() - 1);
+    const formatted = today.toISOString().split('T')[0];
+    setSelectedDay(formatted);
+  }, []);
+
+  const fetchReport = useCallback(async () => {
+    if (!selectedDay || !token) return;
+    setLoading(true);
+    setError('');
+    setCloseResult(null);
+    try {
+      const res = await api.get<CloseReportResponse | CloseReportItem[]>(`/daily_closure/report?day=${selectedDay}`);
+      const data = res.data;
+      const reportArray = Array.isArray(data) ? data : (data.report || data.items || data.data || []);
+      setReport(reportArray);
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err.message || 'Error desconocido';
+      setError(message);
+      setReport([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDay, token]);
+
+  useEffect(() => {
+    if (isReady && token && selectedDay) {
+      fetchReport();
+    }
+  }, [isReady, token, selectedDay, fetchReport]);
+
+  const handleCloseDay = async () => {
+    setCloseLoading(true);
+    setError('');
+    try {
+      const res = await api.post<CloseResponse>('/daily_closure/close', { day: selectedDay });
+      setCloseResult(res.data);
+      setCloseDialogOpen(false);
+      fetchReport();
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err.message || 'Error desconocido';
+      setError(message);
+    } finally {
+      setCloseLoading(false);
+    }
+  };
+
+  const exportCSV = () => {
+    if (!Array.isArray(report) || report.length === 0) return;
+    const headers = ['Pais', 'Moneda', 'Entradas', 'Salidas', 'Balance Neto'];
+    const rows = report.map(r => [
+      r.country,
+      r.currency,
+      (r.total_in || 0).toFixed(2),
+      (r.total_out || 0).toFixed(2),
+      (r.net_balance || 0).toFixed(2),
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `cierre_${selectedDay}.csv`;
+    link.click();
+  };
+
+  const safeReport = Array.isArray(report) ? report : [];
+  const totalIn = safeReport.reduce((sum, r) => sum + (r.total_in || 0), 0);
+  const totalOut = safeReport.reduce((sum, r) => sum + (r.total_out || 0), 0);
+  const totalNet = safeReport.reduce((sum, r) => sum + (r.net_balance || 0), 0);
+
+  if (!isReady || !token) return null;
+
+  return (
+    <Box sx={{ p: 1 }} className="animate-fade-in">
+      {/* Header */}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 900, color: '#111827', tracking: '-0.02em' }}>
+            Cierre Diario
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5, fontWeight: 500 }}>
+            Reporte de cierre y consolidación operativa por día
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          startIcon={<RefreshIcon />}
+          onClick={fetchReport}
+          disabled={loading}
+          sx={{ borderRadius: '12px', px: 3, py: 1, backgroundColor: '#4B2E83', '&:hover': { backgroundColor: '#5A37A0' } }}
+        >
+          Actualizar
+        </Button>
+      </Stack>
+
+      {/* Filtros */}
+      <Card sx={{ mb: 4, borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+        <CardContent sx={{ p: 3 }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="flex-end">
+            <TextField
+              type="date"
+              label="Día de Operación"
+              value={selectedDay}
+              onChange={(e) => setSelectedDay(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ width: 220 }}
+              size="small"
+            />
+            <Button variant="outlined" onClick={fetchReport} disabled={loading} sx={{ borderRadius: '10px' }}>
+              Consultar Reporte
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              onClick={exportCSV}
+              disabled={safeReport.length === 0}
+              sx={{ borderRadius: '10px' }}
+            >
+              Exportar CSV
+            </Button>
+            <Box sx={{ flex: 1 }} />
+            <Chip
+              label={`Periodo: ${selectedDay}`}
+              size="small"
+              sx={{ backgroundColor: '#F3E8FF', color: '#6B21A8', fontWeight: 700, px: 1 }}
+            />
+          </Stack>
+        </CardContent>
+      </Card>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 4, borderRadius: '12px', border: '1px solid #FECACA' }}>
+          {error}
+        </Alert>
+      )}
+
+      {closeResult && (
+        <Alert
+          severity={closeResult.status === 'already_closed' ? 'info' : 'success'}
+          sx={{ mb: 4, borderRadius: '12px', border: closeResult.status === 'already_closed' ? '1px solid #BFDBFE' : '1px solid #BBF7D0' }}
+          icon={<CheckIcon />}
+        >
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{closeResult.message}</Typography>
+          {closeResult.closed_at && (
+            <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+              Sincronizado el: {new Date(closeResult.closed_at).toLocaleString('es-VE')}
+            </Typography>
+          )}
+        </Alert>
+      )}
+
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 12 }}>
+          <CircularProgress sx={{ color: '#4B2E83' }} />
+        </Box>
+      ) : (
+        <>
+          {/* Resumen KPIs */}
+          <GridContainer>
+            <KPIDisplay
+              title="Total Entradas"
+              value={`$${totalIn.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+              icon={<InIcon />}
+              color="#16A34A"
+              bg="#DCFCE7"
+            />
+            <KPIDisplay
+              title="Total Salidas"
+              value={`$${totalOut.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+              icon={<OutIcon />}
+              color="#DC2626"
+              bg="#FEE2E2"
+            />
+            <KPIDisplay
+              title="Balance Neto"
+              value={`$${totalNet.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+              icon={<BalanceIcon />}
+              color={totalNet >= 0 ? '#2563EB' : '#DC2626'}
+              bg={totalNet >= 0 ? '#DBEAFE' : '#FEE2E2'}
+            />
+          </GridContainer>
+
+          {/* Tabla detalle */}
+          <Card sx={{ mb: 4, borderRadius: '16px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+            <Box sx={{ p: 3, borderBottom: '1px solid #F1F5F9' }}>
+              <Typography variant="h6" sx={{ fontWeight: 800, color: '#1E293B' }}>
+                Detalle por País / Moneda
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#64748B', mt: 0.5, display: 'block' }}>
+                Corte de caja para el día {selectedDay}
+              </Typography>
+            </Box>
+
+            <TableContainer sx={{ maxHeight: 500 }}>
+              <Table stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>País</TableCell>
+                    <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Moneda</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Entradas</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Salidas</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Balance Neto</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {safeReport.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center" sx={{ py: 10 }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                          No hay registros para la fecha seleccionada
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    safeReport.map((item, idx) => (
+                      <TableRow key={idx} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                        <TableCell sx={{ fontWeight: 700, color: '#334155' }}>{item.country}</TableCell>
+                        <TableCell>
+                          <Chip label={item.currency} size="small" variant="outlined" sx={{ fontWeight: 800, borderRadius: '6px' }} />
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: '#16A34A', fontWeight: 600 }}>
+                          ${(item.total_in || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: '#DC2626', fontWeight: 600 }}>
+                          ${(item.total_out || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 900, color: item.net_balance >= 0 ? '#2563EB' : '#DC2626' }}>
+                          ${(item.net_balance || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Card>
+
+          {/* Botón de cierre */}
+          <Box sx={{ 
+            p: 3, 
+            borderRadius: '20px', 
+            backgroundColor: '#FEF3C7', 
+            border: '1px solid #F59E0B',
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 2
+          }}>
+            <Stack direction="row" spacing={2} alignItems="center">
+              <Box sx={{ backgroundColor: '#FDE68A', borderRadius: '14px', p: 1.5, display: 'flex' }}>
+                <WarningIcon sx={{ color: '#D97706', fontSize: 24 }} />
+              </Box>
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 800, color: '#92400E' }}>
+                  Acción de Cierre
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#92400E', opacity: 0.9, fontWeight: 500 }}>
+                  Bloquea las operaciones del día y genera el reporte histórico final.
+                </Typography>
+              </Box>
+            </Stack>
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={<LockIcon />}
+              onClick={() => setCloseDialogOpen(true)}
+              disabled={safeReport.length === 0}
+              sx={{
+                backgroundColor: '#92400E',
+                px: 5,
+                py: 1.5,
+                borderRadius: '12px',
+                fontWeight: 800,
+                boxShadow: '0 4px 14px 0 rgba(146, 64, 14, 0.39)',
+                '&:hover': { backgroundColor: '#78350F' },
+              }}
+            >
+              Cerrar Día {selectedDay}
+            </Button>
+          </Box>
+        </>
+      )}
+
+      {/* Dialog confirmacion */}
+      <Dialog open={closeDialogOpen} onClose={() => setCloseDialogOpen(false)} PaperProps={{ sx: { borderRadius: '20px', p: 1 } }}>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.25rem' }}>Confirmar Cierre Maestro</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Alert severity="warning" variant="filled" sx={{ borderRadius: '12px', fontWeight: 600 }}>
+              Atención: Estás cerrando el día {selectedDay}
+            </Alert>
+            <Typography variant="body2" sx={{ color: '#475569', lineHeight: 1.6 }}>
+              Este proceso consolidará todas las entradas y salidas registradas. 
+              El reporte resultante servirá como base para la tesorería central.
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 3, pt: 1 }}>
+          <Button onClick={() => setCloseDialogOpen(false)} sx={{ fontWeight: 700, color: '#64748B' }}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={handleCloseDay}
+            disabled={closeLoading}
+            startIcon={<LockIcon />}
+            sx={{ 
+              backgroundColor: '#4B2E83', 
+              borderRadius: '12px', 
+              px: 3,
+              fontWeight: 700,
+              '&:hover': { backgroundColor: '#5A37A0' } 
+            }}
+          >
+            {closeLoading ? 'Cerrando...' : 'Confirmar Cierre'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+function GridContainer({ children }: { children: React.ReactNode }) {
+  return (
+    <Stack direction="row" spacing={3} sx={{ mb: 4, flexWrap: 'wrap', gap: 2.5 }}>
+      {children}
+    </Stack>
+  );
+}
+
+function KPIDisplay({ title, value, icon, color, bg }: { title: string, value: string, icon: any, color: string, bg: string }) {
+  return (
+    <Card sx={{ flex: '1 1 calc(33.33% - 20px)', minWidth: 260, borderRadius: '18px', border: '1px solid #F1F5F9' }}>
+      <CardContent sx={{ p: 3 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+          <Box>
+            <Typography variant="body2" sx={{ color: '#64748B', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase', tracking: '0.1em' }}>
+              {title}
+            </Typography>
+            <Typography variant="h4" sx={{ fontWeight: 900, color: '#0F172A', mt: 1 }}>
+              {value}
+            </Typography>
+          </Box>
+          <Box sx={{ backgroundColor: bg, borderRadius: '14px', p: 1.5, display: 'flex' }}>
+            {React.cloneElement(icon, { sx: { color, fontSize: 28 } })}
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+
+==========================================
+=== METRICAS ===
+=== Ruta: backoffice_web/src/app/metrics/page.tsx ===
+==========================================
+
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Stack,
+  Grid,
+  CircularProgress,
+  Alert,
+  IconButton,
+  Tooltip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
+  Divider,
+} from '@mui/material';
+import {
+  Refresh as RefreshIcon,
+  TrendingUp as ProfitIcon,
+  Receipt as OrderIcon,
+  AttachMoney as MoneyIcon,
+  ShowChart as ChartIcon,
+} from '@mui/icons-material';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as ChartTooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import { useAuth } from '@/components/AuthProvider';
+import { apiRequest } from '@/lib/api';
+
+/* ============ Types ============ */
+interface MetricsOverview {
+  total_orders: number;
+  pending_orders: number;
+  completed_orders: number;
+  total_volume_usd: number;
+  total_volume_dest: number;
+  daily_volume: { date: string; volume: number }[];
+}
+
+interface CorridorMetric {
+  route: string;
+  volume: number;
+  count: number;
+  avg_rate: number;
+}
+
+interface P2PPrice {
+  bank_name: string;
+  amount: number;
+  is_verified: boolean;
+  captured_at: string;
+}
+
+export default function MetricsPage() {
+  const { token } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [overview, setOverview] = useState<MetricsOverview | null>(null);
+  const [corridors, setCorridors] = useState<CorridorMetric[]>([]);
+  const [p2p, setP2P] = useState<P2PPrice[]>([]);
+
+  const loadMetrics = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiRequest<{ overview: MetricsOverview; corridors: CorridorMetric[]; p2p: P2PPrice[] }>('/admin/metrics');
+      setOverview(data.overview);
+      setCorridors(data.corridors);
+      setP2P(data.p2p);
+    } catch (e: any) {
+      console.error('Error metrics:', e);
+      setError(e.message || 'No se pudieron cargar las métricas');
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadMetrics();
+  }, [loadMetrics]);
+
+  const formatUsd = (val: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ p: 4 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800, color: '#1E293B' }}>Dashboard Metricas 10x</Typography>
+          <Typography variant="body2" color="text.secondary">Visualización en tiempo real de volumen y operaciones</Typography>
+        </Box>
+        <Tooltip title="Recargar métricas">
+          <IconButton onClick={loadMetrics}>
+            <RefreshIcon />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+
+      {error ? (
+        <Alert severity="error" sx={{ mb: 4 }}>{error}</Alert>
+      ) : (
+        <>
+          {/* Summary Cards */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            {[
+              { label: 'Volumen Total', value: formatUsd(overview?.total_volume_usd || 0), icon: <MoneyIcon sx={{ color: '#0052FF' }} />, color: '#0052FF15' },
+              { label: 'Órdenes Totales', value: overview?.total_orders || 0, icon: <OrderIcon sx={{ color: '#10B981' }} />, color: '#10B98115' },
+              { label: 'Órdenes Pendientes', value: overview?.pending_orders || 0, icon: <ChartIcon sx={{ color: '#F59E0B' }} />, color: '#F59E0B15' },
+              { label: 'Crecimiento', value: '+12.5%', icon: <ProfitIcon sx={{ color: '#8B5CF6' }} />, color: '#8B5CF615' },
+            ].map((card, idx) => (
+              <Grid item xs={12} sm={6} md={3} key={idx}>
+                <Card sx={{ borderRadius: 4, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                  <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Box sx={{ p: 1.5, borderRadius: 3, backgroundColor: card.color }}>{card.icon}</Box>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>{card.label}</Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 800 }}>{card.value}</Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+
+          {/* Charts Row */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={12} md={8}>
+              <Card sx={{ borderRadius: 4, height: '400px' }}>
+                <CardContent sx={{ height: '100%' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Volumen Diario (Last 30 Days)</Typography>
+                  <ResponsiveContainer width="100%" height="85%">
+                    <AreaChart data={overview?.daily_volume || []}>
+                      <defs>
+                        <linearGradient id="colorVol" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#0052FF" stopOpacity={0.1}/>
+                          <stop offset="95%" stopColor="#0052FF" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
+                      <ChartTooltip />
+                      <Area type="monotone" dataKey="volume" stroke="#0052FF" fillOpacity={1} fill="url(#colorVol)" strokeWidth={3} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Card sx={{ borderRadius: 4, height: '400px' }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Top Corredores</Typography>
+                  <Stack spacing={2.5}>
+                    {corridors.slice(0, 5).map((c, i) => (
+                      <Box key={i}>
+                        <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{c.route}</Typography>
+                          <Typography variant="caption" sx={{ color: '#0052FF', fontWeight: 700 }}>{formatUsd(c.volume)}</Typography>
+                        </Stack>
+                        <Box sx={{ width: '100%', height: 6, backgroundColor: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
+                          <Box sx={{ width: `${Math.min(100, (c.volume / (overview?.total_volume_usd || 1)) * 100)}%`, height: '100%', backgroundColor: '#0052FF' }} />
+                        </Box>
+                      </Box>
+                    ))}
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+
+          {/* P2P Reality Table */}
+          <Card sx={{ borderRadius: 4 }}>
+            <CardContent>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Monitoreo Binance P2P (VE)</Typography>
+              {p2p.length > 0 ? (
+                <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 3 }}>
+                  <Table>
+                    <TableHead sx={{ backgroundColor: '#F8FAFC' }}>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700 }}>Banco / Método</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }} align="right">Precio (Bs/$)</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }} align="center">Verificado</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Última Captura</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {p2p.map((p, i) => (
+                        <TableRow key={i} hover>
+                          <TableCell sx={{ fontWeight: 600 }}>{p.bank_name}</TableCell>
+                          <TableCell align="right" sx={{ color: '#16A34A', fontWeight: 800 }}>{p.amount.toFixed(2)}</TableCell>
+                          <TableCell align="center">{p.is_verified ? <Chip label="Si" size="small" sx={{ backgroundColor: '#16A34A15', color: '#16A34A', fontWeight: 700, height: 20 }} /> : <Chip label="No" size="small" sx={{ height: 20 }} />}</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem', color: '#64748B' }}>
+                            {p.captured_at ? new Date(p.captured_at).toLocaleString('es-VE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Box sx={{ py: 6, textAlign: 'center' }}><Typography variant="body2" color="text.secondary">Sin datos de precios P2P</Typography></Box>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </Box>
+  );
+}
+
+
+==========================================
+=== CONFIGURACIONES ===
+=== Ruta: backoffice_web/src/app/settings/page.tsx ===
+==========================================
+
+'use client';
+
+import React, { useState } from 'react';
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Stack,
+  TextField,
+  Button,
+  CircularProgress,
+  Alert,
+  Divider,
+  Paper,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Checkbox,
+  FormControlLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Switch,
+} from "@mui/material";
+import {
+  Refresh as RefreshIcon,
+  Save as SaveIcon,
+  Sync as SyncIcon,
+  SettingsSuggest as EngineIcon,
+  Percent as MarginIcon,
+  History as HistoryIcon,
+  Check as CheckIcon,
+  CurrencyExchange as CashIcon,
+} from "@mui/icons-material";
+import { useAuth } from "@/components/AuthProvider";
+import api, { apiRequest } from "@/lib/api";
+
+interface RateVersion {
+  id: number;
+  kind: string;
+  reason: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+function CashDeliveryPanel({ saving, setSaving, setError, setSuccess }: any) {
+  const [cashDeliveryEnable, setCashDeliveryEnable] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    async function init() {
+      try {
+        const val = await api.get('/admin/settings/cash_delivery');
+        setCashDeliveryEnable(val.data === 'true' || val.data === true);
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
+    }
+    init();
+  }, []);
+
+  const handleToggle = async (val: boolean) => {
+    setSaving(true);
+    setCashDeliveryEnable(val);
+    try {
+      await api.put('/admin/settings/cash_delivery', { value: val ? 'true' : 'false' });
+      setSuccess("Configuración de entrega en efectivo actualizada");
+    } catch (e: any) {
+      setError(e.message || "Error guardando cache delivery config");
+    } finally { setSaving(false); }
+  };
+
+  if (loading) return null;
+
+  return (
+    <Card variant="outlined" sx={{ p: 2, bgcolor: "#F8FAFC" }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <CashIcon sx={{ color: "#0052FF" }} />
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>Entrega en Efectivo (USD)</Typography>
+            <Typography variant="caption" color="text.secondary">Habilitar/Deshabilitar esta opción para operadores</Typography>
+          </Box>
+        </Stack>
+        <Switch checked={cashDeliveryEnable} onChange={(e) => handleToggle(e.target.checked)} disabled={saving} />
+      </Stack>
+    </Card>
+  );
+}
+
+export default function SettingsPage() {
+  const { token } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const [activeVersion, setActiveVersion] = useState<RateVersion | null>(null);
+  const [history, setHistory] = useState<RateVersion[]>([]);
+
+  // Form states
+  const [marginDefault, setMarginDefault] = useState("10.0");
+  const [marginDestVenez, setMarginDestVenez] = useState("6.0");
+  const [marginRouteUsaVenez, setMarginRouteUsaVenez] = useState("10.0");
+  const [regenerateNow, setRegenerateNow] = useState(true);
+
+  // Splits
+  const [opWithSponsor, setOpWithSponsor] = useState("35");
+  const [sponsorPct, setSponsorPct] = useState("15");
+  const [opSolo, setOpSolo] = useState("50");
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiRequest<{
+        active: RateVersion;
+        recent: RateVersion[];
+        margins: any;
+        profit_split: any;
+      }>('/admin/settings/advanced');
+
+      setActiveVersion(data.active);
+      setHistory(data.recent);
+      setMarginDefault(data.margins.margin_default || "10.0");
+      setMarginDestVenez(data.margins.margin_dest_venez || "6.0");
+      setMarginRouteUsaVenez(data.margins.margin_route_usa_venez || "10.0");
+
+      setOpWithSponsor(data.profit_split.operator_with_sponsor || "35");
+      setSponsorPct(data.profit_split.sponsor_percentage || "15");
+      setOpSolo(data.profit_split.operator_solo || "50");
+
+    } catch (e: any) {
+      setError(e.message || "Error cargando configuración");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const manualRegen = async () => {
+    setSaving(true);
+    try {
+      await api.post('/admin/rates/regenerate', { reason: "Manual regen from Admin Panel" });
+      setSuccess("Proceso de regeneración iniciado correctamente");
+      load();
+    } catch (e: any) {
+      setError(e.message || "Error regenerando tasas");
+    } finally { setSaving(false); }
+  };
+
+  const saveMargins = async () => {
+    setSaving(true);
+    setConfirmOpen(false);
+    try {
+      await api.put('/admin/settings/margins', {
+        margin_default: marginDefault,
+        margin_dest_venez: marginDestVenez,
+        margin_route_usa_venez: marginRouteUsaVenez,
+        regenerate: regenerateNow
+      });
+      setSuccess("Márgenes actualizados correctamente");
+      load();
+    } catch (e: any) {
+      setError(e.message || "Error guardando márgenes");
+    } finally { setSaving(false); }
+  };
+
+  const saveProfitSplit = async () => {
+    setSaving(true);
+    try {
+      const w_sp = parseFloat(opWithSponsor);
+      const sp = parseFloat(sponsorPct);
+      const ops = parseFloat(opSolo);
+
+      if (w_sp + sp !== 100 && w_sp + sp !== ops) {
+         // logic error but allow it if they want
+      }
+
+      await api.put('/admin/settings/profit-split', {
+        operator_with_sponsor: w_sp,
+        sponsor_percentage: sp,
+        operator_solo: ops,
+      });
+      setSuccess("Distribución de profit actualizada");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error guardando profit split");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const formatDate = (ds: string) => new Date(ds).toLocaleString();
+
+  React.useEffect(() => { if (token) load(); }, [token]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", py: 10 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Box className="fade-in" sx={{ p: 4, pb: 6 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>Configuración Avanzada</Typography>
+          <Typography variant="body2" color="text.secondary">Gestión de márgenes, tasas y distribución de ganancias</Typography>
+        </Box>
+        <Button variant="outlined" startIcon={<RefreshIcon />} onClick={load} disabled={saving}>
+          Actualizar datos
+        </Button>
+      </Stack>
+
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+      {success && <Alert severity="success" sx={{ mb: 3 }}>{success}</Alert>}
+
+      <Stack spacing={4}>
+        {/* Tasas Activas */}
+        <Paper sx={{ p: 3, borderLeft: "4px solid #4B2E83" }}>
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+            <EngineIcon color="primary" />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Estado de Tasas</Typography>
+          </Stack>
+
+          <Stack direction="row" spacing={4} sx={{ mb: 3 }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Versión Activa</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                {activeVersion ? `#${activeVersion.id}` : "Ninguna"}
+              </Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Generada el</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                {activeVersion ? formatDate(activeVersion.created_at) : "-"}
+              </Typography>
+            </Box>
+            <Box sx={{ flex: 1, textAlign: "right" }}>
+              <Button
+                variant="contained"
+                color="secondary"
+                startIcon={<SyncIcon />}
+                onClick={manualRegen}
+                disabled={saving}
+              >
+                Regenerar Tasas Ahora
+              </Button>
+            </Box>
+          </Stack>
+
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>Historial Reciente</Typography>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>ID</TableCell>
+                  <TableCell>Tipo</TableCell>
+                  <TableCell>Razón</TableCell>
+                  <TableCell>Fecha</TableCell>
+                  <TableCell>Estado</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {history.map((v) => (
+                  <TableRow key={v.id}>
+                    <TableCell>#{v.id}</TableCell>
+                    <TableCell><Chip label={v.kind} size="small" variant="outlined" /></TableCell>
+                    <TableCell sx={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {v.reason || "-"}
+                    </TableCell>
+                    <TableCell>{formatDate(v.created_at)}</TableCell>
+                    <TableCell>
+                      {v.is_active ? <Chip label="Activa" size="small" color="success" /> : <Typography variant="caption" color="text.secondary">Inactiva</Typography>}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+
+        {/* Márgenes Generales */}
+        <Paper sx={{ p: 3, borderLeft: "4px solid #16A34A" }}>
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+            <MarginIcon sx={{ color: "#16A34A" }} />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Márgenes Globales</Typography>
+          </Stack>
+
+          <Stack direction="row" spacing={3} sx={{ mb: 3 }}>
+            <TextField
+              label="Margen General (%)"
+              value={marginDefault}
+              onChange={(e) => setMarginDefault(e.target.value)}
+              InputProps={{ endAdornment: "%" }}
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Destino VENEZUELA (%)"
+              value={marginDestVenez}
+              onChange={(e) => setMarginDestVenez(e.target.value)}
+              InputProps={{ endAdornment: "%" }}
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Ruta USA -> VE (%)"
+              value={marginRouteUsaVenez}
+              onChange={(e) => setMarginRouteUsaVenez(e.target.value)}
+              InputProps={{ endAdornment: "%" }}
+              size="small"
+              fullWidth
+            />
+          </Stack>
+
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <FormControlLabel
+              control={<Checkbox checked={regenerateNow} onChange={(e) => setRegenerateNow(e.target.checked)} />}
+              label="Regenerar tasas inmediatamente al guardar"
+            />
+            <Button variant="contained" startIcon={<SaveIcon />} onClick={() => setConfirmOpen(true)} disabled={saving}>
+              Guardar Márgenes
+            </Button>
+          </Stack>
+        </Paper>
+
+        {/* Profit Split */}
+        <Paper sx={{ p: 3, borderLeft: "4px solid #2563EB" }}>
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+            <HistoryIcon sx={{ color: "#2563EB" }} />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Distribución de Profit (Splits)</Typography>
+          </Stack>
+
+          <Stack direction="row" spacing={3} sx={{ mb: 3 }}>
+            <TextField
+              label="Operador (con Sponsor) (%)"
+              value={opWithSponsor}
+              onChange={(e) => setOpWithSponsor(e.target.value)}
+              helperText="Lo que recibe el op si tiene sponsor"
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Sponsor (%)"
+              value={sponsorPct}
+              onChange={(e) => setSponsorPct(e.target.value)}
+              helperText="Comisión para el sponsor"
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Operador Solo (%)"
+              value={opSolo}
+              onChange={(e) => setOpSolo(e.target.value)}
+              helperText="Lo que recibe el op si NO tiene sponsor"
+              size="small"
+              fullWidth
+            />
+          </Stack>
+          <Box sx={{ textAlign: "right" }}>
+            <Button variant="contained" onClick={saveProfitSplit} disabled={saving}>
+              Guardar Splits
+            </Button>
+          </Box>
+        </Paper>
+
+        {/* 💵 Entrega en Efectivo USD */}
+        <CashDeliveryPanel saving={saving} setSaving={setSaving} setError={setError} setSuccess={setSuccess} />
+
+      </Stack>
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>¿Confirmar cambios?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Se actualizarán los márgenes globales en la base de datos.
+            {regenerateNow && " Además, se iniciará el proceso de regeneración de tasas."}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Cancelar</Button>
+          <Button onClick={saveMargins} variant="contained" color="primary">Confirmar</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+
+==========================================
+=== RUTAS DE COMISION ===
+=== Ruta: backoffice_web/src/app/routes/page.tsx ===
+==========================================
+
+'use client';
+
+import * as React from "react";
+import {
+  Box,
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Stack,
+  MenuItem,
+  CircularProgress,
+  Alert,
+  Tooltip,
+  Chip,
+} from "@mui/material";
+import {
+  Refresh as RefreshIcon,
+  Add as AddIcon,
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+} from "@mui/icons-material";
+import { useAuth } from "@/components/AuthProvider";
+import { apiGet, apiPut, apiRequest } from "@/lib/api";
+
+const COUNTRIES = [
+  "USA", "CHILE", "PERU", "COLOMBIA", "VENEZUELA", "MEXICO", "ARGENTINA"
+];
+
+interface CommissionRoute {
+  id: number;
+  origin: string;
+  dest: string;
+  margin_percent: string;
+  is_active: boolean;
+  notes?: string;
+}
+
+export default function RoutesPage() {
+  const { token } = useAuth();
+  const [routes, setRoutes] = React.useState<CommissionRoute[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // Dialog state
+  const [open, setOpen] = React.useState(false);
+  const [editId, setEditId] = React.useState<number | null>(null);
+  const [editOrigin, setEditOrigin] = React.useState("USA");
+  const [editDest, setEditDest] = React.useState("VENEZUELA");
+  const [editPercent, setEditPercent] = React.useState("");
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiGet<CommissionRoute[]>('/admin/settings/routes');
+      setRoutes(res.data || []);
+    } catch (e: any) {
+      setError(e.message || "Error cargando rutas");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (token) load();
+  }, [token]);
+
+  const handleAdd = () => {
+    setEditId(null);
+    setEditOrigin("USA");
+    setEditDest("VENEZUELA");
+    setEditPercent("");
+    setOpen(true);
+  };
+
+  const handleEdit = (r: CommissionRoute) => {
+    setEditId(r.id);
+    setEditOrigin(r.origin);
+    setEditDest(r.dest);
+    setEditPercent(r.margin_percent);
+    setOpen(true);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("¿Eliminar esta ruta de comisión?")) return;
+    setSaving(true);
+    try {
+      await apiRequest(`/admin/settings/routes/${id}`, { method: 'DELETE' });
+      load();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSaving(true);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const payload = {
+        origin: editOrigin,
+        dest: editDest,
+        margin_percent: parseFloat(editPercent)
+      };
+
+      if (editId) {
+        await apiPut(`/admin/settings/routes/${editId}`, payload);
+      } else {
+        await apiRequest('/admin/settings/routes', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+      }
+      setOpen(false);
+      load();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Box sx={{ p: 4 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>Rutas de Comisión</Typography>
+          <Typography variant="body2" color="text.secondary">Overrides específicos por corredor (Ej: USA a VE)</Typography>
+        </Box>
+        <Stack direction="row" spacing={2}>
+          <IconButton onClick={load} disabled={loading}><RefreshIcon /></IconButton>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>Nueva Ruta</Button>
+        </Stack>
+      </Stack>
+
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
+      ) : (
+        <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 2 }}>
+          <Table>
+            <TableHead sx={{ bgcolor: '#F8FAFC' }}>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700 }}>Origen</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Destino</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Margen Override</TableCell>
+                <TableCell sx={{ fontWeight: 700 }} align="center">Estado</TableCell>
+                <TableCell sx={{ fontWeight: 700 }} align="right">Acciones</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {routes.length === 0 ? (
+                <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4 }}>No hay rutas configuradas. Se usarán los márgenes globales.</TableCell></TableRow>
+              ) : (
+                routes.map((r) => (
+                  <TableRow key={r.id} hover>
+                    <TableCell>{r.origin}</TableCell>
+                    <TableCell>{r.dest}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#16A34A' }}>{r.margin_percent}%</TableCell>
+                    <TableCell align="center">
+                      <Chip 
+                        label={r.is_active ? "Activa" : "Inactiva"} 
+                        size="small" 
+                        color={r.is_active ? "success" : "default"}
+                        variant={r.is_active ? "filled" : "outlined"}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton size="small" onClick={() => handleEdit(r)}><EditIcon fontSize="small" /></IconButton>
+                      <IconButton size="small" color="error" onClick={() => handleDelete(r.id)}><DeleteIcon fontSize="small" /></IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontWeight: 700 }}>{editId ? "Editar Ruta" : "Nueva Ruta de Comisión"}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            <TextField
+              select
+              label="País Origen"
+              value={editOrigin}
+              onChange={(e) => setEditOrigin(e.target.value)}
+              fullWidth
+            >
+              {COUNTRIES.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+            </TextField>
+            <TextField
+              select
+              label="País Destino"
+              value={editDest}
+              onChange={(e) => setEditDest(e.target.value)}
+              fullWidth
+            >
+              {COUNTRIES.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+            </TextField>
+            <TextField
+              label="Margen (%)"
+              value={editPercent}
+              onChange={(e) => setEditPercent(e.target.value)}
+              InputProps={{ endAdornment: "%" }}
+              fullWidth
+              helperText="Ej: 2.5 para 2.50%"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Cancelar</Button>
+          <Button onClick={handleSave} variant="contained" disabled={saving}>Guardar</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+
+==========================================
+=== ORIGEN/PAISES ===
+=== Ruta: backoffice_web/src/app/origin/page.tsx ===
+==========================================
+
+'use client';
+
+import React, { useState, useEffect, useCallback, ReactElement } from 'react';
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Stack,
+  Button,
+  TextField,
+  Alert,
+  CircularProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Divider,
+  Chip,
+  Tooltip,
+  IconButton,
+} from '@mui/material';
+import {
+  TrendingUp as InIcon,
+  TrendingDown as OutIcon,
+  AccountBalance as BalanceIcon,
+  Send as SendIcon,
+  Refresh as RefreshIcon,
+  InfoOutlined as InfoIcon,
+} from '@mui/icons-material';
+import { useAuth } from '@/components/AuthProvider';
+import api from '@/lib/api';
+
+interface DailyMovement {
+  country: string;
+  currency: string;
+  total_in: number;
+  total_out: number;
+  net_balance: number;
+}
+
+interface BalanceResponse {
+  movements?: DailyMovement[];
+  items?: DailyMovement[];
+  data?: DailyMovement[];
+}
+
+interface SweepRequest {
+  country: string;
+  currency: string;
+  amount: number;
+  tx_hash: string;
+  notes: string;
+}
+
+interface StatCardProps {
+  title: string;
+  value: string;
+  icon: ReactElement;
+  color: string;
+  bg?: string;
+  hint?: string;
+}
+
+function StatCard({ title, value, icon, color, bg, hint }: StatCardProps) {
+  return (
+    <Card sx={{ flex: '1 1 calc(33.33% - 16px)', minWidth: 260, borderRadius: '18px', border: '1px solid #F1F5F9' }}>
+      <CardContent sx={{ p: 3 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+          <Box>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="body2" sx={{ color: '#64748B', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase', tracking: '0.1em' }}>
+                {title}
+              </Typography>
+              {hint && (
+                <Tooltip title={hint}>
+                  <IconButton size="small" sx={{ p: 0.25, color: '#94A3B8' }}>
+                    <InfoIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Stack>
+            <Typography variant="h4" sx={{ fontWeight: 900, color: '#0F172A', mt: 1 }}>
+              {value}
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              backgroundColor: bg || `${color}12`,
+              borderRadius: '14px',
+              p: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {React.cloneElement(icon, { sx: { color, fontSize: 28 } })}
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function OriginPage() {
+  const { token, isReady } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [movements, setMovements] = useState<DailyMovement[]>([]);
+  const [selectedDay, setSelectedDay] = useState('');
+  const [sweepDialogOpen, setSweepDialogOpen] = useState(false);
+  const [sweepForm, setSweepForm] = useState<SweepRequest>({
+    country: '',
+    currency: '',
+    amount: 0,
+    tx_hash: '',
+    notes: '',
+  });
+  const [sweepLoading, setSweepLoading] = useState(false);
+  const [sweepSuccess, setSweepSuccess] = useState('');
+
+  useEffect(() => {
+    const today = new Date();
+    const formatted = today.toISOString().split('T')[0];
+    setSelectedDay(formatted);
+  }, []);
+
+  const fetchBalance = useCallback(async () => {
+    if (!selectedDay || !token) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.get<BalanceResponse | DailyMovement[]>(`/origin_wallets/balance?day=${selectedDay}`);
+      const data = res.data;
+      const movArray = Array.isArray(data) ? data : (data.movements || data.items || data.data || []);
+      setMovements(movArray);
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err.message || 'Error desconocido';
+      setError(message);
+      setMovements([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDay, token]);
+
+  useEffect(() => {
+    if (isReady && token && selectedDay) {
+      fetchBalance();
+    }
+  }, [isReady, token, selectedDay, fetchBalance]);
+
+  const openSweepDialog = (country: string, currency: string) => {
+    setSweepForm({ country, currency, amount: 0, tx_hash: '', notes: '' });
+    setSweepDialogOpen(true);
+    setSweepSuccess('');
+  };
+
+  const handleSweepSubmit = async () => {
+    setSweepLoading(true);
+    setError('');
+    setSweepSuccess('');
+    try {
+      await api.post('/origin_wallets/sweeps', sweepForm);
+      setSweepSuccess('Sweep registrado exitosamente');
+      setSweepDialogOpen(false);
+      fetchBalance();
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err.message || 'Error desconocido';
+      setError(message);
+    } finally {
+      setSweepLoading(false);
+    }
+  };
+
+  const safeMovements = Array.isArray(movements) ? movements : [];
+  const totalIn = safeMovements.reduce((sum, m) => sum + (m.total_in || 0), 0);
+  const totalOut = safeMovements.reduce((sum, m) => sum + (m.total_out || 0), 0);
+  const totalNet = safeMovements.reduce((sum, m) => sum + (m.net_balance || 0), 0);
+
+  if (!isReady || !token) return null;
+
+  return (
+    <Box sx={{ p: 1 }} className="animate-fade-in">
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 900, color: '#111827', tracking: '-0.02em' }}>
+            Billeteras Origen
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5, fontWeight: 500 }}>
+            Entradas y salidas por país y moneda para el día seleccionado
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          startIcon={<RefreshIcon />}
+          onClick={fetchBalance}
+          disabled={loading}
+          sx={{ borderRadius: '12px', px: 3, py: 1, backgroundColor: '#4B2E83', '&:hover': { backgroundColor: '#5A37A0' } }}
+        >
+          Actualizar
+        </Button>
+      </Stack>
+
+      <Card sx={{ mb: 4, borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="flex-end">
+            <TextField
+              type="date"
+              label="Fecha de Consulta"
+              value={selectedDay}
+              onChange={(e) => setSelectedDay(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ width: 220 }}
+              size="small"
+            />
+            <Button variant="outlined" onClick={fetchBalance} disabled={loading} sx={{ borderRadius: '10px' }}>
+              Consultar Billeteras
+            </Button>
+            <Box sx={{ flex: 1 }} />
+            <Chip
+              label={`Registros: ${safeMovements.length}`}
+              size="small"
+              sx={{ backgroundColor: '#F3E8FF', color: '#6B21A8', fontWeight: 800, px: 2 }}
+            />
+          </Stack>
+        </CardContent>
+      </Card>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 4, borderRadius: '12px' }}>
+          {error}
+        </Alert>
+      )}
+
+      {sweepSuccess && (
+        <Alert severity="success" sx={{ mb: 4, borderRadius: '12px' }} onClose={() => setSweepSuccess('')}>
+          {sweepSuccess}
+        </Alert>
+      )}
+
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 12 }}>
+          <CircularProgress sx={{ color: '#4B2E83' }} />
+        </Box>
+      ) : (
+        <>
+          <Stack direction="row" spacing={3} sx={{ mb: 4, flexWrap: 'wrap', gap: 2.5 }}>
+            <StatCard
+              title="Total Entradas"
+              value={`$${totalIn.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+              icon={<InIcon />}
+              color="#16A34A"
+              bg="#DCFCE7"
+              hint="Suma total de entradas del día en USD aproximado"
+            />
+            <StatCard
+              title="Total Salidas (Sweeps)"
+              value={`$${totalOut.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+              icon={<OutIcon />}
+              color="#DC2626"
+              bg="#FEE2E2"
+              hint="Suma total de salidas/sweeps del día hacia Binance u otras carteras"
+            />
+            <StatCard
+              title="Balance de Origen"
+              value={`$${totalNet.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+              icon={<BalanceIcon />}
+              color={totalNet >= 0 ? '#2563EB' : '#DC2626'}
+              bg={totalNet >= 0 ? '#DBEAFE' : '#FEE2E2'}
+              hint="Fondos disponibles en origen (Entradas - Salidas)"
+            />
+          </Stack>
+
+          <Card sx={{ borderRadius: '16px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+            <Box sx={{ p: 3, borderBottom: '1px solid #F1F5F9' }}>
+              <Typography variant="h6" sx={{ fontWeight: 800, color: '#1E293B' }}>
+                Detalle de Liquidez en Origen
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>
+                Acción para registrar salidas de fondos (sweeps)
+              </Typography>
+            </Box>
+
+            <TableContainer sx={{ maxHeight: 620 }}>
+              <Table stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>País</TableCell>
+                    <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Moneda</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Entradas</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Salidas</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Balance Neto</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Gestión de Fondos</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {safeMovements.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center" sx={{ py: 10 }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                          No se detectaron movimientos para la fecha seleccionada
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    safeMovements.map((mov, idx) => (
+                      <TableRow key={idx} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                        <TableCell sx={{ fontWeight: 700, color: '#334155' }}>{mov.country}</TableCell>
+                        <TableCell>
+                          <Chip label={mov.currency} size="small" variant="outlined" sx={{ fontWeight: 800, borderRadius: '6px' }} />
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: '#16A34A', fontWeight: 600 }}>
+                          ${(mov.total_in || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: '#DC2626', fontWeight: 600 }}>
+                          ${(mov.total_out || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 900, color: mov.net_balance >= 0 ? '#2563EB' : '#DC2626' }}>
+                          ${(mov.net_balance || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell align="center">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<SendIcon />}
+                            onClick={() => openSweepDialog(mov.country, mov.currency)}
+                            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 700 }}
+                          >
+                            Registrar Sweep
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Card>
+        </>
+      )}
+
+      <Dialog open={sweepDialogOpen} onClose={() => setSweepDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '20px' } }}>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.25rem' }}>Registrar Sweep (Salida a Binance)</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} sx={{ mt: 1.5 }}>
+            <Stack direction="row" spacing={2.5}>
+              <TextField label="País" value={sweepForm.country} disabled fullWidth size="small" />
+              <TextField label="Moneda" value={sweepForm.currency} disabled fullWidth size="small" />
+            </Stack>
+            <TextField
+              label="Monto de Salida"
+              type="number"
+              value={sweepForm.amount}
+              onChange={(e) => setSweepForm({ ...sweepForm, amount: parseFloat(e.target.value) || 0 })}
+              fullWidth
+              required
+              helperText="El monto será restado del balance disponible en origen"
+            />
+            <TextField
+              label="TX Hash / Referencia"
+              value={sweepForm.tx_hash}
+              onChange={(e) => setSweepForm({ ...sweepForm, tx_hash: e.target.value })}
+              fullWidth
+              required
+              placeholder="Hash de la transacción en Binance/Blockchain"
+            />
+            <TextField
+              label="Notas Adicionales"
+              value={sweepForm.notes}
+              onChange={(e) => setSweepForm({ ...sweepForm, notes: e.target.value })}
+              fullWidth
+              multiline
+              rows={3}
+              placeholder="Detalles sobre el envío..."
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 3, pt: 1 }}>
+          <Button onClick={() => setSweepDialogOpen(false)} sx={{ fontWeight: 700, color: '#64748B' }}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={handleSweepSubmit}
+            disabled={sweepLoading || !sweepForm.amount || !sweepForm.tx_hash}
+            sx={{ fontWeight: 800, borderRadius: '12px', px: 4, backgroundColor: '#4B2E83', '&:hover': { backgroundColor: '#5A37A0' } }}
+          >
+            {sweepLoading ? 'Procesando...' : 'Confirmar Envío'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+
+==========================================
+=== METODOS DE PAGO ===
+=== Ruta: backoffice_web/src/app/payment-methods/page.tsx ===
+==========================================
+
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Stack,
+  IconButton,
+  Button,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  CircularProgress,
+  Alert,
+  Tooltip,
+  Snackbar,
+  Switch,
+  FormControlLabel,
+  Avatar,
+  Divider,
+} from '@mui/material';
+import {
+  Refresh as RefreshIcon,
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Save as SaveIcon,
+  DragIndicator as DragIcon,
+  CheckCircle as ActiveIcon,
+  Cancel as InactiveIcon,
+} from '@mui/icons-material';
+import { useAuth } from '@/components/AuthProvider';
+import api from '@/lib/api';
+
+const COUNTRIES = [
+  { code: 'VENEZUELA', label: 'Venezuela', flag: '🇻🇪', color: '#FFD700' },
+  { code: 'USA', label: 'Estados Unidos', flag: '🇺🇸', color: '#3C3B6E' },
+  { code: 'CHILE', label: 'Chile', flag: '🇨🇱', color: '#D52B1E' },
+  { code: 'PERU', label: 'Perú', flag: '🇵🇪', color: '#D91023' },
+  { code: 'COLOMBIA', label: 'Colombia', flag: '🇨🇴', color: '#FCD116' },
+  { code: 'MEXICO', label: 'México', flag: '🇲🇽', color: '#006847' },
+  { code: 'ARGENTINA', label: 'Argentina', flag: '🇦🇷', color: '#75AADB' },
+];
+
+interface PaymentMethod {
+  name: string;
+  holder: string;
+  details: string;
+  active: boolean;
+  priority?: number;
+}
+
+interface CountryData {
+  country: string;
+  methods: PaymentMethod[];
+  total_count: number;
+  active_count: number;
+}
+
+export default function PaymentMethodsPage() {
+  const { token } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<CountryData[]>([]);
+
+  const [editCountry, setEditCountry] = useState<string | null>(null);
+  const [editIndex, setEditIndex] = useState<number>(-1);
+  const [editMethod, setEditMethod] = useState<PaymentMethod | null>(null);
+
+  const [deleteTarget, setDeleteTarget] = useState<{ country: string; index: number } | null>(null);
+
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.get<CountryData[]>('/admin/payment-methods');
+      setData(res.data || []);
+    } catch (e: any) {
+      console.error(e);
+      setError(e.message || 'Error cargando métodos de pago');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (token) load();
+  }, [token, load]);
+
+  const handleAddMethod = (country: string) => {
+    setEditCountry(country);
+    setEditIndex(-1);
+    setEditMethod({ name: '', holder: '', details: '', active: true });
+  };
+
+  const handleEditMethod = (country: string, index: number) => {
+    const method = data.find(d => d.country === country)?.methods[index];
+    if (method) {
+      setEditCountry(country);
+      setEditIndex(index);
+      setEditMethod({ ...method });
+    }
+  };
+
+  const handleSaveMethod = async () => {
+    if (!editCountry || !editMethod) return;
+    setSaving(true);
+    try {
+      const newData = [...data];
+      const countryData = newData.find(d => d.country === editCountry);
+      if (countryData) {
+        if (editIndex >= 0) {
+          countryData.methods[editIndex] = editMethod;
+        } else {
+          countryData.methods.push(editMethod);
+        }
+
+        await api.put(`/admin/payment-methods/${editCountry}`, { methods: countryData.methods });
+        setSnackbar({ open: true, message: 'Método guardado correctamente', severity: 'success' });
+        setEditMethod(null);
+        setEditCountry(null);
+        load();
+      }
+    } catch (e: any) {
+      setSnackbar({ open: true, message: e.message || 'Error guardando método', severity: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleActive = async (country: string, index: number) => {
+    const countryData = data.find(d => d.country === country);
+    if (!countryData) return;
+
+    const methods = [...countryData.methods];
+    methods[index].active = !methods[index].active;
+
+    setSaving(true);
+    try {
+      await api.put(`/admin/payment-methods/${country}`, { methods });
+      load();
+    } catch (e: any) {
+      setSnackbar({ open: true, message: e.message || 'Error actualizando estado', severity: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setSaving(true);
+    try {
+      const countryData = data.find(d => d.country === deleteTarget.country);
+      if (countryData) {
+        const methods = countryData.methods.filter((_, i) => i !== deleteTarget.index);
+        await api.put(`/admin/payment-methods/${deleteTarget.country}`, { methods });
+        setSnackbar({ open: true, message: 'Método eliminado', severity: 'success' });
+        setDeleteTarget(null);
+        load();
+      }
+    } catch (e: any) {
+      setSnackbar({ open: true, message: e.message || 'Error eliminando método', severity: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Box sx={{ p: 4, pb: 10 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800, color: '#1E293B' }}>Métodos de Pago</Typography>
+          <Typography variant="body2" color="text.secondary">Configuración de cuentas receptoras por país</Typography>
+        </Box>
+        <IconButton onClick={load} disabled={loading} color="primary" sx={{ bgcolor: '#F1F5F9' }}>
+          <RefreshIcon />
+        </IconButton>
+      </Stack>
+
+      {error && <Alert severity="error" sx={{ mb: 4 }}>{error}</Alert>}
+
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
+      ) : (
+        <Stack spacing={3}>
+          {COUNTRIES.map((country) => {
+            const cd = data.find(d => d.country === country.code) || { methods: [], total_count: 0, active_count: 0 };
+            return (
+              <Card key={country.code} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 4 }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                      <Avatar sx={{ width: 36, height: 36, fontSize: '1.2rem', bgcolor: country.color }}>
+                        {country.flag}
+                      </Avatar>
+                      <Box>
+                        <Typography variant="h6" sx={{ fontWeight: 700 }}>{country.label}</Typography>
+                        <Typography variant="caption" sx={{ color: '#64748B' }}>
+                          {cd.active_count} activos / {cd.total_count} total
+                        </Typography>
+                      </Box>
+                    </Stack>
+                    <Button
+                      variant="outlined" startIcon={<AddIcon />} size="small"
+                      onClick={() => handleAddMethod(country.code)}
+                      disabled={saving}
+                      sx={{ color: '#4B2E83', borderColor: '#4B2E83' }}
+                    >
+                      Nuevo
+                    </Button>
+                  </Stack>
+
+                  {cd.methods.length === 0 ? (
+                    <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
+                      Sin métodos configurados. El bot mostrará mensaje de soporte.
+                    </Alert>
+                  ) : (
+                    <Stack spacing={1.5}>
+                      {cd.methods.map((method, idx) => (
+                        <Card key={idx} variant="outlined" sx={{
+                          p: 2, opacity: method.active ? 1 : 0.6,
+                          borderColor: method.active ? '#16A34A40' : '#DC262640',
+                          backgroundColor: method.active ? '#F0FDF4' : '#FEF2F2',
+                        }}>
+                          <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                            <Stack direction="row" spacing={1.5} alignItems="flex-start" sx={{ flex: 1 }}>
+                              <DragIcon sx={{ color: '#94A3B8', mt: 0.5, cursor: 'grab' }} />
+                              <Box sx={{ flex: 1 }}>
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  <Typography sx={{ fontWeight: 700 }}>{method.name}</Typography>
+                                  {method.active ? (
+                                    <Chip icon={<ActiveIcon />} label="Activo" size="small" color="success" sx={{ fontWeight: 600, height: 22 }} />
+                                  ) : (
+                                    <Chip icon={<InactiveIcon />} label="Inactivo" size="small" color="error" sx={{ fontWeight: 600, height: 22 }} />
+                                  )}
+                                </Stack>
+                                {method.holder && (
+                                  <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
+                                    Titular: {method.holder}
+                                  </Typography>
+                                )}
+                                {method.details && (
+                                  <Typography variant="body2" sx={{ color: '#64748B', mt: 0.25, whiteSpace: 'pre-line' }}>
+                                    {method.details}
+                                  </Typography>
+                                )}
+                              </Box>
+                            </Stack>
+                            <Stack direction="row" spacing={0.5}>
+                              <Tooltip title={method.active ? 'Desactivar' : 'Activar'}>
+                                <IconButton size="small" onClick={() => handleToggleActive(country.code, idx)}>
+                                  {method.active ? <ActiveIcon sx={{ color: '#16A34A' }} /> : <InactiveIcon sx={{ color: '#DC2626' }} />}
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Editar">
+                                <IconButton size="small" onClick={() => handleEditMethod(country.code, idx)}>
+                                  <EditIcon sx={{ color: '#4B2E83' }} />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Eliminar">
+                                <IconButton size="small" onClick={() => setDeleteTarget({ country: country.code, index: idx })}>
+                                  <DeleteIcon sx={{ color: '#DC2626' }} />
+                                </IconButton>
+                              </Tooltip>
+                            </Stack>
+                          </Stack>
+                        </Card>
+                      ))}
+                    </Stack>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </Stack>
+      )}
+
+      <Dialog open={!!editMethod} onClose={() => { setEditMethod(null); setEditCountry(null); }} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          {editIndex >= 0 ? 'Editar Método' : 'Nuevo Método'}
+          {editCountry && (
+            <Chip label={COUNTRIES.find(c => c.code === editCountry)?.label} size="small" sx={{ ml: 1, fontWeight: 600 }} />
+          )}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} sx={{ mt: 1 }}>
+            <TextField
+              label="Nombre del método" fullWidth required
+              placeholder="Ej: Zelle, Pago Móvil, Transferencia"
+              value={editMethod?.name || ''} onChange={(e) => setEditMethod(prev => prev ? { ...prev, name: e.target.value } : prev)}
+            />
+            <TextField
+              label="Titular" fullWidth
+              placeholder="Ej: Moises Rivero"
+              value={editMethod?.holder || ''} onChange={(e) => setEditMethod(prev => prev ? { ...prev, holder: e.target.value } : prev)}
+            />
+            <TextField
+              label="Datos de pago" fullWidth multiline rows={3}
+              placeholder="Ej: Banco Mercantil&#10;Cuenta: 0105-1234-5678&#10;Teléfono: 04242686434"
+              value={editMethod?.details || ''} onChange={(e) => setEditMethod(prev => prev ? { ...prev, details: e.target.value } : prev)}
+              helperText="Usa Enter para separar líneas"
+            />
+            <FormControlLabel
+              control={<Switch checked={editMethod?.active ?? true} onChange={(e) => setEditMethod(prev => prev ? { ...prev, active: e.target.checked } : prev)} />}
+              label="Activo (visible para operadores)"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5 }}>
+          <Button onClick={() => { setEditMethod(null); setEditCountry(null); }}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSaveMethod} disabled={saving || !editMethod?.name?.trim()}
+            startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
+            sx={{ backgroundColor: '#4B2E83' }}>
+            {saving ? 'Guardando...' : 'Guardar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Eliminar método</DialogTitle>
+        <DialogContent>
+          <Alert severity="error">Esta acción no se puede deshacer.</Alert>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5 }}>
+          <Button onClick={() => setDeleteTarget(null)}>Cancelar</Button>
+          <Button variant="contained" color="error" onClick={handleDeleteConfirm} disabled={saving}>
+            {saving ? 'Eliminando...' : 'Eliminar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(s => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+        <Alert onClose={() => setSnackbar(s => ({ ...s, open: false }))} severity={snackbar.severity} variant="filled">
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
+}
+
+
+==========================================
+=== LOGIN ===
+=== Ruta: backoffice_web/src/app/login/page.tsx ===
+==========================================
+
+'use client';
+
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import api from '@/lib/api';
+import { useAuth } from '@/components/AuthProvider';
+import { Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import Image from 'next/image';
+
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const { login } = useAuth();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const res = await api.post<{
+        access_token: string;
+        role: string;
+        full_name: string;
+      }>('/auth/login', { email, password });
+
+      const data = res.data;
+      login(data.access_token, data.role, data.full_name);
+
+      if (data.role === 'admin' || data.role === 'superadmin') {
+        router.push('/admin');
+      } else {
+        router.push('/operator-office');
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err.message || 'Error de conexión');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center p-4 sm:p-8 animate-fade-in relative overflow-hidden bg-[#0A0F1E]">
+
+      {/* Background Gradients */}
+      <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-cyan-500/20 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-500/20 blur-[120px] rounded-full pointer-events-none" />
+
+      <div className="w-full max-w-[440px] z-10">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-[#ffffff05] border border-[#ffffff1a] mb-5 shadow-[0_0_30px_rgba(6,182,212,0.2)] transition-transform hover:scale-105">
+            <Image src="/logo.png" alt="Sendmax Logo" width={56} height={56} className="w-14 h-14 object-contain" />
+          </div>
+          <h1 className="text-4xl font-black text-white tracking-tighter mb-2 bg-gradient-to-r from-white via-white to-white/40 bg-clip-text">
+            Backoffice <span className="text-cyan-400">10x</span>
+          </h1>
+          <p className="text-sm text-gray-400 font-semibold uppercase tracking-[0.2em] opacity-80">Sendmax Global Admin</p>
+        </div>
+
+        <div className="card-glass p-8 sm:p-10 space-y-8 shadow-[0_20px_50px_rgba(0,0,0,0.3)] border-white/10">
+          <div className="text-center">
+            <h2 className="text-2xl font-black text-white tracking-tight">Acceso Seguro</h2>
+            <p className="text-xs text-gray-500 mt-2 font-bold uppercase tracking-widest">Credenciales del Sistema</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {error && (
+              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold flex items-center gap-3 animate-shake">
+                <AlertCircle size={18} className="shrink-0" />
+                <p>{error}</p>
+              </div>
+            )}
+
+            <div className="space-y-5">
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-cyan-400 transition-colors z-10">
+                  <Mail size={20} strokeWidth={2.5} />
+                </div>
+                <input
+                  type="email"
+                  required
+                  placeholder="Correo electrónico"
+                  className="input-glass pl-12 w-full py-4 text-sm font-medium transition-all group-focus-within:bg-white/5"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  autoFocus
+                />
+              </div>
+
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-cyan-400 transition-colors z-10">
+                  <Lock size={20} strokeWidth={2.5} />
+                </div>
+                <input
+                  type="password"
+                  required
+                  placeholder="Contraseña"
+                  className="input-glass pl-12 w-full py-4 text-sm font-medium transition-all group-focus-within:bg-white/5"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || !email || !password}
+              className="w-full relative overflow-hidden group flex items-center justify-center gap-3 py-4 bg-gradient-to-r from-cyan-600 to-purple-700 hover:from-cyan-500 hover:to-purple-600 text-white font-black text-xs uppercase tracking-[0.2em] rounded-xl transition-all shadow-[0_10px_30px_rgba(6,182,212,0.3)] active:scale-[0.98] disabled:opacity-50"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  Entrar <ArrowRight size={18} />
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+
+        <div className="text-center mt-12 text-[10px] text-gray-600 font-bold uppercase tracking-[0.3em]">
+          <p>© {new Date().getFullYear()} Sendmax Global • Retroceso Seguro v1.2</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+==========================================
+=== LAYOUT PRINCIPAL ===
+=== Ruta: backoffice_web/src/app/layout.tsx ===
+==========================================
+
+import type { Metadata } from "next";
+import localFont from "next/font/local";
+import "./globals.css";
+import { Toaster } from 'react-hot-toast';
+
+const geistSans = localFont({
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist-sans",
+  weight: "100 900",
+});
+
+const geistMono = localFont({
+  src: "./fonts/GeistMonoVF.woff",
+  variable: "--font-geist-mono",
+  weight: "100 900",
+});
+
+export const metadata: Metadata = {
+  title: "Admin Dashboard 10x",
+  description: "Panel de administraci�n empresarial",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="es">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        {children}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            style: {
+              background: '#1a2332',
+              color: '#fff',
+              border: '1px solid rgba(255,255,255,0.1)',
+            },
+          }}
+        />
+      </body>
+    </html>
+  );
+}
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+
+==========================================
+=== LAYOUT SHELL ===
+=== Ruta: backoffice_web/src/components/LayoutShell.tsx ===
+==========================================
+
+'use client';
+
+import React, { useState } from 'react';
+import { usePathname } from 'next/navigation';
+import Sidebar from '@/components/Sidebar';
+import { Menu } from 'lucide-react';
+
+export default function LayoutShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const isLoginPage = pathname === '/login';
+
+  if (isLoginPage) return <>{children}</>;
+
+  return (
+    <div className="flex min-h-screen bg-[var(--background)]">
+      {/* Mobile Header specifically just to toggle the sidebar when md:hidden */}
+      <div className="md:hidden fixed top-0 left-0 w-full h-16 bg-[#0a0f1e]/90 backdrop-blur-md border-b border-[#06b6d41a] z-30 flex items-center px-4">
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="p-2 bg-[#ffffff05] border border-[#06b6d433] rounded-lg text-[#06b6d4] hover:bg-[#06b6d41a] transition-colors shadow-lg"
+        >
+          <Menu size={20} />
+        </button>
+      </div>
+
+      <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+
+      <main className="flex-1 w-full min-h-screen md:max-w-[calc(100vw-264px)] pb-10 custom-scrollbar overflow-x-hidden">
+        <div className="w-full max-w-[1400px] mx-auto p-4 sm:p-6 md:p-8 pt-20 md:pt-8 animate-fade-in">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+
+==========================================
+=== SIDEBAR ===
+=== Ruta: backoffice_web/src/components/Sidebar.tsx ===
+==========================================
+
+'use client';
+
+import React, { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
+import {
+  BarChart,
+  Receipt,
+  Wallet,
+  Settings,
+  LineChart,
+  Calendar,
+  Users,
+  CreditCard,
+  LogOut,
+  Menu,
+  X
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const adminMenu = [
+  { text: "Overview", path: "/admin", icon: BarChart, description: "Dashboard principal" },
+  { text: "Órdenes", path: "/orders", icon: Receipt, description: "Gestionar órdenes" },
+  { text: "Billeteras Origen", path: "/origin", icon: Wallet, description: "Entradas y sweeps" },
+  { text: "Métricas", path: "/metrics", icon: LineChart, description: "Profit y volumen" },
+  { text: "Cierre Diario", path: "/daily-close", icon: Calendar, description: "Reportes y cierres" },
+  { text: "Usuarios", path: "/users", icon: Users, description: "Gestionar operadores" },
+  { text: "Rutas Comisión", path: "/routes", icon: Receipt, description: "Márgenes por ruta" },
+  { text: "Configuración", path: "/settings", icon: Settings, description: "Reglas y márgenes" },
+  { text: "Métodos de Pago", path: "/payment-methods", icon: CreditCard, description: "Métodos por país" },
+];
+
+const operatorMenu = [
+  { text: "Mi Dashboard", path: "/", icon: BarChart, description: "Mis métricas" },
+  { text: "Mis Órdenes", path: "/orders", icon: Receipt, description: "Mis operaciones" },
+  { text: "Métricas", path: "/metrics", icon: LineChart, description: "Mi rendimiento" },
+];
+
+export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boolean, setMobileOpen: (open: boolean) => void }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { logout, fullName, role, token } = useAuth();
+
+  const menuItems = (role === "admin" || role === "superadmin") ? adminMenu : operatorMenu;
+
+  const handleNav = (path: string) => {
+    router.push(path);
+    setMobileOpen(false);
+  };
+
+  const getInitials = (name: string | null) => {
+    if (!name) return "SM";
+    return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+  };
+
+  const SidebarContent = (
+    <div className="flex flex-col h-full bg-[#0a0f1e] border-r border-[#ffffff14] w-[264px] shrink-0">
+      {/* Logo Header */}
+      <div className="p-5 flex items-center justify-between border-b border-[#06b6d41a]">
+        <div
+          onClick={() => handleNav("/")}
+          className="flex items-center gap-3 cursor-pointer transition-opacity hover:opacity-80"
+        >
+          <img src="/logo.png" alt="Sendmax" className="h-9 w-auto object-contain" />
+          <div className="flex flex-col">
+            <h2 className="font-bold text-[#06b6d4] text-[1.1rem] leading-[1.2] tracking-tight">Sendmax</h2>
+            <span className="text-[#8b5cf6] text-[0.65rem] leading-none tracking-wider uppercase font-medium">Backoffice</span>
+          </div>
+        </div>
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="md:hidden text-[#06b6d4] hover:bg-[#06b6d41a] p-1.5 rounded-lg transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Navigation Menu */}
+      <div className="flex-1 overflow-y-auto px-3 py-4 custom-scrollbar">
+        <ul className="space-y-1">
+          {menuItems.map((item) => {
+            const isActive = item.path === "/" ? pathname === "/" : pathname.startsWith(item.path);
+            const Icon = item.icon;
+
+            return (
+              <li key={item.path}>
+                <button
+                  onClick={() => handleNav(item.path)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group text-left relative",
+                    isActive
+                      ? "bg-[#06b6d414] border border-[#06b6d433] text-[#06b6d4]"
+                      : "bg-transparent border border-transparent text-gray-300 hover:bg-[#ffffff08] hover:text-white"
+                  )}
+                >
+                  <div className={cn(
+                    "min-w-6 flex items-center justify-center transition-colors",
+                    isActive ? "text-[#06b6d4]" : "text-gray-500 group-hover:text-gray-300"
+                  )}>
+                    <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                  </div>
+
+                  <div className="flex flex-col">
+                    <span className={cn(
+                      "text-sm tracking-tight",
+                      isActive ? "font-bold" : "font-medium"
+                    )}>
+                      {item.text}
+                    </span>
+                    {!isActive && (
+                      <span className="text-[0.65rem] text-gray-500 mt-0.5 leading-[1.2]">
+                        {item.description}
+                      </span>
+                    )}
+                  </div>
+
+                  {isActive && (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-1 h-6 rounded bg-[#06b6d4] shadow-[0_0_8px_rgba(6,182,212,0.5)]" />
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <div className="mx-4 border-t border-[#06b6d41a]" />
+
+      {/* User Profile Footer */}
+      <div className="p-4 pb-5">
+        {token && (
+          <button
+            onClick={logout}
+            className="w-full flex items-center justify-center gap-2 mb-4 px-4 py-2 border border-[#ef44444d] text-[#ef4444] rounded-xl text-sm font-medium hover:bg-[#ef444414] hover:border-[#ef4444] transition-colors"
+          >
+            <LogOut size={16} />
+            Cerrar Sesión
+          </button>
+        )}
+
+        <div className="flex items-center gap-3 p-2 rounded-xl bg-[#ffffff05] border border-[#ffffff0a]">
+          <div className="w-9 h-9 rounded-full bg-[#06b6d426] text-[#06b6d4] flex items-center justify-center text-xs font-bold border border-[#06b6d44d]">
+            {getInitials(fullName)}
+          </div>
+          <div className="flex flex-col">
+            <span className="text-gray-200 font-semibold text-xs leading-[1.2]">
+              {fullName || "Usuario"}
+            </span>
+            <span className="text-[#8b5cf6] text-[0.65rem] leading-[1.2] font-medium">
+              {role === "admin" ? "Administrador" : "Operador"}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Mobile Backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Wrapper */}
+      <aside className={cn(
+        "fixed md:sticky top-0 left-0 h-screen z-50 transition-transform duration-300 md:translate-x-0 overflow-hidden",
+        mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+      )}>
+        {SidebarContent}
+      </aside>
+    </>
+  );
+}
+
+
+==========================================
+=== AUTH PROVIDER ===
+=== Ruta: backoffice_web/src/components/AuthProvider.tsx ===
+==========================================
+
+'use client';
+
+import React, { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+
+interface AuthContextType {
+  token: string | null;
+  role: string | null;
+  fullName: string | null;
+  login: (token: string, role: string, name: string) => void;
+  logout: () => void;
+  isReady: boolean;
+}
+
+const AuthContext = createContext<AuthContextType>({
+  token: null,
+  role: null,
+  fullName: null,
+  login: () => { },
+  logout: () => { },
+  isReady: false,
+});
+
+export const useAuth = () => useContext(AuthContext);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const [isReady, setIsReady] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [fullName, setFullName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem('auth_token') || localStorage.getItem('token') || localStorage.getItem('admin_token');
+    const storedRole = localStorage.getItem('auth_role');
+    const storedName = localStorage.getItem('auth_name');
+
+    setToken(storedToken);
+    setRole(storedRole);
+    setFullName(storedName);
+    setIsReady(true);
+
+    if (typeof window !== 'undefined') {
+      console.log("AuthProvider: API_URL detectada:", process.env.NEXT_PUBLIC_API_URL);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+    if (!token && pathname !== '/login') {
+      router.push('/login');
+    }
+  }, [isReady, token, pathname, router]);
+
+  const login = (newToken: string, newRole: string, newName: string) => {
+    localStorage.setItem('admin_token', newToken);
+    localStorage.setItem('auth_role', newRole);
+    localStorage.setItem('admin_user', newName); // Keeping backwards compat with custom keys depending on the endpoint response
+    localStorage.setItem('auth_token', newToken);
+    localStorage.setItem('auth_name', newName);
+    setToken(newToken);
+    setRole(newRole);
+    setFullName(newName);
+  };
+
+  const logout = () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_role');
+    localStorage.removeItem('auth_name');
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('token');
+    localStorage.removeItem('admin_user');
+    setToken(null);
+    setRole(null);
+    setFullName(null);
+    router.push('/login');
+  };
+
+  const value = useMemo(
+    () => ({ token, role, fullName, login, logout, isReady }),
+    [token, role, fullName, isReady]
+  );
+
+  if (!isReady) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-[#0a0f1e]">
+        <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+
+==========================================
+=== COMPONENTE CARD ===
+=== Ruta: backoffice_web/src/components/ui/Card.tsx ===
+==========================================
+
+import React from 'react';
+
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+    hover?: boolean;
+}
+
+export default function Card({ children, className = '', hover = false, ...props }: CardProps) {
+    return (
+        <div
+            className={`bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-xl overflow-hidden ${hover ? 'transition-all duration-300 hover:border-cyan-500/50 hover:bg-slate-900/80 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)]' : ''
+                } ${className}`}
+            {...props}
+        >
+            {children}
+        </div>
+    );
+}
+
+
+==========================================
+=== COMPONENTE BUTTON ===
+=== Ruta: backoffice_web/src/components/ui/Button.tsx ===
+==========================================
+
+import React from 'react';
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+    variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+    size?: 'sm' | 'md' | 'lg';
+    loading?: boolean;
+    icon?: React.ReactNode;
+}
+
+export default function Button({
+    children,
+    className = '',
+    variant = 'primary',
+    size = 'md',
+    loading = false,
+    icon,
+    ...props
+}: ButtonProps) {
+    const baseStyle = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
+
+    const variants = {
+        primary: 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white shadow-lg shadow-cyan-500/25',
+        secondary: 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700',
+        ghost: 'bg-transparent hover:bg-white/5 text-slate-300 hover:text-white',
+        danger: 'bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-transparent hover:border-red-500/50',
+    };
+
+    const sizes = {
+        sm: 'text-sm px-3 py-1.5 gap-1.5',
+        md: 'text-sm px-4 py-2 gap-2',
+        lg: 'text-base px-6 py-3 gap-2',
+    };
+
+    return (
+        <button
+            className={`${baseStyle} ${variants[variant]} ${sizes[size]} ${className}`}
+            disabled={loading || props.disabled}
+            {...props}
+        >
+            {loading ? (
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            ) : icon ? (
+                <span className="flex items-center justify-center">{icon}</span>
+            ) : null}
+            {children}
+        </button>
+    );
+}
+
+
+==========================================
+=== COMPONENTE TABLE ===
+=== Ruta: backoffice_web/src/components/ui/Table.tsx ===
+==========================================
+
+import React from 'react';
+
+interface Column<T> {
+    key: string;
+    header: string;
+    render?: (row: T) => React.ReactNode;
+}
+
+interface TableProps<T> {
+    columns: Column<T>[];
+    data: T[];
+    loading?: boolean;
+    emptyMessage?: string;
+    className?: string;
+}
+
+export default function Table<T extends Record<string, any>>({
+    columns,
+    data,
+    loading = false,
+    emptyMessage = 'No hay datos disponibles',
+    className = ''
+}: TableProps<T>) {
+    if (loading) {
+        return (
+            <div className={`flex justify-center items-center p-8 space-x-2 w-full ${className}`}>
+                <div className="w-3 h-3 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                <div className="w-3 h-3 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></div>
+                <div className="w-3 h-3 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></div>
+            </div>
+        );
+    }
+
+    if (data.length === 0) {
+        return (
+            <div className={`p-8 text-center text-slate-400 border border-dashed border-slate-700 rounded-lg ${className}`}>
+                {emptyMessage}
+            </div>
+        );
+    }
+
+    return (
+        <div className={`overflow-x-auto rounded-lg border border-slate-800 ${className}`}>
+            <table className="w-full text-sm text-left">
+                <thead className="text-xs text-slate-400 uppercase bg-slate-900/80 border-b border-slate-800">
+                    <tr>
+                        {columns.map((col, index) => (
+                            <th key={col.key || index} scope="col" className="px-6 py-3 font-medium">
+                                {col.header}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {data.map((row, rowIndex) => (
+                        <tr
+                            key={rowIndex}
+                            className="bg-slate-900/20 border-b border-slate-800/50 hover:bg-slate-800/50 transition-colors"
+                        >
+                            {columns.map((col, colIndex) => (
+                                <td key={colIndex} className="px-6 py-4">
+                                    {col.render ? col.render(row) : row[col.key]}
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+
+==========================================
+=== COMPONENTE INPUT ===
+=== Ruta: backoffice_web/src/components/ui/Input.tsx ===
+==========================================
+
+import React from 'react';
+
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+    label?: string;
+    error?: string;
+    icon?: React.ReactNode;
+}
+
+export default function Input({ label, error, icon, className = '', ...props }: InputProps) {
+    return (
+        <div className={`w-full ${className}`}>
+            {label && <label className="block text-sm font-medium text-slate-300 mb-1.5">{label}</label>}
+            <div className="relative">
+                {icon && (
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        {icon}
+                    </div>
+                )}
+                <input
+                    className={`w-full bg-slate-900/50 border border-slate-700 text-slate-100 text-sm rounded-lg focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 block ${icon ? 'pl-10' : 'pl-4'
+                        } p-2.5 transition-all duration-200 ${error ? 'border-red-500 focus:ring-red-500/50' : ''}`}
+                    {...props}
+                />
+            </div>
+            {error && <p className="mt-1.5 text-xs text-red-500">{error}</p>}
+        </div>
+    );
+}
+
+
+==========================================
+=== COMPONENTE MODAL ===
+=== Ruta: backoffice_web/src/components/ui/Modal.tsx ===
+==========================================
+
+import React, { useEffect } from 'react';
+
+interface ModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    title?: string;
+    children: React.ReactNode;
+    footer?: React.ReactNode;
+    maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
+}
+
+export default function Modal({
+    isOpen,
+    onClose,
+    title,
+    children,
+    footer,
+    maxWidth = 'md'
+}: ModalProps) {
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
+    }, [isOpen]);
+
+    if (!isOpen) return null;
+
+    const maxWidthClasses = {
+        sm: 'max-w-sm',
+        md: 'max-w-md',
+        lg: 'max-w-lg',
+        xl: 'max-w-xl',
+        '2xl': 'max-w-2xl',
+        full: 'max-w-full m-4',
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden p-4">
+            {/* Backdrop */}
+            <div
+                className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
+                onClick={onClose}
+                aria-hidden="true"
+            />
+
+            {/* Modal panel */}
+            <div
+                className={`relative w-full ${maxWidthClasses[maxWidth]} bg-slate-900 border border-slate-800 rounded-xl shadow-[0_0_40px_rgba(0,0,0,0.5)] transform transition-all flex flex-col max-h-[90vh]`}
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
+                {title && (
+                    <div className="flex items-start justify-between p-5 border-b border-slate-800">
+                        <h3 className="text-xl font-semibold text-white">
+                            {title}
+                        </h3>
+                        <button
+                            onClick={onClose}
+                            className="text-slate-400 bg-transparent hover:bg-slate-800 hover:text-white rounded-lg text-sm w-8 h-8 ml-auto inline-flex justify-center items-center transition-colors"
+                        >
+                            <svg className="w-3 h-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14">
+                                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6" />
+                            </svg>
+                            <span className="sr-only">Cerrar modal</span>
+                        </button>
+                    </div>
+                )}
+
+                {/* Body */}
+                <div className="p-5 overflow-y-auto flex-1 custom-scrollbar">
+                    {children}
+                </div>
+
+                {/* Footer */}
+                {footer && (
+                    <div className="flex items-center justify-end p-5 border-t border-slate-800 space-x-3 rounded-b-xl">
+                        {footer}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+
+==========================================
+=== COMPONENTE BADGE ===
+=== Ruta: backoffice_web/src/components/ui/Badge.tsx ===
+==========================================
+
+import React from 'react';
+
+interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+    color?: 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'default';
+    variant?: 'solid' | 'flat' | 'outline';
+}
+
+export default function Badge({
+    children,
+    color = 'primary',
+    variant = 'flat',
+    className = '',
+    ...props
+}: BadgeProps) {
+    const baseStyle = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium';
+
+    const colors = {
+        primary: {
+            flat: 'bg-cyan-500/10 text-cyan-400',
+            solid: 'bg-cyan-500 text-white',
+            outline: 'bg-transparent border border-cyan-500/50 text-cyan-400',
+        },
+        success: {
+            flat: 'bg-green-500/10 text-green-400',
+            solid: 'bg-green-500 text-white',
+            outline: 'bg-transparent border border-green-500/50 text-green-400',
+        },
+        warning: {
+            flat: 'bg-yellow-500/10 text-yellow-500',
+            solid: 'bg-yellow-500 text-white',
+            outline: 'bg-transparent border border-yellow-500/50 text-yellow-500',
+        },
+        danger: {
+            flat: 'bg-red-500/10 text-red-500',
+            solid: 'bg-red-500 text-white',
+            outline: 'bg-transparent border border-red-500/50 text-red-500',
+        },
+        info: {
+            flat: 'bg-blue-500/10 text-blue-400',
+            solid: 'bg-blue-500 text-white',
+            outline: 'bg-transparent border border-blue-500/50 text-blue-400',
+        },
+        default: {
+            flat: 'bg-slate-500/10 text-slate-300',
+            solid: 'bg-slate-600 text-white',
+            outline: 'bg-transparent border border-slate-600 text-slate-300',
+        },
+    };
+
+    const selectedClass = colors[color][variant];
+
+    return (
+        <span className={`${baseStyle} ${selectedClass} ${className}`} {...props}>
+            {children}
+        </span>
+    );
+}
+
+
+==========================================
+=== API CLIENT ===
+=== Ruta: backoffice_web/src/lib/api.ts ===
+==========================================
+
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+
+const api = axios.create({
+  baseURL: API_BASE,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 30000,
+  withCredentials: true,
+});
+
+let isRedirecting = false;
+
+// Request Interceptor: Inject API Key if present
+api.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    if (typeof window !== 'undefined') {
+      const apiKey = localStorage.getItem('api_key');
+      if (apiKey && config.headers) {
+        config.headers['X-API-KEY'] = apiKey;
+      }
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response Interceptor: Handle errors
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (error.response?.status === 401 && !isRedirecting) {
+      isRedirecting = true;
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('token');
+        localStorage.removeItem('admin_user');
+        window.location.href = '/login';
+      }
+      setTimeout(() => { isRedirecting = false; }, 3000);
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+
+// Helper exports
+export const apiGet = <T = any>(url: string, config = {}) =>
+  api.get<T>(url, config);
+
+export const apiPost = <T = any>(url: string, data?: any, config = {}) =>
+  api.post<T>(url, data, config);
+
+export const apiPut = <T = any>(url: string, data?: any, config = {}) =>
+  api.put<T>(url, data, config);
+
+export const apiDelete = <T = any>(url: string, config = {}) =>
+  api.delete<T>(url, config);
+
+export const apiPatch = <T = any>(url: string, data?: any, config = {}) =>
+  api.patch<T>(url, data, config);
+
+/**
+ * Legacy/Compatible helper that returns data directly.
+ * Matches original functional logic of restored pages.
+ */
+export async function apiRequest<T = any>(url: string, options: any = {}): Promise<T> {
+  const method = (options.method || 'GET').toLowerCase();
+  const config = {
+    ...options,
+    method,
+  };
+  
+  // If options.body exists (from fetch-style calls), move to config.data for axios
+  if (options.body && !config.data) {
+    config.data = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+  }
+
+  const response = await api.request<T>({
+    url,
+    ...config,
+  });
+  
+  return response.data;
+}
+
+
+==========================================
+=== UTILS ===
+=== Ruta: backoffice_web/src/lib/utils.ts ===
+==========================================
+
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+export function cn(...inputs: ClassValue[]) {
+    return twMerge(clsx(inputs));
+}
+
+export function sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export function generateId() {
+    return Math.random().toString(36).substring(2, 9);
+}
+
+
+==========================================
+=== FORMATTERS ===
+=== Ruta: backoffice_web/src/lib/formatters.ts ===
+==========================================
+
+export function formatCurrency(amount: number, currency = 'USD'): string {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(amount);
+}
+
+export function formatNumber(num: number): string {
+    return new Intl.NumberFormat('en-US').format(num);
+}
+
+export function formatDate(date: string | Date): string {
+    return new Intl.DateTimeFormat('es-ES', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+    }).format(new Date(date));
+}
+
+export function formatDateTime(date: string | Date): string {
+    return new Intl.DateTimeFormat('es-ES', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(new Date(date));
+}
+
+export function formatRelativeTime(date: string | Date): string {
+    const now = new Date();
+    const then = new Date(date);
+    const seconds = Math.floor((now.getTime() - then.getTime()) / 1000);
+
+    if (seconds < 60) return 'hace un momento';
+    if (seconds < 3600) return `hace ${Math.floor(seconds / 60)} min`;
+    if (seconds < 86400) return `hace ${Math.floor(seconds / 3600)} horas`;
+    return `hace ${Math.floor(seconds / 86400)} días`;
+}
+
+export function formatPercentage(value: number): string {
+    return `${value.toFixed(1)}%`;
+}
+
+export function truncateAddress(address: string, chars = 6): string {
+    return `${address.slice(0, chars)}...${address.slice(-chars)}`;
+}
+
+
+==========================================
+=== CONFIG ===
+=== Ruta: backoffice_web/src/lib/config.ts ===
+==========================================
+
+[ARCHIVO NO ENCONTRADO]
+
+
+==========================================
+=== TYPES INDEX ===
+=== Ruta: backoffice_web/src/types/index.ts ===
+==========================================
+
+// User Types
+export interface User {
+    id: number;
+    username: string;
+    telegram_user_id: string;
+    role: 'admin' | 'operator';
+    is_active: boolean;
+    created_at: string;
+}
+
+// Order Types
+export interface Order {
+    id: number;
+    client_id: number;
+    operator_id: number;
+    amount_usd: number;
+    amount_usdt: number;
+    status: 'pending' | 'assigned' | 'completed' | 'cancelled';
+    profit_real_usd: number;
+    created_at: string;
+    completed_at?: string;
+}
+
+// Metrics Types
+export interface RealtimeMetrics {
+    orders_completed_today: number;
+    volume_usdt_today: number;
+    profit_today: number;
+    vault_balance: number;
+    active_operators: number;
+    pending_withdrawals_count: number;
+    pending_withdrawals_amount: number;
+}
+
+// Vault Types
+export interface VaultBalance {
+    vault_balance: number;
+    total_profit: number;
+    total_withdrawals: number;
+    currency: string;
+    last_updated: string;
+}
+
+export interface VaultTransaction {
+    id: number;
+    transaction_type: 'PROFIT_IN' | 'WITHDRAWAL_OUT' | 'ADJUSTMENT';
+    amount: number;
+    balance_before: number;
+    balance_after: number;
+    description: string;
+    operator_id?: number;
+    order_id?: number;
+    withdrawal_id?: number;
+    created_at: string;
+}
+
+// Operator Types
+export interface Operator extends User {
+    stats: {
+        total_orders: number;
+        completed_orders: number;
+        total_profit: number;
+        commission_earned: number;
+        success_rate: number;
+    };
+}
+
+// Withdrawal Types
+export interface Withdrawal {
+    id: number;
+    operator_id: number;
+    amount: number;
+    status: 'pending' | 'approved' | 'paid' | 'rejected';
+    created_at: string;
+    approved_at?: string;
+    approved_by?: number;
+}
+
+// Activity Log Types
+export interface ActivityLog {
+    id: number;
+    user_id: number;
+    user: User;
+    action: string;
+    resource_type: string;
+    resource_id: number;
+    ip_address: string;
+    metadata: Record<string, any>;
+    created_at: string;
+}
+
+
+==========================================
+=== GLOBALS CSS ===
+=== Ruta: backoffice_web/src/app/globals.css ===
+==========================================
+
+@import "tailwindcss";
+
+:root {
+  --background: #0a0f1e;
+  --foreground: #ffffff;
+  --primary: #06b6d4;
+  --primary-dark: #0891b2;
+  --secondary: #8b5cf6;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  background: linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #0a1628 100%);
+  min-height: 100vh;
+}
+
+/* Glassmorphism Components */
+@layer components {
+  .card-glass {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+  }
+
+  .card-glass-hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    @apply transition-all duration-300;
+  }
+
+  .card-glass-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 40px rgba(6, 182, 212, 0.15);
+    border-color: rgba(6, 182, 212, 0.3);
+  }
+
+  .input-glass {
+    @apply w-full px-4 py-3 rounded-xl;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    transition: all 0.2s ease;
+  }
+
+  .input-glass:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+  }
+
+  .input-glass::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 rounded-xl font-semibold transition-all duration-200;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+    border: none;
+    cursor: pointer;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 30px rgba(6, 182, 212, 0.3);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 rounded-xl font-semibold transition-all duration-200;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+    background: transparent;
+    color: var(--primary);
+    border: none;
+    cursor: pointer;
+  }
+
+  .btn-ghost:hover {
+    background: rgba(6, 182, 212, 0.1);
+  }
+
+  .btn-danger {
+    @apply px-6 py-3 rounded-xl font-semibold transition-all duration-200;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    cursor: pointer;
+  }
+
+  .btn-danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+  }
+
+  /* Badges */
+  .badge {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-success {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .badge-warning {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .badge-danger {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+
+  .badge-info {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+    background: rgba(6, 182, 212, 0.1);
+    color: #06b6d4;
+    border: 1px solid rgba(6, 182, 212, 0.3);
+  }
+
+  /* Tables */
+  .table-glass {
+    @apply w-full;
+  }
+
+  .table-glass thead tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .table-glass th {
+    @apply text-left py-4 px-4 text-sm font-semibold text-gray-400;
+  }
+
+  .table-glass tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s ease;
+  }
+
+  .table-glass tbody tr:hover {
+    background: rgba(6, 182, 212, 0.05);
+  }
+
+  .table-glass td {
+    @apply py-4 px-4 text-sm;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Animations */
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  /* Gradient Text */
+  .gradient-text {
+    background: linear-gradient(135deg, #06b6d4 0%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Loading Skeleton */
+  .skeleton {
+    @apply bg-gray-800/50 animate-pulse rounded;
+  }
+}
+
+/* Custom Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulseGlow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 40px rgba(6, 182, 212, 0.6);
+  }
+}
+
+
+==========================================
+=== TAILWIND CONFIG ===
+=== Ruta: backoffice_web/tailwind.config.ts ===
+==========================================
+
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+    content: [
+        "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
+        "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+        "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    ],
+    theme: {
+        extend: {
+            colors: {
+                background: "var(--background)",
+                foreground: "var(--foreground)",
+            },
+            animation: {
+                'slide-up': 'slideUp 0.5s ease-out',
+                'fade-in': 'fadeIn 0.3s ease-out',
+                'pulse-glow': 'pulseGlow 2s infinite',
+            },
+            keyframes: {
+                slideUp: {
+                    '0%': { opacity: '0', transform: 'translateY(20px)' },
+                    '100%': { opacity: '1', transform: 'translateY(0)' },
+                },
+                fadeIn: {
+                    '0%': { opacity: '0' },
+                    '100%': { opacity: '1' },
+                },
+                pulseGlow: {
+                    '0%, 100%': { boxShadow: '0 0 20px rgba(6, 182, 212, 0.3)' },
+                    '50%': { boxShadow: '0 0 40px rgba(6, 182, 212, 0.6)' },
+                },
+            },
+        },
+    },
+    plugins: [],
+};
+
+export default config;

@@ -8,14 +8,6 @@ import {
   Select,
   FormControl,
 } from '@mui/material';
-import {
-  TrendingUp as InIcon,
-  TrendingDown as OutIcon,
-  AccountBalance as BalanceIcon,
-  Send as SendIcon,
-  Refresh as RefreshIcon,
-  InfoOutlined as InfoIcon,
-} from '@mui/icons-material';
 import { useAuth } from '@/components/AuthProvider';
 import api from '@/lib/api';
 import Card from '@/components/ui/Card';
@@ -24,6 +16,12 @@ import Table from '@/components/ui/Table';
 import Input from '@/components/ui/Input';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
+import SectionHeader from '@/components/ui/SectionHeader';
+import StatCard from '@/components/ui/StatCard';
+import MoneyCell from '@/components/ui/MoneyCell';
+import FilterBar from '@/components/ui/FilterBar';
+import LoadingState from '@/components/ui/LoadingState';
+import { RefreshCcw, TrendingUp, TrendingDown, Wallet, Send } from 'lucide-react';
 
 interface DailyMovement {
   country: string;
@@ -47,37 +45,6 @@ interface SweepRequest {
   notes: string;
 }
 
-interface StatCardProps {
-  title: string;
-  value: string;
-  icon: ReactElement;
-  color: string;
-  bg?: string;
-  hint?: string;
-}
-
-function StatCard({ title, value, icon, color, bg, hint }: StatCardProps) {
-  return (
-    <Card className="flex-1 min-w-[260px] p-6 hover:-translate-y-1">
-      <div className="flex justify-between items-start">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{title}</span>
-            {hint && (
-              <Tooltip title={hint}>
-                <span className="cursor-help"><InfoIcon sx={{ fontSize: 14, color: 'rgba(255,255,255,0.2)' }} /></span>
-              </Tooltip>
-            )}
-          </div>
-          <h3 className="text-3xl font-black text-white mt-2 tracking-tight">{value}</h3>
-        </div>
-        <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
-          {React.cloneElement(icon, { sx: { color, fontSize: 24 } })}
-        </div>
-      </div>
-    </Card>
-  );
-}
 
 export default function OriginPage() {
   const { token, isReady } = useAuth();
@@ -192,7 +159,7 @@ export default function OriginPage() {
           <Button
             size="sm"
             variant="secondary"
-            icon={<SendIcon sx={{ fontSize: 14 }} />}
+            icon={<Send size={14} />}
             onClick={() => openSweepDialog(m.country, m.currency)}
           >
             Sweep
@@ -207,43 +174,39 @@ export default function OriginPage() {
   return (
     <div className="space-y-8 pb-10">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-4xl font-black text-white tracking-tight">
-            Billeteras Origen
-          </h1>
-          <p className="text-gray-500 font-medium mt-1">
-            Entradas y salidas por país y moneda para el día seleccionado
-          </p>
-        </div>
-        <Button
-          variant="primary"
-          icon={<RefreshIcon sx={{ fontSize: 18 }} />}
-          onClick={fetchBalance}
-          loading={loading}
-        >
-          Actualizar
-        </Button>
-      </div>
+      <SectionHeader
+        title="Billeteras Origen"
+        subtitle="Entradas y salidas por país y moneda para el día seleccionado"
+        rightSlot={
+          <Button
+            variant="primary"
+            icon={<RefreshCcw size={18} className={loading ? "animate-spin" : ""} />}
+            onClick={fetchBalance}
+            loading={loading}
+          >
+            Actualizar
+          </Button>
+        }
+      />
 
-      <Card className="p-4 bg-primary-800/20">
-        <div className="flex flex-col md:flex-row items-end gap-6">
+      <FilterBar>
+        <div className="w-full md:w-64">
           <Input
             type="date"
             label="Fecha de Consulta"
             value={selectedDay}
             onChange={(e) => setSelectedDay(e.target.value)}
-            className="w-full md:w-60"
           />
+        </div>
+        <div className="flex gap-3 pt-2 lg:pt-0">
           <Button variant="secondary" onClick={fetchBalance} loading={loading}>
             Consultar Billeteras
           </Button>
-          <div className="flex-1" />
-          <Badge color="info" className="px-4 py-1.5">
+          <Badge color="info">
             Registros: {safeMovements.length}
           </Badge>
         </div>
-      </Card>
+      </FilterBar>
 
       {error && (
         <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-500 font-bold animate-shake">
@@ -255,7 +218,7 @@ export default function OriginPage() {
         <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-500 font-bold flex justify-between items-center">
           {sweepSuccess}
           <button onClick={() => setSweepSuccess('')} className="bg-emerald-500/10 hover:bg-emerald-500/20 p-1 rounded-lg">
-            <OutIcon size={16} />
+            <TrendingDown size={16} />
           </button>
         </div>
       )}
@@ -263,39 +226,43 @@ export default function OriginPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard
           title="Total Entradas"
-          value={`$${totalIn.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
-          icon={<InIcon sx={{ fontSize: 24 }} />}
-          color="#10b981"
-          hint="Suma total de entradas del día en USD aproximado"
+          value={<MoneyCell value={totalIn} emphasize />}
+          icon={<TrendingUp size={24} />}
+          accentClassName="from-emerald-600/10 to-emerald-500/5 shadow-emerald-900/10"
+          subtitle="Acumulado bruto del día en curso"
         />
         <StatCard
           title="Total Salidas (Sweeps)"
-          value={`$${totalOut.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
-          icon={<OutIcon sx={{ fontSize: 24 }} />}
-          color="#f43f5e"
-          hint="Suma total de salidas/sweeps del día hacia Binance u otras carteras"
+          value={<MoneyCell value={totalOut} emphasize />}
+          icon={<TrendingDown size={24} />}
+          accentClassName="from-rose-600/10 to-rose-500/5 shadow-rose-900/10"
+          subtitle="Retiros a Binance u otras carteras"
         />
         <StatCard
           title="Balance de Origen"
-          value={`$${totalNet.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
-          icon={<BalanceIcon sx={{ fontSize: 24 }} />}
-          color={totalNet >= 0 ? '#3b82f6' : '#f43f5e'}
-          hint="Fondos disponibles en origen (Entradas - Salidas)"
+          value={<MoneyCell value={totalNet} emphasize />}
+          icon={<Wallet size={24} />}
+          accentClassName={totalNet >= 0 ? "from-blue-600/10 to-blue-500/5" : "from-rose-600/10 to-rose-500/5"}
+          subtitle="Liquidez disponible en origen"
         />
       </div>
 
-      <Card className="overflow-hidden">
-        <div className="p-6 border-b border-white/5 bg-white/5">
-          <h2 className="text-xl font-black text-white">Detalle de Liquidez en Origen</h2>
-          <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Reporte consolidado por moneda</p>
-        </div>
-        <Table
-          columns={columns}
-          data={safeMovements}
-          loading={loading}
-          emptyMessage="No se detectaron movimientos para la fecha seleccionada"
-        />
-      </Card>
+      {loading ? (
+        <LoadingState title="Consultando liquidez..." />
+      ) : (
+        <Card className="overflow-hidden">
+          <div className="p-6 border-b border-white/5 bg-white/[0.02]">
+            <h2 className="text-xl font-black text-white">Detalle de Liquidez en Origen</h2>
+            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mt-1">Reporte consolidado por moneda</p>
+          </div>
+          <Table
+            columns={columns}
+            data={safeMovements}
+            loading={loading}
+            emptyMessage="No se detectaron movimientos para la fecha seleccionada"
+          />
+        </Card>
+      )}
 
       <Modal
         isOpen={sweepDialogOpen}

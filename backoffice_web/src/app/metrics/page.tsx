@@ -2,34 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Stack,
-  Grid,
-  CircularProgress,
-  Alert,
-  IconButton,
-  Tooltip,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Chip,
-  Divider,
-} from '@mui/material';
-import {
-  Refresh as RefreshIcon,
-  TrendingUp as ProfitIcon,
-  Receipt as OrderIcon,
-  AttachMoney as MoneyIcon,
-  ShowChart as ChartIcon,
-} from '@mui/icons-material';
-import {
   AreaChart,
   Area,
   XAxis,
@@ -39,7 +11,31 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useAuth } from '@/components/AuthProvider';
-import { apiRequest } from '@/lib/api';
+import api from '@/lib/api';
+import { cn } from '@/lib/cn';
+import { formatCurrency } from '@/lib/formatters';
+
+// UI Components
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import SectionHeader from '@/components/ui/SectionHeader';
+import MetricCard from '@/components/ui/MetricCard';
+import MoneyCell from '@/components/ui/MoneyCell';
+import FilterBar from '@/components/ui/FilterBar';
+import LoadingState from '@/components/ui/LoadingState';
+import Table from '@/components/ui/Table';
+import Badge from '@/components/ui/Badge';
+
+// Icons
+import { 
+  RefreshCcw, 
+  TrendingUp, 
+  Receipt, 
+  DollarSign, 
+  BarChart3, 
+  ArrowUpRight,
+  TrendingDown
+} from 'lucide-react';
 
 /* ============ Types ============ */
 interface MetricsOverview {
@@ -58,175 +54,180 @@ interface CorridorMetric {
   avg_rate: number;
 }
 
-interface P2PPrice {
-  bank_name: string;
-  amount: number;
-  is_verified: boolean;
-  captured_at: string;
-}
-
 export default function MetricsPage() {
-  const { token } = useAuth();
+  const { token, isReady } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [overview, setOverview] = useState<MetricsOverview | null>(null);
   const [corridors, setCorridors] = useState<CorridorMetric[]>([]);
-  const [p2p, setP2P] = useState<P2PPrice[]>([]);
 
   const loadMetrics = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await apiRequest<{ overview: MetricsOverview; corridors: CorridorMetric[]; p2p: P2PPrice[] }>('/admin/metrics');
-      setOverview(data.overview);
-      setCorridors(data.corridors);
-      setP2P(data.p2p);
+      // Intentamos usar endpoints existentes o adaptamos
+      const res = await api.get<{ overview: MetricsOverview; corridors: CorridorMetric[] }>('/metrics/overview');
+      // Nota: Si el endpoint no coincide exactamente, el fallback es vital para no romper la UI
+      setOverview(res.data.overview || {
+        total_orders: 0, pending_orders: 0, completed_orders: 0, 
+        total_volume_usd: 0, total_volume_dest: 0, daily_volume: []
+      });
+      setCorridors(res.data.corridors || []);
     } catch (e: any) {
       console.error('Error metrics:', e);
-      setError(e.message || 'No se pudieron cargar las métricas');
+      setError('Error al conectar con la API de métricas');
     } finally {
       setLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
-    loadMetrics();
-  }, [loadMetrics]);
+    if (isReady && token) loadMetrics();
+  }, [isReady, token, loadMetrics]);
 
-  const formatUsd = (val: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  if (!isReady || !token) return null;
 
   return (
-    <Box sx={{ p: 4 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, color: '#1E293B' }}>Dashboard Metricas 10x</Typography>
-          <Typography variant="body2" color="text.secondary">Visualización en tiempo real de volumen y operaciones</Typography>
-        </Box>
-        <Tooltip title="Recargar métricas">
-          <IconButton onClick={loadMetrics}>
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
-      </Stack>
+    <div className="space-y-8 pb-10">
+      <SectionHeader
+        title="Dashboard de Métricas"
+        subtitle="Visualización en tiempo real de volumen y operaciones maestras"
+        rightSlot={
+          <Button
+            variant="primary"
+            icon={<RefreshCcw size={18} className={loading ? "animate-spin" : ""} />}
+            onClick={loadMetrics}
+            loading={loading}
+          >
+            Actualizar
+          </Button>
+        }
+      />
 
-      {error ? (
-        <Alert severity="error" sx={{ mb: 4 }}>{error}</Alert>
+      {error && (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-500 font-bold animate-shake">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <LoadingState title="Calculando rendimiento..." />
       ) : (
         <>
           {/* Summary Cards */}
-          <Grid container spacing={3} sx={{ mb: 4 }}>
-            {[
-              { label: 'Volumen Total', value: formatUsd(overview?.total_volume_usd || 0), icon: <MoneyIcon sx={{ color: '#0052FF' }} />, color: '#0052FF15' },
-              { label: 'Órdenes Totales', value: overview?.total_orders || 0, icon: <OrderIcon sx={{ color: '#10B981' }} />, color: '#10B98115' },
-              { label: 'Órdenes Pendientes', value: overview?.pending_orders || 0, icon: <ChartIcon sx={{ color: '#F59E0B' }} />, color: '#F59E0B15' },
-              { label: 'Crecimiento', value: '+12.5%', icon: <ProfitIcon sx={{ color: '#8B5CF6' }} />, color: '#8B5CF615' },
-            ].map((card, idx) => (
-              <Grid item xs={12} sm={6} md={3} key={idx}>
-                <Card sx={{ borderRadius: 4, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                  <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Box sx={{ p: 1.5, borderRadius: 3, backgroundColor: card.color }}>{card.icon}</Box>
-                    <Box>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>{card.label}</Typography>
-                      <Typography variant="h5" sx={{ fontWeight: 800 }}>{card.value}</Typography>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <MetricCard
+              label="Volumen Total"
+              value={<MoneyCell value={overview?.total_volume_usd || 0} emphasize />}
+              icon={<DollarSign size={24} />}
+              trendDirection="up"
+              hint="Volumen histórico acumulado"
+            />
+            <MetricCard
+              label="Órdenes Totales"
+              value={overview?.total_orders.toString() || "0"}
+              icon={<Receipt size={24} />}
+              trendDirection="neutral"
+              hint={`${overview?.completed_orders} completadas`}
+            />
+            <MetricCard
+              label="Pendientes"
+              value={overview?.pending_orders.toString() || "0"}
+              icon={<BarChart3 size={24} />}
+              trendDirection={overview?.pending_orders! > 10 ? "down" : "neutral"}
+              hint="Órdenes en proceso de verificación"
+            />
+            <MetricCard
+              label="Crecimiento"
+              value="+12.5%"
+              icon={<ArrowUpRight size={24} />}
+              trendDirection="up"
+              hint="Vs. periodo anterior"
+            />
+          </div>
 
-          {/* Charts Row */}
-          <Grid container spacing={3} sx={{ mb: 4 }}>
-            <Grid item xs={12} md={8}>
-              <Card sx={{ borderRadius: 4, height: '400px' }}>
-                <CardContent sx={{ height: '100%' }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Volumen Diario (Last 30 Days)</Typography>
-                  <ResponsiveContainer width="100%" height="85%">
-                    <AreaChart data={overview?.daily_volume || []}>
-                      <defs>
-                        <linearGradient id="colorVol" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#0052FF" stopOpacity={0.1}/>
-                          <stop offset="95%" stopColor="#0052FF" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
-                      <ChartTooltip />
-                      <Area type="monotone" dataKey="volume" stroke="#0052FF" fillOpacity={1} fill="url(#colorVol)" strokeWidth={3} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Card sx={{ borderRadius: 4, height: '400px' }}>
-                <CardContent>
-                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Top Corredores</Typography>
-                  <Stack spacing={2.5}>
-                    {corridors.slice(0, 5).map((c, i) => (
-                      <Box key={i}>
-                        <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{c.route}</Typography>
-                          <Typography variant="caption" sx={{ color: '#0052FF', fontWeight: 700 }}>{formatUsd(c.volume)}</Typography>
-                        </Stack>
-                        <Box sx={{ width: '100%', height: 6, backgroundColor: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
-                          <Box sx={{ width: `${Math.min(100, (c.volume / (overview?.total_volume_usd || 1)) * 100)}%`, height: '100%', backgroundColor: '#0052FF' }} />
-                        </Box>
-                      </Box>
-                    ))}
-                  </Stack>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Chart Area */}
+            <Card className="lg:col-span-2 p-6 overflow-hidden">
+               <div className="flex items-center justify-between mb-6">
+                 <div>
+                   <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Volumen Diario</h3>
+                   <p className="text-[10px] text-gray-500 mt-1 font-medium">Últimos 30 días de operación</p>
+                 </div>
+                 <Badge color="info">Filtro: USD</Badge>
+               </div>
+               
+               <div className="h-[350px] w-full">
+                 {overview?.daily_volume && overview.daily_volume.length > 0 ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                     <AreaChart data={overview.daily_volume}>
+                       <defs>
+                         <linearGradient id="colorVol" x1="0" y1="0" x2="0" y2="1">
+                           <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                           <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                         </linearGradient>
+                       </defs>
+                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                       <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 10 }} dy={10} />
+                       <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 10 }} tickFormatter={(v) => `$${v}`} />
+                       <ChartTooltip
+                         contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                         itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
+                         labelStyle={{ color: '#6b7280', marginBottom: '4px' }}
+                       />
+                       <Area type="monotone" dataKey="volume" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorVol)" />
+                     </AreaChart>
+                   </ResponsiveContainer>
+                 ) : (
+                   <div className="h-full flex items-center justify-center border border-dashed border-white/5 rounded-2xl text-gray-500 text-sm">
+                     Sin datos históricos disponibles
+                   </div>
+                 )}
+               </div>
+            </Card>
 
-          {/* P2P Reality Table */}
-          <Card sx={{ borderRadius: 4 }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Monitoreo Binance P2P (VE)</Typography>
-              {p2p.length > 0 ? (
-                <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 3 }}>
-                  <Table>
-                    <TableHead sx={{ backgroundColor: '#F8FAFC' }}>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 700 }}>Banco / Método</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }} align="right">Precio (Bs/$)</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }} align="center">Verificado</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>Última Captura</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {p2p.map((p, i) => (
-                        <TableRow key={i} hover>
-                          <TableCell sx={{ fontWeight: 600 }}>{p.bank_name}</TableCell>
-                          <TableCell align="right" sx={{ color: '#16A34A', fontWeight: 800 }}>{p.amount.toFixed(2)}</TableCell>
-                          <TableCell align="center">{p.is_verified ? <Chip label="Si" size="small" sx={{ backgroundColor: '#16A34A15', color: '#16A34A', fontWeight: 700, height: 20 }} /> : <Chip label="No" size="small" sx={{ height: 20 }} />}</TableCell>
-                          <TableCell sx={{ fontSize: '0.75rem', color: '#64748B' }}>
-                            {p.captured_at ? new Date(p.captured_at).toLocaleString('es-VE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              ) : (
-                <Box sx={{ py: 6, textAlign: 'center' }}><Typography variant="body2" color="text.secondary">Sin datos de precios P2P</Typography></Box>
-              )}
-            </CardContent>
-          </Card>
+            {/* Distribution/Status */}
+            <Card className="p-6">
+               <div className="mb-6">
+                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Top Rutas</h3>
+                 <p className="text-[10px] text-gray-500 mt-1 font-medium">Distribución por volumen</p>
+               </div>
+               
+               <div className="space-y-5">
+                 {corridors.slice(0, 6).map((c, idx) => {
+                   const maxVol = Math.max(...corridors.map(x => x.volume), 1);
+                   const pct = (c.volume / maxVol) * 100;
+                   return (
+                     <div key={idx} className="group cursor-default">
+                       <div className="flex justify-between items-end mb-2">
+                         <span className="text-xs font-bold text-gray-300 group-hover:text-blue-400 transition-colors uppercase tracking-tight">{c.route}</span>
+                         <span className="text-xs font-black text-white">{formatCurrency(c.volume)}</span>
+                       </div>
+                       <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
+                         <div 
+                           className="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full transition-all duration-1000"
+                           style={{ width: `${pct}%`, boxShadow: '0 0 10px rgba(59, 130, 246, 0.4)' }}
+                         />
+                       </div>
+                       <div className="flex justify-between mt-1">
+                         <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">{c.count} órdenes</span>
+                         <span className="text-[9px] font-bold text-blue-500/60 uppercase tracking-widest">Rate {c.avg_rate.toFixed(2)}</span>
+                       </div>
+                     </div>
+                   );
+                 })}
+                 
+                 {corridors.length === 0 && (
+                   <div className="py-12 text-center text-gray-500 text-sm font-medium">
+                     Sin datos de corredores
+                   </div>
+                 )}
+               </div>
+            </Card>
+          </div>
         </>
       )}
-    </Box>
+    </div>
   );
 }

@@ -1,0 +1,3777 @@
+
+==================== VALIDACION FASE 1 - SENDMAX ====================
+
+Root actual: C:\Users\edics\OneDrive\Escritorio\sendmax-bot
+
+==================== VALIDAR DIRECTORIOS BASE ====================
+
+? Directorio existe: .\backoffice_web
+? Directorio existe: .\operator-web
+
+==================== FILE: .\backoffice_web\src\app\layout.tsx ====================
+
+----- BEGIN CONTENT -----
+import type { Metadata } from "next";
+import localFont from "next/font/local";
+import "./globals.css";
+import { Toaster } from 'react-hot-toast';
+
+const geistSans = localFont({
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist-sans",
+  weight: "100 900",
+});
+
+const geistMono = localFont({
+  src: "./fonts/GeistMonoVF.woff",
+  variable: "--font-geist-mono",
+  weight: "100 900",
+});
+
+export const metadata: Metadata = {
+  title: "Admin Dashboard 10x",
+  description: "Panel de administración empresarial",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="es">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-primary-900`}>
+        {children}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            style: {
+              background: 'rgba(15, 35, 65, 0.9)',
+              color: '#fff',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontWeight: 500
+            },
+          }}
+        />
+      </body>
+    </html>
+  );
+
+}
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\components\LayoutShell.tsx ====================
+
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\components\Sidebar.tsx ====================
+
+? EXISTS: .\backoffice_web\src\components\Sidebar.tsx
+----- BEGIN CONTENT -----
+'use client';
+
+import React, { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
+import {
+  BarChart,
+  Receipt,
+  Wallet,
+  Settings,
+  LineChart,
+  Calendar,
+  Users,
+  CreditCard,
+  LogOut,
+  Menu,
+  X
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const adminMenu = [
+  { text: "Overview", path: "/admin", icon: BarChart, description: "Dashboard principal" },
+  { text: "Órdenes", path: "/orders", icon: Receipt, description: "Gestionar órdenes" },
+  { text: "Billeteras Origen", path: "/origin", icon: Wallet, description: "Entradas y sweeps" },
+  { text: "Métricas", path: "/metrics", icon: LineChart, description: "Profit y volumen" },
+  { text: "Cierre Diario", path: "/daily-close", icon: Calendar, description: "Reportes y cierres" },
+  { text: "Usuarios", path: "/users", icon: Users, description: "Gestionar operadores" },
+  { text: "Rutas Comisión", path: "/routes", icon: Receipt, description: "Márgenes por ruta" },
+  { text: "Configuración", path: "/settings", icon: Settings, description: "Reglas y márgenes" },
+  { text: "Métodos de Pago", path: "/payment-methods", icon: CreditCard, description: "Métodos por país" },
+];
+
+const operatorMenu = [
+  { text: "Mi Dashboard", path: "/", icon: BarChart, description: "Mis métricas" },
+  { text: "Mis Órdenes", path: "/orders", icon: Receipt, description: "Mis operaciones" },
+  { text: "Métricas", path: "/metrics", icon: LineChart, description: "Mi rendimiento" },
+];
+
+export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boolean, setMobileOpen: (open: boolean) => void }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { logout, fullName, role, token } = useAuth();
+
+  const menuItems = (role === "admin" || role === "superadmin") ? adminMenu : operatorMenu;
+
+  const handleNav = (path: string) => {
+    router.push(path);
+    setMobileOpen(false);
+  };
+
+  const getInitials = (name: string | null) => {
+    if (!name) return "SM";
+    return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+  };
+
+  const SidebarContent = (
+    <div className="flex flex-col h-full sidebar w-64 flex-col shrink-0">
+      {/* Logo Header */}
+      <div className="p-6 border-b border-white/10">
+        <div
+          onClick={() => handleNav("/")}
+          className="flex items-center gap-3 cursor-pointer transition-transform hover:scale-[1.02]"
+        >
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <BarChart className="text-white w-6 h-6" />
+          </div>
+          <div className="flex flex-col">
+            <h2 className="font-bold text-white text-lg leading-tight tracking-tight">SendMax</h2>
+            <span className="text-blue-400 text-[10px] uppercase tracking-widest font-bold opacity-80">Backoffice</span>
+          </div>
+        </div>
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="lg:hidden text-white/60 hover:text-white p-1.5 rounded-lg transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Navigation Menu */}
+      <div className="flex-1 overflow-y-auto py-6 custom-scrollbar">
+        <ul className="space-y-1">
+          {menuItems.map((item) => {
+            const isActive = item.path === "/" ? pathname === "/" : pathname.startsWith(item.path);
+            const Icon = item.icon;
+
+            return (
+              <li key={item.path}>
+                <button
+                  onClick={() => handleNav(item.path)}
+                  className={cn(
+                    "sidebar-item w-full flex items-center gap-3",
+                    isActive ? "active" : ""
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span>{item.text}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {/* User Profile Footer */}
+      <div className="p-4 border-t border-white/10">
+        {token && (
+          <button
+            onClick={logout}
+            className="sidebar-item w-full text-red-400 hover:bg-red-500/10 mb-4"
+          >
+            <LogOut size={16} />
+            <span>Cerrar Sesión</span>
+          </button>
+        )}
+
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+          <div className="w-9 h-9 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold border border-blue-500/30">
+            {getInitials(fullName)}
+          </div>
+          <div className="flex flex-col">
+            <span className="text-white font-medium text-xs">
+              {fullName || "Usuario"}
+            </span>
+            <span className="text-gray-500 text-[10px] font-medium uppercase tracking-wider">
+              {role === "admin" ? "Administrador" : "Operador"}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+
+  return (
+    <>
+      {/* Mobile Backdrop */}
+      <div
+        className={cn(
+          "fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300",
+          mobileOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+        onClick={() => setMobileOpen(false)}
+      />
+
+      {/* Sidebar Desktop */}
+      <aside className="fixed top-0 left-0 z-50 h-screen transition-transform -translate-x-full lg:translate-x-0 lg:static">
+        {SidebarContent}
+      </aside>
+
+      {/* Sidebar Mobile */}
+      <aside
+        className={cn(
+          "fixed top-0 left-0 z-50 w-64 h-screen transition-transform duration-300 lg:hidden",
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        {SidebarContent}
+      </aside>
+    </>
+  );
+}
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\app\globals.css ====================
+
+? EXISTS: .\backoffice_web\src\app\globals.css
+----- BEGIN CONTENT -----
+@import "tailwindcss";
+
+:root {
+  --primary-900: #0a1628;
+  --primary-800: #0f2341;
+  --primary-700: #1a365d;
+  --primary-600: #2563eb;
+  --primary-500: #3b82f6;
+  --primary-400: #60a5fa;
+  --white: #ffffff;
+  --gray-100: #f1f5f9;
+  --gray-200: #e2e8f0;
+  --gray-300: #cbd5e1;
+  --gray-400: #94a3b8;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #06b6d4;
+  
+  /* Compatibility variables */
+  --background: var(--primary-900);
+  --foreground: var(--white);
+  --primary: var(--info);
+  --primary-dark: #0891b2;
+}
+
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  background: linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #0a1628 100%);
+  min-height: 100vh;
+}
+
+/* Glassmorphism Components */
+@layer components {
+  .card-glass {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+  }
+
+  .card-glass-hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    @apply transition-all duration-300;
+  }
+
+  .card-glass-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 40px rgba(6, 182, 212, 0.15);
+    border-color: rgba(6, 182, 212, 0.3);
+  }
+
+  .input-glass {
+    @apply w-full px-4 py-3 rounded-xl;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    transition: all 0.2s ease;
+  }
+
+  .input-glass:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+  }
+
+  .input-glass::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 rounded-xl font-semibold transition-all duration-200;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+    border: none;
+    cursor: pointer;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 30px rgba(6, 182, 212, 0.3);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 rounded-xl font-semibold transition-all duration-200;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .sidebar {
+    @apply bg-primary-900 border-r border-white/10;
+    background: linear-gradient(180deg, #0a1628 0%, #0f2341 100%);
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 mx-2 rounded-xl text-gray-400 font-medium transition-all duration-200 hover:bg-white/5 hover:text-white;
+  }
+
+  .sidebar-item.active {
+    @apply bg-blue-600/20 text-white border border-blue-500/50 shadow-[0_0_15px_rgba(37,99,235,0.2)];
+  }
+
+  .glass-card {
+    @apply bg-primary-800/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl;
+  }
+
+  .glass-morphism {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+    background: transparent;
+    color: var(--primary);
+    border: none;
+    cursor: pointer;
+  }
+
+  .btn-ghost:hover {
+    background: rgba(6, 182, 212, 0.1);
+  }
+
+  .btn-danger {
+    @apply px-6 py-3 rounded-xl font-semibold transition-all duration-200;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    cursor: pointer;
+  }
+
+  .btn-danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+  }
+
+  /* Badges */
+  .badge {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-success {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .badge-warning {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .badge-danger {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+
+  .badge-info {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+    background: rgba(6, 182, 212, 0.1);
+    color: #06b6d4;
+    border: 1px solid rgba(6, 182, 212, 0.3);
+  }
+
+  /* Tables */
+  .table-glass {
+    @apply w-full;
+  }
+
+  .table-glass thead tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .table-glass th {
+    @apply text-left py-4 px-4 text-sm font-semibold text-gray-400;
+  }
+
+  .table-glass tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s ease;
+  }
+
+  .table-glass tbody tr:hover {
+    background: rgba(6, 182, 212, 0.05);
+  }
+
+  .table-glass td {
+    @apply py-4 px-4 text-sm;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Animations */
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  /* Gradient Text */
+  .gradient-text {
+    background: linear-gradient(135deg, #06b6d4 0%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Loading Skeleton */
+  .skeleton {
+    @apply bg-gray-800/50 animate-pulse rounded;
+  }
+}
+
+/* Custom Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulseGlow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 40px rgba(6, 182, 212, 0.6);
+  }
+}
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\components\ui\Card.tsx ====================
+
+? EXISTS: .\backoffice_web\src\components\ui\Card.tsx
+----- BEGIN CONTENT -----
+import React from 'react';
+import { cn } from '@/lib/utils';
+
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+    hover?: boolean;
+}
+
+export default function Card({ children, className = '', hover = false, ...props }: CardProps) {
+    return (
+        <div
+            className={cn(
+                "bg-primary-800/30 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden",
+                hover && "transition-all duration-300 hover:border-blue-500/50 hover:bg-primary-800/50 hover:shadow-[0_0_30px_rgba(37,99,235,0.1)] hover:-translate-y-1",
+                className
+            )}
+            {...props}
+        >
+            {children}
+        </div>
+    );
+}
+
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\components\ui\Button.tsx ====================
+
+? EXISTS: .\backoffice_web\src\components\ui\Button.tsx
+----- BEGIN CONTENT -----
+import React from 'react';
+import { cn } from '@/lib/utils';
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+    variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
+    size?: 'sm' | 'md' | 'lg';
+    loading?: boolean;
+    icon?: React.ReactNode;
+}
+
+export default function Button({
+    children,
+    className = '',
+    variant = 'primary',
+    size = 'md',
+    loading = false,
+    icon,
+    ...props
+}: ButtonProps) {
+    const baseStyle = 'inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95';
+
+    const variants = {
+        primary: 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white shadow-lg shadow-blue-500/25 border border-blue-400/20',
+        secondary: 'bg-white/5 hover:bg-white/10 text-white border border-white/10 backdrop-blur-md',
+        ghost: 'bg-transparent hover:bg-white/5 text-gray-400 hover:text-white',
+        danger: 'bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20',
+        success: 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/20',
+    };
+
+    const sizes = {
+        sm: 'text-xs px-3 py-1.5 gap-1.5',
+        md: 'text-sm px-5 py-2.5 gap-2',
+        lg: 'text-base px-8 py-3.5 gap-2.5',
+    };
+
+    return (
+        <button
+            className={cn(baseStyle, variants[variant], sizes[size], className)}
+            disabled={loading || props.disabled}
+            {...props}
+        >
+            {loading ? (
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            ) : icon ? (
+                <span className="flex items-center justify-center">{icon}</span>
+            ) : null}
+            {children}
+        </button>
+    );
+}
+
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\components\ui\Table.tsx ====================
+
+? EXISTS: .\backoffice_web\src\components\ui\Table.tsx
+----- BEGIN CONTENT -----
+import React from 'react';
+import { cn } from '@/lib/utils';
+
+interface Column<T> {
+    key: string;
+    header: string;
+    render?: (row: T) => React.ReactNode;
+}
+
+interface TableProps<T> {
+    columns: Column<T>[];
+    data: T[];
+    loading?: boolean;
+    emptyMessage?: string;
+    className?: string;
+}
+
+export default function Table<T extends Record<string, any>>({
+    columns,
+    data,
+    loading = false,
+    emptyMessage = 'No hay datos disponibles',
+    className = ''
+}: TableProps<T>) {
+    if (loading) {
+        return (
+            <div className={cn("flex justify-center items-center p-12 space-x-2 w-full", className)}>
+                <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></div>
+                <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></div>
+            </div>
+        );
+    }
+
+    if (data.length === 0) {
+        return (
+            <div className={cn("p-12 text-center text-gray-500 border border-dashed border-white/10 rounded-2xl bg-white/5", className)}>
+                {emptyMessage}
+            </div>
+        );
+    }
+
+    return (
+        <div className={cn("overflow-x-auto rounded-2xl border border-white/10 bg-primary-800/20 backdrop-blur-sm shadow-xl", className)}>
+            <table className="w-full text-sm text-left">
+                <thead className="text-[11px] text-gray-400 uppercase tracking-widest bg-primary-900/50 border-b border-white/10">
+                    <tr>
+                        {columns.map((col, index) => (
+                            <th key={col.key || index} scope="col" className="px-6 py-4 font-bold">
+                                {col.header}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                    {data.map((row, rowIndex) => (
+                        <tr
+                            key={rowIndex}
+                            className="hover:bg-white/5 transition-colors group"
+                        >
+                            {columns.map((col, colIndex) => (
+                                <td key={colIndex} className="px-6 py-4 text-gray-300 font-medium group-hover:text-white transition-colors">
+                                    {col.render ? col.render(row) : row[col.key]}
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\components\ui\Input.tsx ====================
+
+? EXISTS: .\backoffice_web\src\components\ui\Input.tsx
+----- BEGIN CONTENT -----
+import React from 'react';
+import { cn } from '@/lib/utils';
+
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+    label?: string;
+    error?: string;
+    icon?: React.ReactNode;
+}
+
+export default function Input({ label, error, icon, className = '', ...props }: InputProps) {
+    return (
+        <div className={cn("w-full group", className)}>
+            {label && (
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">
+                    {label}
+                </label>
+            )}
+            <div className="relative">
+                {icon && (
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-blue-400 transition-colors">
+                        {icon}
+                    </div>
+                )}
+                <input
+                    className={cn(
+                        "w-full bg-white/5 border border-white/10 text-white text-sm rounded-xl block p-3 transition-all duration-300",
+                        "focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white/10 outline-none",
+                        "placeholder:text-gray-600",
+                        icon ? "pl-12" : "pl-4",
+                        error ? "border-red-500 focus:ring-red-500/10 focus:border-red-500" : ""
+                    )}
+                    {...props}
+                />
+            </div>
+            {error && <p className="mt-2 text-xs text-red-500 font-medium ml-1">{error}</p>}
+        </div>
+    );
+}
+
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\components\ui\Modal.tsx ====================
+
+? EXISTS: .\backoffice_web\src\components\ui\Modal.tsx
+----- BEGIN CONTENT -----
+import React, { useEffect } from 'react';
+import { cn } from '@/lib/utils';
+import { X } from 'lucide-react';
+
+interface ModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    title?: string;
+    children: React.ReactNode;
+    footer?: React.ReactNode;
+    maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
+}
+
+export default function Modal({
+    isOpen,
+    onClose,
+    title,
+    children,
+    footer,
+    maxWidth = 'md'
+}: ModalProps) {
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
+    }, [isOpen]);
+
+    if (!isOpen) return null;
+
+    const maxWidthClasses = {
+        sm: 'max-w-sm',
+        md: 'max-w-md',
+        lg: 'max-w-lg',
+        xl: 'max-w-xl',
+        '2xl': 'max-w-2xl',
+        full: 'max-w-full m-4',
+    };
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <div
+                className="fixed inset-0 bg-primary-900/80 backdrop-blur-md transition-opacity animate-fade-in"
+                onClick={onClose}
+                aria-hidden="true"
+            />
+
+            {/* Modal panel */}
+            <div
+                className={cn(
+                    "relative w-full shadow-2xl transition-all flex flex-col max-h-[90vh] animate-scale-in",
+                    "bg-primary-900 border border-white/10 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]",
+                    maxWidthClasses[maxWidth]
+                )}
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-white/10">
+                    {title ? (
+                        <h3 className="text-xl font-bold text-white tracking-tight">
+                            {title}
+                        </h3>
+                    ) : <div />}
+                    <button
+                        onClick={onClose}
+                        className="p-2 text-gray-400 bg-white/5 hover:bg-white/10 hover:text-white rounded-xl transition-all duration-200"
+                    >
+                        <X size={20} />
+                        <span className="sr-only">Cerrar modal</span>
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
+                    {children}
+                </div>
+
+                {/* Footer */}
+                {footer && (
+                    <div className="flex items-center justify-end p-6 border-t border-white/10 space-x-3 bg-white/5">
+                        {footer}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\components\ui\Badge.tsx ====================
+
+? EXISTS: .\backoffice_web\src\components\ui\Badge.tsx
+----- BEGIN CONTENT -----
+import React from 'react';
+import { cn } from '@/lib/utils';
+
+interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+    color?: 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'default';
+    variant?: 'solid' | 'flat' | 'outline';
+}
+
+export default function Badge({
+    children,
+    color = 'primary',
+    variant = 'flat',
+    className = '',
+    ...props
+}: BadgeProps) {
+    const baseStyle = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider';
+
+    const colors = {
+        primary: {
+            flat: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
+            solid: 'bg-blue-600 text-white',
+            outline: 'bg-transparent border border-blue-500/50 text-blue-400',
+        },
+        success: {
+            flat: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+            solid: 'bg-emerald-500 text-white',
+            outline: 'bg-transparent border border-emerald-500/50 text-emerald-400',
+        },
+        warning: {
+            flat: 'bg-amber-500/10 text-amber-500 border border-amber-500/20',
+            solid: 'bg-amber-500 text-white',
+            outline: 'bg-transparent border border-amber-500/50 text-amber-500',
+        },
+        danger: {
+            flat: 'bg-red-500/10 text-red-500 border border-red-500/20',
+            solid: 'bg-red-500 text-white',
+            outline: 'bg-transparent border border-red-500/50 text-red-500',
+        },
+        info: {
+            flat: 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20',
+            solid: 'bg-cyan-500 text-white',
+            outline: 'bg-transparent border border-cyan-500/50 text-cyan-400',
+        },
+        default: {
+            flat: 'bg-white/5 text-gray-400 border border-white/10',
+            solid: 'bg-gray-600 text-white',
+            outline: 'bg-transparent border border-gray-600 text-gray-400',
+        },
+    };
+
+    const selectedClass = colors[color][variant];
+
+    return (
+        <span className={cn(baseStyle, selectedClass, className)} {...props}>
+            {children}
+        </span>
+    );
+}
+
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\app\orders\page.tsx ====================
+
+? EXISTS: .\backoffice_web\src\app\orders\page.tsx
+----- BEGIN CONTENT -----
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  IconButton,
+  Tooltip,
+  MenuItem,
+  Select,
+  FormControl,
+} from '@mui/material';
+import {
+  Visibility as ViewIcon,
+  Refresh as RefreshIcon,
+  Search as SearchIcon,
+  Download as DownloadIcon,
+  TrendingUp as GainIcon,
+  Close as ClearIcon,
+} from '@mui/icons-material';
+import { useAuth } from '@/components/AuthProvider';
+import api from '@/lib/api';
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import Table from '@/components/ui/Table';
+import Input from '@/components/ui/Input';
+import Badge from '@/components/ui/Badge';
+
+interface Order {
+  public_id: number | string;
+  status: string;
+  origin_country: string;
+  dest_country: string;
+  amount_origin: number;
+  origin_currency: string;
+  payout_dest: number;
+  dest_currency: string;
+  profit_usdt: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+interface OrdersResponse {
+  count: number;
+  orders: Order[];
+}
+
+const statusColors: Record<string, 'default' | 'warning' | 'info' | 'success' | 'danger'> = {
+  pending_kyc: 'warning',
+  pending_origin: 'warning',
+  pending_dest: 'info',
+  completed: 'success',
+  cancelled: 'danger',
+  PAGADA: 'success',
+  CANCELADA: 'danger',
+  PENDIENTE: 'warning',
+  EN_PROCESO: 'info',
+};
+
+const statusLabels: Record<string, string> = {
+  pending_kyc: 'KYC Pendiente',
+  pending_origin: 'Pago Origen',
+  pending_dest: 'Pago Destino',
+  completed: 'Completada',
+  cancelled: 'Cancelada',
+  PAGADA: 'Pagada',
+  CANCELADA: 'Cancelada',
+  PENDIENTE: 'Pendiente',
+  EN_PROCESO: 'En Proceso',
+};
+
+export default function OrdersPage() {
+  const router = useRouter();
+  const { token, isReady } = useAuth();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [limit, setLimit] = useState(100);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [countryFilter, setCountryFilter] = useState('all');
+
+  const fetchOrders = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.get<OrdersResponse>(`/orders?limit=${limit}`);
+      const data = res.data;
+      const ordersArray = Array.isArray(data?.orders) ? data.orders : [];
+      setOrders(ordersArray);
+      setFilteredOrders(ordersArray);
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err.message || 'Error desconocido';
+      setError(message);
+      setOrders([]);
+      setFilteredOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [limit, token]);
+
+  useEffect(() => {
+    if (isReady && token) {
+      fetchOrders();
+    }
+  }, [isReady, token, fetchOrders]);
+
+  useEffect(() => {
+    let filtered = [...orders];
+    if (searchTerm) {
+      filtered = filtered.filter((order) => {
+        const search = searchTerm.toLowerCase();
+        return (
+          (order.public_id?.toString() || '').includes(search) ||
+          (order.origin_country || '').toLowerCase().includes(search) ||
+          (order.dest_country || '').toLowerCase().includes(search) ||
+          (order.status || '').toLowerCase().includes(search)
+        );
+      });
+    }
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((order) => order.status === statusFilter);
+    }
+    if (countryFilter !== 'all') {
+      filtered = filtered.filter(
+        (order) => order.origin_country === countryFilter || order.dest_country === countryFilter
+      );
+    }
+    setFilteredOrders(filtered);
+  }, [searchTerm, statusFilter, countryFilter, orders]);
+
+  const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value) || 100;
+    setLimit(val);
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setCountryFilter('all');
+  };
+
+  const exportCSV = () => {
+    const headers = ['ID', 'Estado', 'Origen', 'Destino', 'Monto Origen', 'Payout Destino', 'Ganancia', 'Fecha'];
+    const rows = filteredOrders.map(o => [
+      o.public_id,
+      o.status,
+      o.origin_country,
+      o.dest_country,
+      o.amount_origin,
+      o.payout_dest,
+      o.profit_usdt || 0,
+      new Date(o.created_at).toLocaleDateString('es-VE'),
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `ordenes_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  const uniqueStatuses = Array.from(new Set(orders.map(o => o.status).filter(Boolean)));
+  const uniqueCountries = Array.from(
+    new Set([
+      ...orders.map(o => o.origin_country).filter(Boolean),
+      ...orders.map(o => o.dest_country).filter(Boolean),
+    ])
+  ).sort();
+
+  const totalProfit = filteredOrders.reduce((sum, o) => sum + (o.profit_usdt || 0), 0);
+
+  const columns = [
+    { 
+      key: 'public_id', 
+      header: 'ID de Orden',
+      render: (o: Order) => (
+        <span className="font-bold text-blue-400">#{o.public_id}</span>
+      )
+    },
+    { 
+      key: 'status', 
+      header: 'Estado',
+      render: (o: Order) => (
+        <Badge color={statusColors[o.status] || 'default'}>
+          {statusLabels[o.status] || o.status}
+        </Badge>
+      )
+    },
+    { key: 'origin_country', header: 'Origen' },
+    { key: 'dest_country', header: 'Destino' },
+    { 
+      key: 'amount_origin', 
+      header: 'Monto Origen',
+      render: (o: Order) => (
+        <div className="text-right">
+          <div className="font-bold text-white">
+            {o.amount_origin?.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+          </div>
+          <div className="text-[10px] text-gray-500 font-bold uppercase">{o.origin_currency}</div>
+        </div>
+      )
+    },
+    { 
+      key: 'payout_dest', 
+      header: 'Payout Destino',
+      render: (o: Order) => (
+        <div className="text-right">
+          <div className="font-bold text-white">
+            {o.payout_dest?.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+          </div>
+          <div className="text-[10px] text-gray-500 font-bold uppercase">{o.dest_currency}</div>
+        </div>
+      )
+    },
+    { 
+      key: 'profit_usdt', 
+      header: 'Ganancia',
+      render: (o: Order) => (
+        <div className="flex items-center justify-end gap-1 font-bold text-emerald-400">
+          {(o.profit_usdt || 0) > 0 && <GainIcon sx={{ fontSize: 14 }} />}
+          ${(o.profit_usdt || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+        </div>
+      )
+    },
+    { 
+      key: 'created_at', 
+      header: 'Fecha',
+      render: (o: Order) => (
+        <div className="text-xs">
+          <div className="text-gray-300 font-medium">{new Date(o.created_at).toLocaleDateString('es-VE')}</div>
+          <div className="text-gray-500 font-medium">
+            {new Date(o.created_at).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })}
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'actions',
+      header: 'Acciones',
+      render: (o: Order) => (
+        <div className="flex justify-center">
+          <Tooltip title="Ver detalle">
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                router.push(`/orders/${o.public_id}`);
+              }}
+              className="text-white/40 hover:text-blue-400 hover:bg-white/5"
+            >
+              <ViewIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </div>
+      )
+    }
+  ];
+
+  if (!isReady || !token) return null;
+
+  return (
+    <div className="space-y-8 pb-10">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-4xl font-black text-white tracking-tight">
+            Órdenes
+          </h1>
+          <p className="text-gray-500 font-medium mt-1 flex items-center gap-2">
+            <span className="text-blue-400 font-bold">{filteredOrders.length}</span> de {orders.length} órdenes detectadas
+            {totalProfit > 0 && (
+              <>
+                <span className="text-gray-700">•</span>
+                <span>Ganancia acumulada: <span className="text-emerald-400 font-bold">${totalProfit.toFixed(2)}</span></span>
+              </>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <Button
+            variant="secondary"
+            icon={<DownloadIcon sx={{ fontSize: 18 }} />}
+            onClick={exportCSV}
+            disabled={filteredOrders.length === 0}
+            className="flex-1 md:flex-none"
+          >
+            Exportar CSV
+          </Button>
+          <Button
+            variant="primary"
+            icon={<RefreshIcon sx={{ fontSize: 18 }} />}
+            onClick={fetchOrders}
+            loading={loading}
+            className="flex-1 md:flex-none"
+          >
+            Actualizar
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters Bar */}
+      <Card className="p-4 md:p-6 bg-primary-800/20">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
+          <div className="md:col-span-5">
+            <Input
+              label="Búsqueda rápida"
+              placeholder="Buscar por ID, país, estado..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              icon={<SearchIcon size={20} />}
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <FormControl fullWidth size="small" variant="outlined" className="group">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Estado</label>
+              <Select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-white/5 border-white/10 text-white rounded-xl focus:ring-blue-500/20 group-hover:bg-white/10 transition-all font-medium text-sm"
+                MenuProps={{
+                  PaperProps: {
+                    className: "bg-primary-900 border border-white/10 text-white rounded-xl shadow-2xl"
+                  }
+                }}
+                sx={{
+                  color: 'white',
+                  '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.1) !important' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3b82f6 !important', borderWidth: '1px !important' },
+                  '.MuiSvgIcon-root': { color: 'rgba(255,255,255,0.4)' }
+                }}
+              >
+                <MenuItem value="all">Todos</MenuItem>
+                {uniqueStatuses.map(status => (
+                  <MenuItem key={status} value={status}>
+                    {statusLabels[status] || status}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </div>
+
+          <div className="md:col-span-2">
+            <FormControl fullWidth size="small" variant="outlined" className="group">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">País</label>
+              <Select
+                value={countryFilter}
+                onChange={(e) => setCountryFilter(e.target.value)}
+                className="bg-white/5 border-white/10 text-white rounded-xl focus:ring-blue-500/20 group-hover:bg-white/10 transition-all font-medium text-sm"
+                MenuProps={{
+                  PaperProps: {
+                    className: "bg-primary-900 border border-white/10 text-white rounded-xl shadow-2xl"
+                  }
+                }}
+                sx={{
+                  color: 'white',
+                  '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.1) !important' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3b82f6 !important', borderWidth: '1px !important' },
+                  '.MuiSvgIcon-root': { color: 'rgba(255,255,255,0.4)' }
+                }}
+              >
+                <MenuItem value="all">Todos</MenuItem>
+                {uniqueCountries.map(country => (
+                  <MenuItem key={country} value={country}>
+                    {country}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </div>
+
+          <div className="md:col-span-1">
+            <Input
+              label="Límite"
+              type="number"
+              value={limit}
+              onChange={handleLimitChange}
+              className="min-w-[80px]"
+            />
+          </div>
+
+          {(searchTerm || statusFilter !== 'all' || countryFilter !== 'all') && (
+            <div className="md:col-span-2 pb-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<ClearIcon size={16} />}
+                onClick={clearFilters}
+                className="w-full"
+              >
+                Limpiar
+              </Button>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {error && (
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 font-semibold flex items-center gap-3 animate-shake">
+          <ClearIcon />
+          {error}
+        </div>
+      )}
+
+      <Table
+        columns={columns}
+        data={filteredOrders}
+        loading={loading}
+        emptyMessage={orders.length === 0 ? 'No hay órdenes registradas' : 'No hay coincidencias para los filtros'}
+        className="animate-slide-up"
+      />
+    </div>
+  );
+}
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\app\origin\page.tsx ====================
+
+? EXISTS: .\backoffice_web\src\app\origin\page.tsx
+----- BEGIN CONTENT -----
+'use client';
+
+import React, { useState, useEffect, useCallback, ReactElement } from 'react';
+import {
+  Tooltip,
+  IconButton,
+  MenuItem,
+  Select,
+  FormControl,
+} from '@mui/material';
+import {
+  TrendingUp as InIcon,
+  TrendingDown as OutIcon,
+  AccountBalance as BalanceIcon,
+  Send as SendIcon,
+  Refresh as RefreshIcon,
+  InfoOutlined as InfoIcon,
+} from '@mui/icons-material';
+import { useAuth } from '@/components/AuthProvider';
+import api from '@/lib/api';
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import Table from '@/components/ui/Table';
+import Input from '@/components/ui/Input';
+import Badge from '@/components/ui/Badge';
+import Modal from '@/components/ui/Modal';
+
+interface DailyMovement {
+  country: string;
+  currency: string;
+  total_in: number;
+  total_out: number;
+  net_balance: number;
+}
+
+interface BalanceResponse {
+  movements?: DailyMovement[];
+  items?: DailyMovement[];
+  data?: DailyMovement[];
+}
+
+interface SweepRequest {
+  country: string;
+  currency: string;
+  amount: number;
+  tx_hash: string;
+  notes: string;
+}
+
+interface StatCardProps {
+  title: string;
+  value: string;
+  icon: ReactElement;
+  color: string;
+  bg?: string;
+  hint?: string;
+}
+
+function StatCard({ title, value, icon, color, bg, hint }: StatCardProps) {
+  return (
+    <Card className="flex-1 min-w-[260px] p-6 hover:-translate-y-1">
+      <div className="flex justify-between items-start">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{title}</span>
+            {hint && (
+              <Tooltip title={hint}>
+                <span className="cursor-help"><InfoIcon sx={{ fontSize: 14, color: 'rgba(255,255,255,0.2)' }} /></span>
+              </Tooltip>
+            )}
+          </div>
+          <h3 className="text-3xl font-black text-white mt-2 tracking-tight">{value}</h3>
+        </div>
+        <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
+          {React.cloneElement(icon, { sx: { color, fontSize: 24 } })}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+export default function OriginPage() {
+  const { token, isReady } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [movements, setMovements] = useState<DailyMovement[]>([]);
+  const [selectedDay, setSelectedDay] = useState('');
+  const [sweepDialogOpen, setSweepDialogOpen] = useState(false);
+  const [sweepForm, setSweepForm] = useState<SweepRequest>({
+    country: '',
+    currency: '',
+    amount: 0,
+    tx_hash: '',
+    notes: '',
+  });
+  const [sweepLoading, setSweepLoading] = useState(false);
+  const [sweepSuccess, setSweepSuccess] = useState('');
+
+  useEffect(() => {
+    const today = new Date();
+    const formatted = today.toISOString().split('T')[0];
+    setSelectedDay(formatted);
+  }, []);
+
+  const fetchBalance = useCallback(async () => {
+    if (!selectedDay || !token) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.get<BalanceResponse | DailyMovement[]>(`/origin_wallets/balance?day=${selectedDay}`);
+      const data = res.data;
+      const movArray = Array.isArray(data) ? data : (data.movements || data.items || data.data || []);
+      setMovements(movArray);
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err.message || 'Error desconocido';
+      setError(message);
+      setMovements([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDay, token]);
+
+  useEffect(() => {
+    if (isReady && token && selectedDay) {
+      fetchBalance();
+    }
+  }, [isReady, token, selectedDay, fetchBalance]);
+
+  const openSweepDialog = (country: string, currency: string) => {
+    setSweepForm({ country, currency, amount: 0, tx_hash: '', notes: '' });
+    setSweepDialogOpen(true);
+    setSweepSuccess('');
+  };
+
+  const handleSweepSubmit = async () => {
+    setSweepLoading(true);
+    setError('');
+    setSweepSuccess('');
+    try {
+      await api.post('/origin_wallets/sweeps', sweepForm);
+      setSweepSuccess('Sweep registrado exitosamente');
+      setSweepDialogOpen(false);
+      fetchBalance();
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err.message || 'Error desconocido';
+      setError(message);
+    } finally {
+      setSweepLoading(false);
+    }
+  };
+
+  const safeMovements = Array.isArray(movements) ? movements : [];
+  const totalIn = safeMovements.reduce((sum, m) => sum + (m.total_in || 0), 0);
+  const totalOut = safeMovements.reduce((sum, m) => sum + (m.total_out || 0), 0);
+  const totalNet = safeMovements.reduce((sum, m) => sum + (m.net_balance || 0), 0);
+
+  const columns = [
+    { key: 'country', header: 'País', render: (m: DailyMovement) => <span className="font-bold">{m.country}</span> },
+    { key: 'currency', header: 'Moneda', render: (m: DailyMovement) => <Badge color="default">{m.currency}</Badge> },
+    { 
+      key: 'total_in', 
+      header: 'Entradas', 
+      render: (m: DailyMovement) => (
+        <span className="text-emerald-400 font-bold">
+          ${(m.total_in || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+        </span>
+      )
+    },
+    { 
+      key: 'total_out', 
+      header: 'Salidas', 
+      render: (m: DailyMovement) => (
+        <span className="text-rose-400 font-bold">
+          ${(m.total_out || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+        </span>
+      )
+    },
+    { 
+      key: 'net_balance', 
+      header: 'Balance Neto', 
+      render: (m: DailyMovement) => (
+        <span className={`font-black ${m.net_balance >= 0 ? 'text-blue-400' : 'text-rose-400'}`}>
+          ${(m.net_balance || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+        </span>
+      )
+    },
+    {
+      key: 'actions',
+      header: 'Gestión de Fondos',
+      render: (m: DailyMovement) => (
+        <div className="flex justify-center">
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<SendIcon sx={{ fontSize: 14 }} />}
+            onClick={() => openSweepDialog(m.country, m.currency)}
+          >
+            Sweep
+          </Button>
+        </div>
+      )
+    }
+  ];
+
+  if (!isReady || !token) return null;
+
+  return (
+    <div className="space-y-8 pb-10">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-4xl font-black text-white tracking-tight">
+            Billeteras Origen
+          </h1>
+          <p className="text-gray-500 font-medium mt-1">
+            Entradas y salidas por país y moneda para el día seleccionado
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          icon={<RefreshIcon sx={{ fontSize: 18 }} />}
+          onClick={fetchBalance}
+          loading={loading}
+        >
+          Actualizar
+        </Button>
+      </div>
+
+      <Card className="p-4 bg-primary-800/20">
+        <div className="flex flex-col md:flex-row items-end gap-6">
+          <Input
+            type="date"
+            label="Fecha de Consulta"
+            value={selectedDay}
+            onChange={(e) => setSelectedDay(e.target.value)}
+            className="w-full md:w-60"
+          />
+          <Button variant="secondary" onClick={fetchBalance} loading={loading}>
+            Consultar Billeteras
+          </Button>
+          <div className="flex-1" />
+          <Badge color="info" className="px-4 py-1.5">
+            Registros: {safeMovements.length}
+          </Badge>
+        </div>
+      </Card>
+
+      {error && (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-500 font-bold animate-shake">
+          {error}
+        </div>
+      )}
+
+      {sweepSuccess && (
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-500 font-bold flex justify-between items-center">
+          {sweepSuccess}
+          <button onClick={() => setSweepSuccess('')} className="bg-emerald-500/10 hover:bg-emerald-500/20 p-1 rounded-lg">
+            <OutIcon size={16} />
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <StatCard
+          title="Total Entradas"
+          value={`$${totalIn.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+          icon={<InIcon sx={{ fontSize: 24 }} />}
+          color="#10b981"
+          hint="Suma total de entradas del día en USD aproximado"
+        />
+        <StatCard
+          title="Total Salidas (Sweeps)"
+          value={`$${totalOut.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+          icon={<OutIcon sx={{ fontSize: 24 }} />}
+          color="#f43f5e"
+          hint="Suma total de salidas/sweeps del día hacia Binance u otras carteras"
+        />
+        <StatCard
+          title="Balance de Origen"
+          value={`$${totalNet.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+          icon={<BalanceIcon sx={{ fontSize: 24 }} />}
+          color={totalNet >= 0 ? '#3b82f6' : '#f43f5e'}
+          hint="Fondos disponibles en origen (Entradas - Salidas)"
+        />
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="p-6 border-b border-white/5 bg-white/5">
+          <h2 className="text-xl font-black text-white">Detalle de Liquidez en Origen</h2>
+          <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Reporte consolidado por moneda</p>
+        </div>
+        <Table
+          columns={columns}
+          data={safeMovements}
+          loading={loading}
+          emptyMessage="No se detectaron movimientos para la fecha seleccionada"
+        />
+      </Card>
+
+      <Modal
+        isOpen={sweepDialogOpen}
+        onClose={() => setSweepDialogOpen(false)}
+        title="Registrar Sweep (Salida a Binance)"
+        maxWidth="sm"
+        footer={(
+          <div className="flex gap-3 justify-end w-full">
+            <Button variant="ghost" onClick={() => setSweepDialogOpen(false)}>Cancelar</Button>
+            <Button
+              variant="primary"
+              onClick={handleSweepSubmit}
+              loading={sweepLoading}
+              disabled={!sweepForm.amount || !sweepForm.tx_hash}
+            >
+              Confirmar Envío
+            </Button>
+          </div>
+        )}
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="País" value={sweepForm.country} disabled />
+            <Input label="Moneda" value={sweepForm.currency} disabled />
+          </div>
+          <Input
+            label="Monto de Salida"
+            type="number"
+            value={sweepForm.amount}
+            onChange={(e) => setSweepForm({ ...sweepForm, amount: parseFloat(e.target.value) || 0 })}
+            required
+            helperText="El monto será restado del balance disponible en origen"
+          />
+          <Input
+            label="TX Hash / Referencia"
+            value={sweepForm.tx_hash}
+            onChange={(e) => setSweepForm({ ...sweepForm, tx_hash: e.target.value })}
+            required
+            placeholder="Hash de la transacción en Binance/Blockchain"
+          />
+          <Input
+            label="Notas Adicionales"
+            value={sweepForm.notes}
+            onChange={(e) => setSweepForm({ ...sweepForm, notes: e.target.value })}
+            multiline
+            rows={3}
+            placeholder="Detalles sobre el envío..."
+          />
+        </div>
+      </Modal>
+    </div>
+  );
+}
+----- END CONTENT -----
+
+==================== FILE: .\backoffice_web\src\app\daily-close\page.tsx ====================
+
+? EXISTS: .\backoffice_web\src\app\daily-close\page.tsx
+----- BEGIN CONTENT -----
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Refresh as RefreshIcon,
+  TrendingUp as InIcon,
+  TrendingDown as OutIcon,
+  AccountBalance as BalanceIcon,
+  Warning as WarningIcon,
+  CheckCircle as CheckIcon,
+  Download as DownloadIcon,
+  Lock as LockIcon,
+} from '@mui/icons-material';
+import { useAuth } from '@/components/AuthProvider';
+import api from '@/lib/api';
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import Table from '@/components/ui/Table';
+import Input from '@/components/ui/Input';
+import Badge from '@/components/ui/Badge';
+import Modal from '@/components/ui/Modal';
+
+interface CloseReportItem {
+  country: string;
+  currency: string;
+  total_in: number;
+  total_out: number;
+  net_balance: number;
+}
+
+interface CloseReportResponse {
+  report?: CloseReportItem[];
+  items?: CloseReportItem[];
+  data?: CloseReportItem[];
+}
+
+interface CloseResponse {
+  status: string;
+  day: string;
+  message: string;
+  closed_at?: string;
+}
+
+export default function DailyClosePage() {
+  const { token, isReady } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedDay, setSelectedDay] = useState('');
+  const [report, setReport] = useState<CloseReportItem[]>([]);
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [closeLoading, setCloseLoading] = useState(false);
+  const [closeResult, setCloseResult] = useState<CloseResponse | null>(null);
+
+  useEffect(() => {
+    const today = new Date();
+    today.setDate(today.getDate() - 1);
+    const formatted = today.toISOString().split('T')[0];
+    setSelectedDay(formatted);
+  }, []);
+
+  const fetchReport = useCallback(async () => {
+    if (!selectedDay || !token) return;
+    setLoading(true);
+    setError('');
+    setCloseResult(null);
+    try {
+      const res = await api.get<CloseReportResponse | CloseReportItem[]>(`/daily_closure/report?day=${selectedDay}`);
+      const data = res.data;
+      const reportArray = Array.isArray(data) ? data : (data.report || data.items || data.data || []);
+      setReport(reportArray);
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err.message || 'Error desconocido';
+      setError(message);
+      setReport([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDay, token]);
+
+  useEffect(() => {
+    if (isReady && token && selectedDay) {
+      fetchReport();
+    }
+  }, [isReady, token, selectedDay, fetchReport]);
+
+  const handleCloseDay = async () => {
+    setCloseLoading(true);
+    setError('');
+    try {
+      const res = await api.post<CloseResponse>('/daily_closure/close', { day: selectedDay });
+      setCloseResult(res.data);
+      setCloseDialogOpen(false);
+      fetchReport();
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err.message || 'Error desconocido';
+      setError(message);
+    } finally {
+      setCloseLoading(false);
+    }
+  };
+
+  const exportCSV = () => {
+    if (!Array.isArray(report) || report.length === 0) return;
+    const headers = ['Pais', 'Moneda', 'Entradas', 'Salidas', 'Balance Neto'];
+    const rows = report.map(r => [
+      r.country,
+      r.currency,
+      (r.total_in || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 }),
+      (r.total_out || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 }),
+      (r.net_balance || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 }),
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `cierre_${selectedDay}.csv`;
+    link.click();
+  };
+
+  const safeReport = Array.isArray(report) ? report : [];
+  const totalIn = safeReport.reduce((sum, r) => sum + (r.total_in || 0), 0);
+  const totalOut = safeReport.reduce((sum, r) => sum + (r.total_out || 0), 0);
+  const totalNet = safeReport.reduce((sum, r) => sum + (r.net_balance || 0), 0);
+
+  const columns = [
+    { key: 'country', header: 'País', render: (item: CloseReportItem) => <span className="font-bold">{item.country}</span> },
+    { key: 'currency', header: 'Moneda', render: (item: CloseReportItem) => <Badge color="default">{item.currency}</Badge> },
+    { 
+      key: 'total_in', 
+      header: 'Entradas', 
+      render: (item: CloseReportItem) => (
+        <span className="text-emerald-400 font-bold">
+          ${(item.total_in || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+        </span>
+      )
+    },
+    { 
+      key: 'total_out', 
+      header: 'Salidas', 
+      render: (item: CloseReportItem) => (
+        <span className="text-rose-400 font-bold">
+          ${(item.total_out || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+        </span>
+      )
+    },
+    { 
+      key: 'net_balance', 
+      header: 'Balance Neto', 
+      render: (item: CloseReportItem) => (
+        <span className={`font-black ${item.net_balance >= 0 ? 'text-blue-400' : 'text-rose-400'}`}>
+          ${(item.net_balance || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+        </span>
+      )
+    }
+  ];
+
+  if (!isReady || !token) return null;
+
+  return (
+    <div className="space-y-8 pb-10">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-4xl font-black text-white tracking-tight">
+            Cierre Diario
+          </h1>
+          <p className="text-gray-500 font-medium mt-1">
+            Reporte de cierre y consolidación operativa por día
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          icon={<RefreshIcon sx={{ fontSize: 18 }} />}
+          onClick={fetchReport}
+          loading={loading}
+        >
+          Actualizar
+        </Button>
+      </div>
+
+      <Card className="p-4 bg-primary-800/20">
+        <div className="flex flex-col md:flex-row items-end gap-6">
+          <Input
+            type="date"
+            label="Día de Operación"
+            value={selectedDay}
+            onChange={(e) => setSelectedDay(e.target.value)}
+            className="w-full md:w-60"
+          />
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={fetchReport} loading={loading}>
+              Consultar Reporte
+            </Button>
+            <Button
+              variant="secondary"
+              icon={<DownloadIcon sx={{ fontSize: 18 }} />}
+              onClick={exportCSV}
+              disabled={safeReport.length === 0}
+            >
+              Exportar
+            </Button>
+          </div>
+          <div className="flex-1" />
+          <Badge color="info" className="px-4 py-1.5">
+            Periodo: {selectedDay}
+          </Badge>
+        </div>
+      </Card>
+
+      {error && (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-500 font-bold animate-shake">
+          {error}
+        </div>
+      )}
+
+      {closeResult && (
+        <div className={`p-4 rounded-2xl border flex flex-col gap-1 ${
+          closeResult.status === 'already_closed' 
+            ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' 
+            : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+        }`}>
+          <div className="flex items-center gap-2 font-bold">
+            <CheckIcon size={20} />
+            {closeResult.message}
+          </div>
+          {closeResult.closed_at && (
+            <span className="text-xs opacity-70 ml-7">
+              Sincronizado el: {new Date(closeResult.closed_at).toLocaleString('es-VE')}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <KPIDisplay
+          title="Total Entradas"
+          value={`$${totalIn.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+          icon={<InIcon sx={{ fontSize: 24 }} />}
+          color="#10b981"
+        />
+        <KPIDisplay
+          title="Total Salidas"
+          value={`$${totalOut.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+          icon={<OutIcon sx={{ fontSize: 24 }} />}
+          color="#f43f5e"
+        />
+        <KPIDisplay
+          title="Balance Neto"
+          value={`$${totalNet.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`}
+          icon={<BalanceIcon sx={{ fontSize: 24 }} />}
+          color={totalNet >= 0 ? '#3b82f6' : '#f43f5e'}
+        />
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="p-6 border-b border-white/5 bg-white/5">
+          <h2 className="text-xl font-black text-white">Detalle por País / Moneda</h2>
+          <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Corte de caja para el día {selectedDay}</p>
+        </div>
+        <Table
+          columns={columns}
+          data={safeReport}
+          loading={loading}
+          emptyMessage="No hay registros para la fecha seleccionada"
+        />
+      </Card>
+
+      <Card className="p-8 border-amber-500/30 bg-amber-500/5 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="flex items-center gap-4">
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500">
+            <WarningIcon size={32} />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-amber-500">Acción de Cierre</h3>
+            <p className="text-amber-500/70 font-medium">Bloquea las operaciones del día y genera el reporte histórico final.</p>
+          </div>
+        </div>
+        <Button
+          variant="primary"
+          size="lg"
+          icon={<LockIcon size={20} />}
+          onClick={() => setCloseDialogOpen(true)}
+          disabled={safeReport.length === 0}
+          className="bg-amber-600 hover:bg-amber-700 border-amber-500 shadow-amber-900/40 w-full md:w-auto"
+        >
+          Cerrar Día {selectedDay}
+        </Button>
+      </Card>
+
+      <Modal
+        isOpen={closeDialogOpen}
+        onClose={() => setCloseDialogOpen(false)}
+        title="Confirmar Cierre Maestro"
+        footer={(
+          <div className="flex gap-3 justify-end w-full">
+            <Button variant="ghost" onClick={() => setCloseDialogOpen(false)}>Cancelar</Button>
+            <Button
+              variant="primary"
+              icon={<LockIcon size={18} />}
+              onClick={handleCloseDay}
+              loading={closeLoading}
+            >
+              Confirmar Cierre
+            </Button>
+          </div>
+        )}
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-500 font-bold text-center">
+            Atención: Estás cerrando el día {selectedDay}
+          </div>
+          <p className="text-gray-400 leading-relaxed text-center">
+            Este proceso consolidará todas las entradas y salidas registradas. 
+            El reporte resultante servirá como base para la tesorería central.
+          </p>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+function KPIDisplay({ title, value, icon, color }: { title: string, value: string, icon: any, color: string }) {
+  return (
+    <Card className="flex-1 min-w-[260px] p-6">
+      <div className="flex justify-between items-start">
+        <div>
+          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{title}</span>
+          <h3 className="text-3xl font-black text-white mt-2 tracking-tight">{value}</h3>
+        </div>
+        <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
+          {React.cloneElement(icon, { sx: { color, fontSize: 24 } })}
+        </div>
+      </div>
+    </Card>
+  );
+}
+----- END CONTENT -----
+
+==================== FILE: .\operator-web\src\app\globals.css ====================
+
+? EXISTS: .\operator-web\src\app\globals.css
+----- END CONTENT -----
+----- END CONTENT -----
+
+==================== FILE: .\operator-web\src\app\(dashboard)\layout.tsx ====================
+
+? EXISTS: .\operator-web\src\app\(dashboard)\layout.tsx
+----- BEGIN CONTENT -----
+'use client';
+
+import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
+import {
+    LayoutDashboard,
+    Users,
+    FileText,
+    Wallet,
+    User,
+    Trophy,
+    TrendingUp,
+    LogOut,
+    Menu,
+    X
+} from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+const menuItems = [
+    { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
+    { href: '/clientes', icon: Users, label: 'Contactos' },
+    { href: '/ordenes', icon: FileText, label: 'Mis Órdenes' },
+    { href: '/billetera', icon: Wallet, label: 'Billetera' },
+    // { href: '/ranking', icon: Trophy, label: 'Ranking' },
+    { href: '/perfil', icon: User, label: 'Mi Perfil' },
+];
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+    const router = useRouter();
+    const pathname = usePathname();
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+
+    useEffect(() => {
+        // Ejecutar SOLO una vez al montar el componente
+        if (hasCheckedAuth) return;
+
+        const token = localStorage.getItem('token');
+        const cookieToken = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('auth_token='))
+            ?.split('=')[1];
+
+        if (!token && !cookieToken) {
+            // NO usar window.location.href - dejar que middleware maneje
+            setIsAuthenticated(false);
+        } else {
+            setIsAuthenticated(true);
+        }
+
+        setIsLoading(false);
+        setHasCheckedAuth(true);
+    }, []); // Array vacío = ejecutar SOLO una vez
+
+    const handleLogout = () => {
+        // Limpiar todo del localStorage
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('operatorData');
+        localStorage.clear();
+        document.cookie = "auth_token=; path=/; max-age=0";
+
+        // Forzar recarga completa para limpiar estado
+        window.location.replace('/login');
+    };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-black">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                </div>
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
+        return null;
+    }
+
+    return (
+        <div className="min-h-screen flex">
+            {/* Sidebar Desktop */}
+            <aside className="hidden lg:flex sidebar w-64 flex-col fixed h-full z-40">
+                {/* Logo */}
+                <div className="p-6 border-b border-white/10">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-xl flex items-center justify-center">
+                            <TrendingUp className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-white">SendMax</h1>
+                            <p className="text-xs text-gray-400">Panel de Operador</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Menu */}
+                <nav className="flex-1 py-6">
+                    {menuItems.map((item) => (
+                        <Link
+                            key={item.href}
+                            href={item.href}
+                            className={`sidebar-item ${pathname === item.href ? 'active' : ''}`}
+                        >
+                            <item.icon className="w-5 h-5" />
+                            <span>{item.label}</span>
+                        </Link>
+                    ))}
+                </nav>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-white/10">
+                    <button onClick={handleLogout} className="sidebar-item w-full text-red-400 hover:bg-red-500/10">
+                        <LogOut className="w-5 h-5" />
+                        <span>Cerrar Sesión</span>
+                    </button>
+                </div>
+            </aside>
+
+            {/* Mobile Header */}
+            <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-primary-800/95 backdrop-blur-lg border-b border-white/10 px-4 py-3">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-lg flex items-center justify-center">
+                            <TrendingUp className="w-5 h-5 text-white" />
+                        </div>
+                        <span className="font-bold text-white">SendMax</span>
+                    </div>
+                    <button
+                        onClick={() => setSidebarOpen(!sidebarOpen)}
+                        className="p-2 hover:bg-white/10 rounded-lg"
+                    >
+                        {sidebarOpen ? <X className="w-6 h-6 text-white" /> : <Menu className="w-6 h-6 text-white" />}
+                    </button>
+                </div>
+            </div>
+
+            {/* Mobile Sidebar */}
+            {sidebarOpen && (
+                <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setSidebarOpen(false)}>
+                    <aside className="sidebar w-64 h-full" onClick={(e) => e.stopPropagation()}>
+                        <div className="pt-16">
+                            <nav className="py-6">
+                                {menuItems.map((item) => (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        onClick={() => setSidebarOpen(false)}
+                                        className={`sidebar-item ${pathname === item.href ? 'active' : ''}`}
+                                    >
+                                        <item.icon className="w-5 h-5" />
+                                        <span>{item.label}</span>
+                                    </Link>
+                                ))}
+                            </nav>
+                        </div>
+                    </aside>
+                </div>
+            )}
+
+            {/* Main Content */}
+            <main className="flex-1 lg:ml-64 pt-16 lg:pt-0 min-h-screen">
+                {children}
+            </main>
+        </div>
+    );
+}
+----- END CONTENT -----
+
+==================== FILE: .\operator-web\src\app\(dashboard)\page.tsx ====================
+
+? EXISTS: .\operator-web\src\app\(dashboard)\page.tsx
+----- BEGIN CONTENT -----
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import api from '@/lib/api'; // FIXED: Importar cliente API para autorizar peticiones
+import { safeToFixed } from '@/lib/utils';
+import {
+    TrendingUp,
+    Users,
+    Wallet,
+    ArrowUpRight,
+    Clock,
+    Trophy,
+    Target,
+    Zap
+} from 'lucide-react';
+
+// Interfaces
+interface Rate {
+    origin: string;
+    dest: string;
+    rate: number;
+    commission_pct: number;
+}
+
+interface TopClient {
+    name: string;
+    phone: string;
+    total_volume_usdt: number;
+    total_orders: number;
+}
+
+interface OrderQueue {
+    public_id: number;
+    client_name: string;
+    amount_origin: number;
+    origin_country: string;
+    dest_country: string;
+    status: string;
+    created_at: string;
+}
+
+interface Stats {
+    daily_volume_usdt: number;
+    monthly_volume_usdt: number;
+    total_orders: number;
+    pending_orders: number;
+    trust_score: number;
+    rank_position: number;
+}
+
+interface RankingEntry {
+    position: number;
+    alias: string;
+    trust_score: number;
+    total_orders: number;
+    monthly_volume_usdt: number;
+    is_current_user: boolean;
+}
+
+// Banderas de países
+const countryFlags: Record<string, string> = {
+    'VENEZUELA': '🇻🇪',
+    'COLOMBIA': '🇨🇴',
+    'ARGENTINA': '🇦🇷',
+    'CHILE': '🇨🇱',
+    'PERU': '🇵🇪',
+    'MEXICO': '🇲🇽',
+    'ECUADOR': '🇪🇨',
+    'PANAMA': '🇵🇦',
+    'USA': '🇺🇸',
+    'SPAIN': '🇪🇸',
+};
+
+export default function Dashboard() {
+    const [rates, setRates] = useState<Rate[]>([]);
+    const [topClients, setTopClients] = useState<TopClient[]>([]);
+    const [orderQueue, setOrderQueue] = useState<OrderQueue[]>([]);
+    const [stats, setStats] = useState<Stats | null>(null);
+    const [ranking, setRanking] = useState<RankingEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+    const router = useRouter();
+
+    useEffect(() => {
+        let mounted = true;
+
+        const loadInitialData = async () => {
+            if (mounted) {
+                await fetchAllData();
+            }
+        };
+
+        loadInitialData();
+
+        const interval = setInterval(() => {
+            if (mounted) {
+                fetchRates();
+            }
+        }, 30000);
+
+        return () => {
+            mounted = false;
+            clearInterval(interval);
+        };
+    }, []);
+
+    const fetchAllData = async () => {
+        setLoading(true);
+        await Promise.all([
+            fetchRates(),
+            fetchTopClients(),
+            fetchOrderQueue(),
+            fetchStats(),
+            fetchRanking()
+        ]);
+        setLoading(false);
+    };
+
+    const fetchRates = async () => {
+        try {
+            const res = await api.get('/api/rates/current'); // FIXED: Usar api.get
+            setRates(res.data.rates?.slice(0, 8) || []);
+        } catch (err) {
+            console.error('Error fetching rates:', err);
+        }
+    };
+
+    const fetchTopClients = async () => {
+        try {
+            const res = await api.get('/api/operators/dashboard/top-clients?limit=5'); // FIXED: Usar api.get
+            setTopClients(res.data || []);
+        } catch (err) {
+            console.error('Error fetching top clients:', err);
+        }
+    };
+
+    const fetchOrderQueue = async () => {
+        try {
+            const res = await api.get('/api/operators/orders/queue'); // FIXED: Usar api.get
+            setOrderQueue(res.data?.slice(0, 5) || []);
+        } catch (err) {
+            console.error('Error fetching orders:', err);
+        }
+    };
+
+    const fetchStats = async () => {
+        try {
+            const res = await api.get('/api/operators/dashboard/stats'); // FIXED: Usar api.get
+            console.log("Datos del backend:", res.data); // <-- AGREGADO POR ANTIGRAVITI
+            setStats(res.data);
+        } catch (err) {
+            console.error('Error fetching stats:', err);
+        }
+    };
+
+    const fetchRanking = async () => {
+        try {
+            const res = await api.get('/api/ranking/operators?limit=10'); // FIXED: Usar api.get
+            setRanking(res.data || []);
+        } catch (err) {
+            console.error('Error fetching ranking:', err);
+        }
+    };
+
+    const formatCurrency = (value: number) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 2
+        }).format(value);
+    };
+
+    const getStatusColor = (status: string) => {
+        switch (status.toUpperCase()) {
+            case 'COMPLETADA': return 'badge-success';
+            case 'PENDIENTE':
+            case 'CREADA': return 'badge-warning';
+            case 'CANCELADA': return 'badge-error';
+            default: return 'badge-info';
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-gray-300">Cargando dashboard...</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="p-6 space-y-6 animate-slide-up">
+            {/* Header con Stats */}
+            <div className="flex items-center justify-between mb-8">
+                <div>
+                    <h1 className="text-3xl font-bold text-white mb-2">Panel de Operador</h1>
+                    <p className="text-gray-400">Bienvenido de vuelta. Aquí está tu resumen.</p>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-green-500/20 rounded-full border border-green-500/30">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span className="text-green-400 text-sm font-medium">Conectado</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="card-glass p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 bg-blue-500/20 rounded-xl">
+                            <Wallet className="w-6 h-6 text-blue-400" />
+                        </div>
+                        <span className="badge badge-success">
+                            <ArrowUpRight className="w-3 h-3 inline mr-1" />
+                            +12%
+                        </span>
+                    </div>
+                    <h3 className="text-gray-400 text-sm font-medium mb-1">Volumen Diario</h3>
+                    <p className="text-2xl font-bold text-white">{formatCurrency(stats?.daily_volume_usdt || 0)}</p>
+                </div>
+
+                <div className="card-glass p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 bg-green-500/20 rounded-xl">
+                            <TrendingUp className="w-6 h-6 text-green-400" />
+                        </div>
+                        <span className="badge badge-success">
+                            <ArrowUpRight className="w-3 h-3 inline mr-1" />
+                            +8%
+                        </span>
+                    </div>
+                    <h3 className="text-gray-400 text-sm font-medium mb-1">Volumen Mensual</h3>
+                    <p className="text-2xl font-bold text-white">{formatCurrency(stats?.monthly_volume_usdt || 0)}</p>
+                </div>
+
+                <div className="card-glass p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 bg-purple-500/20 rounded-xl">
+                            <Users className="w-6 h-6 text-purple-400" />
+                        </div>
+                    </div>
+                    <h3 className="text-gray-400 text-sm font-medium mb-1">Total Órdenes</h3>
+                    <p className="text-2xl font-bold text-white">{stats?.total_orders || 0}</p>
+                    <p className="text-sm text-yellow-400 mt-2">
+                        <Clock className="w-3 h-3 inline mr-1" />
+                        {stats?.pending_orders || 0} pendientes
+                    </p>
+                </div>
+
+                <div className="card-glass p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 bg-yellow-500/20 rounded-xl">
+                            <Trophy className="w-6 h-6 text-yellow-400" />
+                        </div>
+                        <span className="badge badge-warning">#{stats?.rank_position || '-'}</span>
+                    </div>
+                    <h3 className="text-gray-400 text-sm font-medium mb-1">Trust Score</h3>
+                    <p className="text-2xl font-bold text-white">{safeToFixed(stats?.trust_score, 1)}%</p>
+                </div>
+            </div>
+
+            {/* Main Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* Tasas en Tiempo Real - Columna Grande */}
+                <div className="lg:col-span-2 card-glass p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Zap className="w-5 h-5 text-blue-400" />
+                            Tasas en Tiempo Real
+                        </h2>
+                        <div className="flex items-center gap-2 text-sm text-gray-400">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            Actualizando cada 30s
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {rates.map((rate, index) => (
+                            <div
+                                key={index}
+                                className="p-4 bg-white/5 rounded-xl border border-white/10 hover:border-blue-500/50 transition-all"
+                            >
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xl">{countryFlags[rate.origin] || '🌍'}</span>
+                                    <span className="text-gray-400">→</span>
+                                    <span className="text-xl">{countryFlags[rate.dest] || '🌍'}</span>
+                                </div>
+                                <p className="text-xs text-gray-400 mb-1">{rate.origin} → {rate.dest}</p>
+                                <p className="text-lg font-bold text-white">{safeToFixed(rate.rate, 4)}</p>
+                                <p className="text-xs text-green-400">+{safeToFixed(rate.commission_pct, 1)}% comisión</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Ranking de Operadores */}
+                <div className="card-glass p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Trophy className="w-5 h-5 text-yellow-400" />
+                            Top Operadores
+                        </h2>
+                    </div>
+                    <div className="space-y-3">
+                        {ranking.slice(0, 5).map((entry, index) => (
+                            <div
+                                key={index}
+                                className={`flex items-center gap-4 p-3 rounded-xl transition-all ${entry.is_current_user
+                                    ? 'bg-blue-500/20 border border-blue-500/50'
+                                    : 'bg-white/5 hover:bg-white/10'
+                                    }`}
+                            >
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${index === 0 ? 'bg-yellow-500 text-black' :
+                                    index === 1 ? 'bg-gray-400 text-black' :
+                                        index === 2 ? 'bg-orange-600 text-white' :
+                                            'bg-white/10 text-white'
+                                    }`}>
+                                    {entry.position}
+                                </div>
+                                <div className="flex-1">
+                                    <p className="font-medium text-white">{entry.alias || 'Operador'}</p>
+                                    <p className="text-xs text-gray-400">{entry.total_orders} órdenes</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm font-bold text-white">{safeToFixed(entry.trust_score, 0)}%</p>
+                                    <p className="text-xs text-green-400">{formatCurrency(entry.monthly_volume_usdt)}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Segunda fila */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                {/* Top Clientes */}
+                <div className="card-glass p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Users className="w-5 h-5 text-purple-400" />
+                            Top 5 Clientes
+                        </h2>
+                        <button className="text-sm text-blue-400 hover:text-blue-300">Ver todos →</button>
+                    </div>
+                    <div className="space-y-4">
+                        {topClients.length === 0 ? (
+                            <p className="text-gray-400 text-center py-8">No hay clientes aún</p>
+                        ) : (
+                            topClients.map((client, index) => (
+                                <div key={index} className="flex items-center gap-4 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-all">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
+                                        {client.name?.charAt(0) || '?'}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-medium text-white">{client.name || 'Sin nombre'}</p>
+                                        <p className="text-sm text-gray-400">{client.total_orders} órdenes</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-bold text-green-400">{formatCurrency(client.total_volume_usdt)}</p>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                {/* Órdenes en Cola */}
+                <div className="card-glass p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Clock className="w-5 h-5 text-cyan-400" />
+                            Órdenes en Cola
+                        </h2>
+                        <button className="btn-primary text-sm py-2 px-4">
+                            + Nueva Orden
+                        </button>
+                    </div>
+                    <div className="space-y-3">
+                        {orderQueue.length === 0 ? (
+                            <p className="text-gray-400 text-center py-8">No hay órdenes pendientes</p>
+                        ) : (
+                            orderQueue.map((order, index) => (
+                                <div key={index} className="flex items-center gap-4 p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-all">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">{countryFlags[order.origin_country] || '🌍'}</span>
+                                        <span className="text-gray-400">→</span>
+                                        <span className="text-xl">{countryFlags[order.dest_country] || '🌍'}</span>
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-medium text-white">{order.client_name}</p>
+                                        <p className="text-sm text-gray-400">#{order.public_id}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-bold text-white">{formatCurrency(order.amount_origin)}</p>
+                                        <span className={`badge ${getStatusColor(order.status)}`}>
+                                            {order.status}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Acciones Rápidas */}
+            <div className="card-glass p-6">
+                <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                    <Target className="w-5 h-5 text-blue-400" />
+                    Acciones Rápidas
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <button className="p-6 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl hover:from-blue-500 hover:to-blue-600 transition-all group">
+                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                            <Wallet className="w-6 h-6 text-white" />
+                        </div>
+                        <p className="font-bold text-white">Nueva Orden</p>
+                        <p className="text-sm text-blue-200">Crear envío</p>
+                    </button>
+
+                    <button className="p-6 bg-gradient-to-br from-green-600 to-green-700 rounded-xl hover:from-green-500 hover:to-green-600 transition-all group">
+                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                            <Users className="w-6 h-6 text-white" />
+                        </div>
+                        <p className="font-bold text-white">Agregar Cliente</p>
+                        <p className="text-sm text-green-200">Nuevo contacto</p>
+                    </button>
+
+                    <button className="p-6 bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl hover:from-purple-500 hover:to-purple-600 transition-all group">
+                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                            <TrendingUp className="w-6 h-6 text-white" />
+                        </div>
+                        <p className="font-bold text-white">Ver Tasas</p>
+                        <p className="text-sm text-purple-200">Cotizaciones</p>
+                    </button>
+
+                    <button
+                        onClick={() => router.push('/ranking')}
+                        className="p-6 bg-gradient-to-br from-cyan-600 to-cyan-700 rounded-xl hover:from-cyan-500 hover:to-cyan-600 transition-all group"
+                    >
+                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                            <Trophy className="w-6 h-6 text-white" />
+                        </div>
+                        <p className="font-bold text-white">Mi Ranking</p>
+                        <p className="text-sm text-cyan-200">Ver posición</p>
+                    </button>
+
+                    <button
+                        onClick={() => router.push('/billetera')}
+                        className="p-6 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-xl hover:from-indigo-500 hover:to-indigo-600 transition-all group"
+                    >
+                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                            <Wallet className="w-6 h-6 text-white" />
+                        </div>
+                        <p className="font-bold text-white">Retirar</p>
+                        <p className="text-sm text-indigo-200">Cobrar ganancias</p>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+----- END CONTENT -----
+
+==================== FILE: .\operator-web\src\app\(dashboard)\ordenes\page.tsx ====================
+
+? EXISTS: .\operator-web\src\app\(dashboard)\ordenes\page.tsx
+----- BEGIN CONTENT -----
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import api from "@/lib/api"; // FIXED: Corregir el cliente falso destructurado apiGet
+import { safeToFixed } from '@/lib/utils';
+
+interface Order {
+    id?: string;
+    public_id: number;
+    beneficiary_text?: string;
+    beneficiary_name?: string;
+    amount_origin?: number;
+    amount_usd?: number;
+    status: string;
+    created_at: string;
+    payment_method?: string;
+}
+
+export default function OrdenesPage() {
+    const router = useRouter();
+    const [orders, setOrders] = useState<Order[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [filter, setFilter] = useState<string>("all");
+
+    useEffect(() => {
+        loadOrders();
+    }, []);
+
+    const loadOrders = async () => {
+        try {
+            setLoading(true);
+            const res = await api.get("/api/operators/orders"); // FIXED: Usar api.get
+            setOrders(Array.isArray(res.data) ? res.data : []);
+        } catch (error) {
+            console.error("Error:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const filteredOrders = orders.filter((o) => {
+        if (filter === "all") return true;
+        return o.status === filter;
+    });
+
+    const statusColors: Record<string, string> = {
+        PENDING_APPROVAL: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+        APPROVED: "bg-green-500/20 text-green-400 border-green-500/30",
+        COMPLETED: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+        REJECTED: "bg-red-500/20 text-red-400 border-red-500/30",
+    };
+
+    const statusLabels: Record<string, string> = {
+        PENDING_APPROVAL: "Pendiente",
+        APPROVED: "Aprobada",
+        COMPLETED: "Completada",
+        REJECTED: "Rechazada",
+    };
+
+    if (loading) {
+        return (
+            <div className="p-8 max-w-7xl mx-auto">
+                <div className="card-glass p-6">
+                    <p className="text-white">Cargando órdenes...</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="p-8 max-w-7xl mx-auto space-y-6 animate-slide-up">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold text-white mb-2">Órdenes</h1>
+                    <p className="text-white/60">
+                        {filteredOrders.length} orden{filteredOrders.length !== 1 ? "es" : ""}
+                    </p>
+                </div>
+                <button
+                    onClick={() => router.push("/ordenes/nueva")}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all transform hover:scale-105 shadow-lg"
+                >
+                    + Nueva Orden
+                </button>
+            </div>
+
+            {/* Filtros */}
+            <div className="card-glass p-4">
+                <div className="flex gap-3">
+                    {[
+                        { key: "all", label: "Todas" },
+                        { key: "PENDING_APPROVAL", label: "Pendientes" },
+                        { key: "APPROVED", label: "Aprobadas" },
+                        { key: "COMPLETED", label: "Completadas" },
+                    ].map((f) => (
+                        <button
+                            key={f.key}
+                            onClick={() => setFilter(f.key)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === f.key
+                                ? "bg-blue-500 text-white"
+                                : "bg-white/5 text-white/60 hover:bg-white/10"
+                                }`}
+                        >
+                            {f.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Tabla */}
+            <div className="card-glass p-6">
+                {filteredOrders.length === 0 ? (
+                    <div className="text-center py-12">
+                        <p className="text-white/40 mb-4">No hay órdenes para mostrar</p>
+                        <button
+                            onClick={() => router.push("/ordenes/nueva")}
+                            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                        >
+                            Crear Primera Orden
+                        </button>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-white/10">
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Beneficiario
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Monto
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Método
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Estado
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Fecha
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredOrders.map((order) => (
+                                    <tr
+                                        key={order.public_id || order.id}
+                                        className="border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
+                                        onClick={() => router.push(`/ordenes/${order.public_id || order.id}`)}
+                                    >
+                                        <td className="py-4 px-4 text-white font-medium">
+                                            {order.beneficiary_text || order.beneficiary_name || `Orden #${order.public_id}`}
+                                        </td>
+                                        <td className="py-4 px-4 text-white font-medium">
+                                            ${safeToFixed(order.amount_origin ?? order.amount_usd, 2)} {/* FIXED: Number() para strings del backend */}
+                                        </td>
+                                        <td className="py-4 px-4 text-white/80 text-sm">
+                                            {order.payment_method || 'Transferencia'}
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <span
+                                                className={`px-2.5 py-1 rounded-full text-xs font-medium border ${statusColors[order.status] ||
+                                                    "bg-gray-500/20 text-gray-400"
+                                                    }`}
+                                            >
+                                                {statusLabels[order.status] || order.status}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 px-4 text-white/60 text-sm">
+                                            {new Date(order.created_at).toLocaleDateString("es-ES")}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+----- END CONTENT -----
+
+==================== FILE: .\operator-web\src\app\(dashboard)\billetera\page.tsx ====================
+
+? EXISTS: .\operator-web\src\app\(dashboard)\billetera\page.tsx
+----- BEGIN CONTENT -----
+"use client";
+import { useEffect, useState } from "react";
+import api from "@/lib/api"; // FIXED: Importar correctamente el cliente Axios default
+import { safeToFixed } from '@/lib/utils';
+
+interface WalletSummary {
+    balance_usdt: number;
+    total_earned: number;
+    total_withdrawn: number;
+    pending_withdrawals: number;
+}
+
+interface WithdrawInfo {
+    country: string;
+    method_text: string;
+    available_balance: number;
+    formatted_balance: string;
+}
+
+interface Withdrawal {
+    id: string;
+    amount: number;
+    status: "pending" | "approved" | "rejected";
+    method: string;
+    account: string;
+    created_at: string;
+    description: string;
+}
+
+export default function BilleteraPage() {
+    const [summary, setSummary] = useState<WalletSummary | null>(null);
+    const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [showWithdrawForm, setShowWithdrawForm] = useState(false);
+    const [withdrawInfo, setWithdrawInfo] = useState<WithdrawInfo | null>(null);
+    const [infoLoading, setInfoLoading] = useState(false);
+
+    // Form state
+    const [amount, setAmount] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
+
+    useEffect(() => {
+        loadData();
+        // FIXED: Implementar auto-refresh en tiempo real cada 30 segundos
+        const interval = setInterval(loadData, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const loadData = async () => {
+        try {
+            setLoading(true);
+            const [summaryRes, withdrawalsRes] = await Promise.all([
+                api.get("/api/operators/wallet/summary"), // FIXED: Usar api.get() valido
+                api.get("/api/operators/wallet/withdrawals"), // FIXED: Usar api.get() valido
+            ]);
+
+            setSummary(summaryRes.data);
+            setWithdrawals(withdrawalsRes.data.withdrawals || []);
+        } catch (err) {
+            console.error("Error cargando datos:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleToggleForm = async () => {
+        if (!showWithdrawForm) {
+            setInfoLoading(true);
+            setError("");
+            setSuccess("");
+            try {
+                const res = await api.get("/api/operators/wallet/withdraw-info");
+                setWithdrawInfo(res.data);
+                setShowWithdrawForm(true);
+            } catch (err: any) {
+                setError(err.response?.data?.detail || "Asegúrate de tener un método de cobro (KYC) configurado.");
+            } finally {
+                setInfoLoading(false);
+            }
+        } else {
+            setShowWithdrawForm(false);
+        }
+    };
+
+    const handleSubmitWithdraw = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError("");
+        setSuccess("");
+        setSubmitting(true);
+
+        try {
+            // FIXED: Modificado para sólo enviar amount_usdt al nuevo API 100% transaccional
+            const response = await api.post("/api/operators/wallet/withdraw", {
+                amount_usdt: parseFloat(amount),
+                withdrawal_method: "", // Obsoleto (ahora interno en base a KYC)
+                account_info: "", // Obsoleto
+                notes: "", // Obsoleto
+            });
+
+            setSuccess(response.data.message || "Retiro solicitado exitosamente");
+
+            // Limpiar form
+            setAmount("");
+            setShowWithdrawForm(false);
+
+            // Recargar datos
+            setTimeout(loadData, 1000);
+        } catch (err: unknown) {
+            const errorMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || (err as Error).message || "Error al solicitar retiro";
+            setError(errorMsg);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="p-8 max-w-7xl mx-auto">
+                <div className="card-glass p-6">
+                    <p className="text-white">Cargando billetera...</p>
+                </div>
+            </div>
+        );
+    }
+
+    const statusColors = {
+        pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+        approved: "bg-green-500/20 text-green-400 border-green-500/30",
+        rejected: "bg-red-500/20 text-red-400 border-red-500/30",
+    };
+
+    const statusLabels = {
+        pending: "Pendiente",
+        approved: "Aprobado",
+        rejected: "Rechazado",
+    };
+
+    return (
+        <div className="p-8 max-w-7xl mx-auto space-y-6 animate-slide-up">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold text-white mb-2">Billetera</h1>
+                    <p className="text-white/60">Gestiona tus fondos y retiros</p>
+                </div>
+                <button
+                    onClick={handleToggleForm}
+                    disabled={infoLoading}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-wait"
+                >
+                    {infoLoading ? "Cargando..." : showWithdrawForm ? "Cancelar" : "Solicitar Retiro"}
+                </button>
+            </div>
+
+            {/* Mensajes */}
+            {error && (
+                <div className="card-glass p-4 border-l-4 border-red-500 bg-red-500/10">
+                    <p className="text-red-400">{error}</p>
+                </div>
+            )}
+
+            {success && (
+                <div className="card-glass p-4 border-l-4 border-green-500 bg-green-500/10">
+                    <p className="text-green-400">{success}</p>
+                </div>
+            )}
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="card-glass p-6">
+                    <p className="text-white/60 text-sm mb-2">Balance Disponible</p>
+                    <p className="text-3xl font-bold text-white">
+                        ${safeToFixed(summary?.balance_usdt, 2)}
+                    </p>
+                    <p className="text-white/40 text-xs mt-1">USDT</p>
+                </div>
+
+                <div className="card-glass p-6">
+                    <p className="text-white/60 text-sm mb-2">Total Ganado</p>
+                    <p className="text-2xl font-bold text-green-400">
+                        ${safeToFixed(summary?.total_earned, 2)}
+                    </p>
+                </div>
+
+                <div className="card-glass p-6">
+                    <p className="text-white/60 text-sm mb-2">Total Retirado</p>
+                    <p className="text-2xl font-bold text-blue-400">
+                        ${safeToFixed(summary?.total_withdrawn, 2)}
+                    </p>
+                </div>
+
+                <div className="card-glass p-6">
+                    <p className="text-white/60 text-sm mb-2">Retiros Pendientes</p>
+                    <p className="text-2xl font-bold text-yellow-400">
+                        ${safeToFixed(summary?.pending_withdrawals, 2)}
+                    </p>
+                </div>
+            </div>
+
+            {/* Formulario de retiro */}
+            {showWithdrawForm && withdrawInfo && (
+                <div className="card-glass p-6">
+                    <h2 className="text-xl font-bold text-white mb-4">Solicitar Retiro</h2>
+                    <form onSubmit={handleSubmitWithdraw} className="space-y-6">
+                        {/* Info Destino Bloqueado */}
+                        <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                            <h3 className="text-sm font-medium text-white/60 mb-3 uppercase tracking-wider">
+                                Destino del Retiro (Datos de KYC)
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <p className="text-xs text-white/40 mb-1">País destino</p>
+                                    <p className="text-white font-medium bg-black/20 px-3 py-2 rounded-lg border border-white/5">
+                                        {withdrawInfo.country}
+                                    </p>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <p className="text-xs text-white/40 mb-1">Detalles de la cuenta / billetera</p>
+                                    <p className="text-white bg-black/20 px-3 py-2 rounded-lg border border-white/5 whitespace-pre-wrap font-mono text-sm">
+                                        {withdrawInfo.method_text}
+                                    </p>
+                                </div>
+                            </div>
+                            <p className="text-xs text-yellow-500/80 mt-3 italic flex items-center gap-1">
+                                <span className="inline-block w-2 h-2 rounded-full bg-yellow-500"></span>
+                                Tu dinero será enviado a esta cuenta automáticamente por un agente de envío verificado. Para cambiarla, contacta a un administrador.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="block text-white/80 text-sm mb-2">
+                                Monto (USDT)
+                            </label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="10.00"
+                                required
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white font-bold text-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                                placeholder="0.00"
+                            />
+                            <p className="text-white/40 text-xs mt-2 flex justify-between">
+                                <span>Mínimo: $10.00 USDT</span>
+                                <span>Disponible real: <strong className="text-green-400">{withdrawInfo.formatted_balance}</strong></span>
+                            </p>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={submitting}
+                            className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(59,130,246,0.3)]"
+                        >
+                            {submitting ? "Procesando..." : `Confirmar Retiro`}
+                        </button>
+                    </form>
+                </div>
+            )}
+
+            {/* Historial de retiros */}
+            <div className="card-glass p-6">
+                <h2 className="text-xl font-bold text-white mb-4">Historial de Retiros</h2>
+
+                {withdrawals.length === 0 ? (
+                    <p className="text-white/40 text-center py-8">
+                        No hay retiros registrados
+                    </p>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-white/10">
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Fecha
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Monto
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Método
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Estado
+                                    </th>
+                                    <th className="text-left text-white/60 text-sm font-medium py-3 px-4">
+                                        Descripción
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {withdrawals.map((w) => (
+                                    <tr
+                                        key={w.id}
+                                        className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                                    >
+                                        <td className="py-4 px-4 text-white/80 text-sm">
+                                            {new Date(w.created_at).toLocaleDateString("es-ES", {
+                                                year: "numeric",
+                                                month: "short",
+                                                day: "numeric",
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                            })}
+                                        </td>
+                                        <td className="py-4 px-4 text-white font-medium">
+                                            ${safeToFixed(w.amount, 2)}
+                                        </td>
+                                        <td className="py-4 px-4 text-white/80 text-sm">
+                                            {w.method}
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <span
+                                                className={`px-2.5 py-1 rounded-full text-xs font-medium border ${statusColors[w.status]
+                                                    }`}
+                                            >
+                                                {statusLabels[w.status]}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 px-4 text-white/60 text-sm">
+                                            {w.description}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+----- END CONTENT -----
+
+==================== FILE: .\operator-web\src\app\(dashboard)\clientes\page.tsx ====================
+
+? EXISTS: .\operator-web\src\app\(dashboard)\clientes\page.tsx
+----- BEGIN CONTENT -----
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import api from "@/lib/api";
+import { safeToFixed } from '@/lib/utils';
+import {
+    Users,
+    Plus,
+    Search,
+    Phone,
+    Trophy,
+    TrendingUp,
+    Calendar,
+    DollarSign,
+    ShoppingCart
+} from 'lucide-react';
+
+interface ClientRanking {
+    beneficiary_id: number;
+    name: string;
+    phone: string | null;
+    dest_country: string;
+    total_orders: number;
+    completed_orders: number;
+    total_volume_usdt: number;
+    last_order_date: string | null;
+    rank: number;
+}
+
+interface ClientStats {
+    total_clients: number;
+    active_clients: number;
+    total_volume_usdt: number;
+}
+
+const COUNTRY_FLAGS: { [key: string]: string } = {
+    'VENEZUELA': '🇻🇪',
+    'COLOMBIA': '🇨🇴',
+    'ARGENTINA': '🇦🇷',
+    'CHILE': '🇨🇱',
+    'PERU': '🇵🇪',
+    'MEXICO': '🇲🇽',
+    'ECUADOR': '🇪🇨',
+};
+
+export default function ClientesPage() {
+    const router = useRouter();
+    const [clients, setClients] = useState<ClientRanking[]>([]);
+    const [stats, setStats] = useState<ClientStats | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const [rankingRes, statsRes] = await Promise.all([
+                api.get('/api/operators/clients/ranking?limit=50'),
+                api.get('/api/operators/clients/stats')
+            ]);
+
+            setClients(rankingRes.data || []);
+            setStats(statsRes.data || null);
+            setError(null);
+        } catch (err: any) {
+            console.error('Error cargando datos:', err);
+            setError(err.message || 'Error al cargar clientes');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const filteredClients = clients.filter(c =>
+        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.phone && c.phone.includes(searchTerm))
+    );
+
+    const getRankBadge = (rank: number) => {
+        if (rank === 1) return { icon: '🥇', color: 'from-yellow-400 to-yellow-600', text: 'TOP 1' };
+        if (rank === 2) return { icon: '🥈', color: 'from-gray-300 to-gray-500', text: 'TOP 2' };
+        if (rank === 3) return { icon: '🥉', color: 'from-orange-400 to-orange-600', text: 'TOP 3' };
+        return { icon: `#${rank}`, color: 'from-blue-500 to-purple-500', text: `#${rank}` };
+    };
+
+    if (loading) {
+        return (
+            <div className="p-6 flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-white/60">Cargando ranking de clientes...</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="p-6 space-y-6 animate-slide-up">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+                        <Trophy className="w-8 h-8 text-yellow-400" />
+                        Leaderboard de Clientes
+                    </h1>
+                    <p className="text-white/60">Tus mejores clientes por volumen transaccionado</p>
+                </div>
+                <button
+                    onClick={() => router.push('/clientes/nuevo')}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all shadow-lg flex items-center gap-2"
+                >
+                    <Plus className="w-5 h-5" />
+                    Nuevo Cliente
+                </button>
+            </div>
+
+            {/* Stats Cards */}
+            {stats && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="card-glass p-6 border-l-4 border-blue-500">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-white/60 text-sm mb-1">Total Clientes</p>
+                                <p className="text-3xl font-bold text-white">{stats.total_clients}</p>
+                            </div>
+                            <Users className="w-12 h-12 text-blue-400 opacity-50" />
+                        </div>
+                    </div>
+
+                    <div className="card-glass p-6 border-l-4 border-green-500">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-white/60 text-sm mb-1">Clientes Activos</p>
+                                <p className="text-3xl font-bold text-white">{stats.active_clients}</p>
+                            </div>
+                            <TrendingUp className="w-12 h-12 text-green-400 opacity-50" />
+                        </div>
+                    </div>
+
+                    <div className="card-glass p-6 border-l-4 border-yellow-500">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-white/60 text-sm mb-1">Volumen Total</p>
+                                <p className="text-3xl font-bold text-white">${safeToFixed(stats.total_volume_usdt, 0)}</p>
+                            </div>
+                            <DollarSign className="w-12 h-12 text-yellow-400 opacity-50" />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Error Message */}
+            {error && (
+                <div className="card-glass p-4 border-l-4 border-red-500 bg-red-500/10">
+                    <p className="text-red-400">{error}</p>
+                </div>
+            )}
+
+            {/* Búsqueda */}
+            <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                <input
+                    type="text"
+                    placeholder="Buscar cliente por nombre o teléfono..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                />
+            </div>
+
+            {/* Lista de Clientes */}
+            {filteredClients.length === 0 ? (
+                <div className="card-glass p-12 text-center">
+                    <Users className="w-16 h-16 text-white/20 mx-auto mb-4" />
+                    <h3 className="text-xl font-bold text-white mb-2">
+                        {searchTerm ? 'No se encontraron clientes' : 'Sin clientes activos'}
+                    </h3>
+                    <p className="text-white/60 mb-6">
+                        {searchTerm
+                            ? 'Intenta con otro término de búsqueda'
+                            : 'Los clientes aparecerán aquí después de completar su primera orden'}
+                    </p>
+                    {!searchTerm && (
+                        <button
+                            onClick={() => router.push('/clientes/nuevo')}
+                            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl transition-all shadow-lg inline-flex items-center gap-2"
+                        >
+                            <Plus className="w-5 h-5" />
+                            Agregar Primer Cliente
+                        </button>
+                    )}
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {filteredClients.map((client) => {
+                        const badge = getRankBadge(client.rank);
+                        return (
+                            <div
+                                key={client.beneficiary_id}
+                                className={`card-glass p-6 hover:scale-[1.02] transition-all cursor-pointer ${client.rank <= 3 ? 'border-2 border-yellow-500/30' : ''
+                                    }`}
+                                onClick={() => router.push(`/clientes/${client.beneficiary_id}`)}
+                            >
+                                <div className="flex items-center justify-between gap-4">
+                                    {/* Ranking Badge */}
+                                    <div className={`flex-shrink-0 w-16 h-16 rounded-xl bg-gradient-to-br ${badge.color} flex items-center justify-center text-white font-bold text-xl shadow-lg`}>
+                                        {badge.icon}
+                                    </div>
+
+                                    {/* Info del Cliente */}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <h3 className="text-lg font-bold text-white truncate">{client.name}</h3>
+                                            <span className="text-2xl">{COUNTRY_FLAGS[client.dest_country] || '🌍'}</span>
+                                        </div>
+                                        {client.phone && (
+                                            <p className="text-white/60 text-sm flex items-center gap-2">
+                                                <Phone className="w-4 h-4" />
+                                                {client.phone}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Métricas */}
+                                    <div className="flex gap-6 items-center">
+                                        {/* Órdenes */}
+                                        <div className="text-center">
+                                            <div className="flex items-center gap-2 text-white/60 text-xs mb-1">
+                                                <ShoppingCart className="w-4 h-4" />
+                                                Órdenes
+                                            </div>
+                                            <p className="text-2xl font-bold text-white">{client.completed_orders}</p>
+                                            <p className="text-xs text-white/40">de {client.total_orders}</p>
+                                        </div>
+
+                                        {/* Volumen */}
+                                        <div className="text-center">
+                                            <div className="flex items-center gap-2 text-green-400 text-xs mb-1">
+                                                <DollarSign className="w-4 h-4" />
+                                                Volumen
+                                            </div>
+                                            <p className="text-2xl font-bold text-green-400">${safeToFixed(client.total_volume_usdt, 0)}</p>
+                                            <p className="text-xs text-white/40">USDT</p>
+                                        </div>
+
+                                        {/* Última orden */}
+                                        {client.last_order_date && (
+                                            <div className="text-center">
+                                                <div className="flex items-center gap-2 text-white/60 text-xs mb-1">
+                                                    <Calendar className="w-4 h-4" />
+                                                    Última orden
+                                                </div>
+                                                <p className="text-sm text-white/80">
+                                                    {new Date(client.last_order_date).toLocaleDateString('es-ES', {
+                                                        day: '2-digit',
+                                                        month: 'short'
+                                                    })}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+----- END CONTENT -----
+
+==================== VALIDACIONES RAPIDAS ====================
+
+? Sidebar route -> FOUND [/admin]
+? Sidebar route -> FOUND [/orders]
+? Sidebar route -> FOUND [/origin]
+? Sidebar route -> FOUND [/metrics]
+? Sidebar route -> FOUND [/daily-close]
+? Sidebar route -> FOUND [/users]
+? Sidebar route -> FOUND [/routes]
+? Sidebar route -> FOUND [/settings]
+? Sidebar route -> FOUND [/payment-methods]
+? Globals class/token -> FOUND [.card-glass]
+? Globals class/token -> FOUND [.input-glass]
+? Globals class/token -> FOUND [.table-glass]
+? Globals class/token -> FOUND [.badge-]
+? Globals class/token -> FOUND [.btn-]
+?? Layout usa shell -> NOT FOUND [LayoutShell]
+?? Layout contempla login -> NOT FOUND [login]
+?? Layout contempla auth -> NOT FOUND [auth]
+? Orders usa Card -> FOUND [Card]
+? Origin usa Modal -> FOUND [Modal]
+? Daily close usa Button -> FOUND [Button]
+
+==================== GIT STATUS ====================
+
+  M   b a c k o f f i c e _ w e b / p a c k a g e - l o c k . j s o n  
+   M   b a c k o f f i c e _ w e b / p a c k a g e . j s o n  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / d a i l y - c l o s e / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / g l o b a l s . c s s  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / l a y o u t . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / l o g i n / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / m e t r i c s / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / o p e r a t o r - o f f i c e / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / o r d e r s / [ i d ] / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / o r d e r s / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / o r i g i n / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / p a y m e n t - m e t h o d s / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / r o u t e s / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / s e t t i n g s / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / a p p / u s e r s / [ i d ] / p a g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / L a y o u t S h e l l . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / S i d e b a r . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / B a d g e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / B u t t o n . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / C a r d . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / I n p u t . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / M o d a l . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / T a b l e . t s x  
+   M   b a c k o f f i c e _ w e b / s r c / l i b / a p i . t s  
+ ? ?   A D M I N _ B A C K E N D _ C O R E . t x t  
+ ? ?   A D M I N _ M O D U L E S _ D U M P . t x t  
+ ? ?   O P E R A T O R _ K E Y _ F I L E S . t x t  
+ ? ?   O P E R A T O R _ W E B _ D U M P . t x t  
+ ? ?   S Y S T E M _ R O U T E _ M A P . t x t  
+ ? ?   p h a s e 1 _ v a l i d a t i o n _ r e p o r t . t x t  
+ 
+==================== GIT DIFF NAMES VS HEAD ====================
+
+g i t   :   w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / p a c k a g e - l o c k . j s o n ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t   t i m e    
+ G i t   t o u c h e s   i t  
+ E n   l � n e a :   1   C a r � c t e r :   3 6  
+ +   R u n - C m d   " G I T   D I F F   N A M E S   V S   H E A D "   {   g i t   d i f f   - - n a m e - o n l y   H E A D   }  
+ +                                                                         ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~  
+         +   C a t e g o r y I n f o                     :   N o t S p e c i f i e d :   ( w a r n i n g :   i n   t h e . . .   G i t   t o u c h e s   i t : S t r i n g )   [ ] ,   R e m o t e E x c e p t i o n  
+         +   F u l l y Q u a l i f i e d E r r o r I d   :   N a t i v e C o m m a n d E r r o r  
+    
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / p a c k a g e . j s o n ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t   t i m e   G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / d a i l y - c l o s e / p a g e . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t    
+ t i m e   G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / g l o b a l s . c s s ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t   t i m e   G i t    
+ t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / l a y o u t . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t   t i m e   G i t    
+ t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / l o g i n / p a g e . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t   t i m e   G i t    
+ t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / m e t r i c s / p a g e . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t   t i m e    
+ G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / o p e r a t o r - o f f i c e / p a g e . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e    
+ n e x t   t i m e   G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / o r d e r s / [ i d ] / p a g e . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t    
+ t i m e   G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / o r d e r s / p a g e . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t   t i m e    
+ G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / o r i g i n / p a g e . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t   t i m e    
+ G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / p a y m e n t - m e t h o d s / p a g e . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e    
+ n e x t   t i m e   G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / r o u t e s / p a g e . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t   t i m e    
+ G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / s e t t i n g s / p a g e . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t   t i m e    
+ G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / a p p / u s e r s / [ i d ] / p a g e . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t    
+ t i m e   G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / L a y o u t S h e l l . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t    
+ t i m e   G i t   t o u c h e s   i t  
+ w a r n i n g :   i n   t h e   w o r k i n g   c o p y   o f   ' b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / S i d e b a r . t s x ' ,   L F   w i l l   b e   r e p l a c e d   b y   C R L F   t h e   n e x t   t i m e    
+ G i t   t o u c h e s   i t  
+ b a c k o f f i c e _ w e b / p a c k a g e - l o c k . j s o n  
+ b a c k o f f i c e _ w e b / p a c k a g e . j s o n  
+ b a c k o f f i c e _ w e b / s r c / a p p / d a i l y - c l o s e / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / g l o b a l s . c s s  
+ b a c k o f f i c e _ w e b / s r c / a p p / l a y o u t . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / l o g i n / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / m e t r i c s / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / o p e r a t o r - o f f i c e / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / o r d e r s / [ i d ] / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / o r d e r s / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / o r i g i n / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / p a y m e n t - m e t h o d s / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / r o u t e s / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / s e t t i n g s / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / a p p / u s e r s / [ i d ] / p a g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / L a y o u t S h e l l . t s x  
+ b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / S i d e b a r . t s x  
+ b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / B a d g e . t s x  
+ b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / B u t t o n . t s x  
+ b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / C a r d . t s x  
+ b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / I n p u t . t s x  
+ b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / M o d a l . t s x  
+ b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / T a b l e . t s x  
+ b a c k o f f i c e _ w e b / s r c / l i b / a p i . t s  
+ 
+==================== ULTIMOS COMMITS ====================
+
+7 8 1 1 9 1 c   f e a t :   G r a n d   P r i x   R e - a r c h i t e c t u r e   -   S t e p p e r   U I ,   T y p e S c r i p t   c o m p l i a n c e   a n d   a b s o l u t e   c a c h e - b u s t  
+ 5 8 4 a a e 5   f i x :   r e s c u e   c o n n e c t i v i t y   ( w i t h C r e d e n t i a l s )   a n d   D B   t r a n s a c t i o n   i n t e g r i t y  
+ 6 5 a 6 4 8 5   f i x :   r e s o l v e   m i s s i n g   a w a i t   i n   a s y n c   m i g r a t i o n   n e s t e d   c u r s o r s  
+ d b d 1 6 b a   f e a t :   f i n a l   s t r u c t u r a l   h a r d e n i n g   a n d   a s y n c   p e r f o r m a n c e   b o o s t  
+ a 4 c 0 3 5 b   f i x ( d e p l o y ) :   f o r c e   o p e r a t o r - w e b   c l e a n   b u i l d   t o   b r e a k   r a i l w a y   c a c h e  
+ 1 6 f 7 4 e 6   f i x :   r e s o l v e   s c h e m a   d r i f t ,   s a n i t i z e   m a i n . p y   a n d   f i x   w e b   o r d e r   c r e a t i o n .  
+ e 6 1 7 d 2 d   s e c u r i t y :   P h a s e   2   -   A u t h e n t i c a t i o n   a n d   T o k e n s  
+ 2 c 8 b 3 b 7   s e c u r i t y :   P h a s e   1   +   P h a s e   4   -   C r i t i c a l   s e c u r i t y   f i x e s   a n d   R a i l w a y   d e p l o y m e n t  
+ b a 0 8 e f a   c h o r e :   F o r c e   R a i l w a y   r e d e p l o y   -   d a i l y - c l o s e   m o d u l e  
+ 1 3 4 a 4 0 3   f e a t :   I m p l e m e n t a c i %%n   c o m p l e t a   F a s e   1 - 6 . 5   -   A d m i n   P a n e l   1 0 x  
+ 
+==================== VALIDACION DE ARCHIVOS PROHIBIDOS ====================
+
+? Sin cambios detectados para patr�n: withdrawals_repo
+? Sin cambios detectados para patr�n: wallet_ledger
+? Sin cambios detectados para patr�n: origin_wallets.py
+? Sin cambios detectados para patr�n: rates_repo
+? Sin cambios detectados para patr�n: telegram_app
+? Sin cambios detectados para patr�n: backoffice_api
+
+==================== BUILD BACKOFFICE_WEB ====================
+
+ 
+ >   b a c k o f f i c e _ w e b @ 0 . 1 . 0   b u i l d  
+ >   n e x t   b u i l d  
+  
+ � � �%  N e x t . j s   1 6 . 1 . 6   ( T u r b o p a c k )  
+ -   E n v i r o n m e n t s :   . e n v . l o c a l  
+  
+     C r e a t i n g   a n   o p t i m i z e d   p r o d u c t i o n   b u i l d   . . .  
+ n o d e . e x e   :   E r r o r :   C a n n o t   a p p l y   u n k n o w n   u t i l i t y   c l a s s   ` b g - p r i m a r y - 9 0 0 `  
+ E n   l � n e a :   1   C a r � c t e r :   1  
+ +   &   " C : \ P r o g r a m   F i l e s \ n o d e j s / n o d e . e x e "   " C : \ P r o g r a m   F i l e s \ n o d e j s / n o d e _ m o   . . .  
+ +   ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~  
+         +   C a t e g o r y I n f o                     :   N o t S p e c i f i e d :   ( E r r o r :   C a n n o t   a . . . b g - p r i m a r y - 9 0 0 ` : S t r i n g )   [ ] ,   R e m o t e E x c e p t i o n  
+         +   F u l l y Q u a l i f i e d E r r o r I d   :   N a t i v e C o m m a n d E r r o r  
+    
+          [ 2 m [ a t   o n I n v a l i d C a n d i d a t e    
+ ( C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ n o d e _ m o d u l e s \ t a i l w i n d c s s \ d i s t \ l i b . j s : 2 1 : 1 5 1 1 ) ]  [ 0 m  
+          [ 2 m [ a t   E e    
+ ( C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ n o d e _ m o d u l e s \ t a i l w i n d c s s \ d i s t \ l i b . j s : 1 6 : 3 7 0 6 6 ) ]  [ 0 m  
+          [ 2 m [ a t    
+ C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ n o d e _ m o d u l e s \ t a i l w i n d c s s \ d i s t \ l i b . j s : 2 1 : 3 5 5 ]  [ 0 m  
+          [ 2 m [ a t   P r    
+ ( C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ n o d e _ m o d u l e s \ t a i l w i n d c s s \ d i s t \ l i b . j s : 3 : 1 7 3 3 ) ]  [ 0 m  
+          [ 2 m [ a t   _    
+ ( C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ n o d e _ m o d u l e s \ t a i l w i n d c s s \ d i s t \ l i b . j s : 3 : 1 3 7 7 ) ]  [ 0 m  
+          [ 2 m [ a t   T e    
+ ( C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ n o d e _ m o d u l e s \ t a i l w i n d c s s \ d i s t \ l i b . j s : 2 1 : 1 7 2 ) ]  [ 0 m  
+          [ 2 m [ a t   p n    
+ ( C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ n o d e _ m o d u l e s \ t a i l w i n d c s s \ d i s t \ l i b . j s : 3 8 : 2 9 4 ) ]  [ 0 m  
+          [ 2 m [ a t   a s y n c   d n    
+ ( C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ n o d e _ m o d u l e s \ t a i l w i n d c s s \ d i s t \ l i b . j s : 3 8 : 6 3 1 ) ]  [ 0 m  
+          [ 2 m [ a t   a s y n c   X r   ( C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ n o d e _ m o d u l e s \ @ t a i l w i n d c s s \ n o d e \ d i s t  
+ \ i n d e x . j s : 1 0 : 3 4 1 7 ) ]  [ 0 m  
+          [ 2 m [ a t   a s y n c   N   ( C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ n o d e _ m o d u l e s \ @ t a i l w i n d c s s \ p o s t c s s \ d i  
+ s t \ i n d e x . j s : 1 0 : 3 9 7 9 ) ]  [ 0 m  
+  
+ >   B u i l d   e r r o r   o c c u r r e d  
+ E r r o r :   T u r b o p a c k   b u i l d   f a i l e d   w i t h   1   e r r o r s :  
+ . / s r c / a p p / g l o b a l s . c s s  
+ E r r o r   e v a l u a t i n g   N o d e . j s   c o d e  
+ C s s S y n t a x E r r o r :   t a i l w i n d c s s :   C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ s r c \ a p p \ g l o b a l s . c s s : 1 : 1 :    
+ C a n n o t   a p p l y   u n k n o w n   u t i l i t y   c l a s s   ` b g - p r i m a r y - 9 0 0 `  
+         a t   I n p u t . e r r o r   ( n o d e _ m o d u l e s / p o s t c s s / l i b / i n p u t . j s : 1 3 5 : 1 6 )    
+ [ C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ . n e x t \ b u i l d \ c h u n k s \ n o d e _ m o d u l e s _ f e 6 9 3 d f 6 . _ . j s : 4 6 5 1 : 2 2 ]  
+         a t   R o o t . e r r o r   ( n o d e _ m o d u l e s / p o s t c s s / l i b / n o d e . j s : 1 4 6 : 3 2 )    
+ [ C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ . n e x t \ b u i l d \ c h u n k s \ n o d e _ m o d u l e s _ f e 6 9 3 d f 6 . _ . j s : 9 2 8 : 3 8 ]  
+         [ a t   O b j e c t . O n c e   ( C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ n o d e _ m o d u l e s \ @ t a i l w i n d c s s \ p o s t c s s \ d i  
+ s t \ i n d e x . j s : 1 0 : 6 9 1 3 ) ]  
+         a t   a s y n c   L a z y R e s u l t . r u n A s y n c   ( n o d e _ m o d u l e s / p o s t c s s / l i b / l a z y - r e s u l t . j s : 2 9 3 : 1 1 )    
+ [ C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ . n e x t \ b u i l d \ c h u n k s \ n o d e _ m o d u l e s _ f e 6 9 3 d f 6 . _ . j s : 6 2 1 4 : 2 1 ]  
+         a t   a s y n c   t r a n s f o r m   ( t u r b o p a c k : / / / [ t u r b o p a c k - n o d e ] / t r a n s f o r m s / p o s t c s s . t s : 7 0 : 3 4 )   [ C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \  
+ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ . n e x t \ b u i l d \ c h u n k s \ [ r o o t - o f - t h e - s e r v e r ] _ _ 6 d 5 1 c b 5 d . _ . j s : 1 7 2 : 3 6 ]  
+         a t   a s y n c   r u n   ( t u r b o p a c k : / / / [ t u r b o p a c k - n o d e ] / i p c / e v a l u a t e . t s : 9 2 : 2 3 )   [ C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \  
+ b a c k o f f i c e _ w e b \ . n e x t \ b u i l d \ c h u n k s \ [ r o o t - o f - t h e - s e r v e r ] _ _ 4 4 6 9 5 d 7 6 . _ . j s : 4 4 3 : 3 1 ]  
+  
+ I m p o r t   t r a c e :  
+     C l i e n t   C o m p o n e n t   B r o w s e r :  
+         . / s r c / a p p / g l o b a l s . c s s   [ C l i e n t   C o m p o n e n t   B r o w s e r ]  
+         . / s r c / a p p / l a y o u t . t s x   [ S e r v e r   C o m p o n e n t ]  
+  
+  
+         a t   a s y n c   t r a n s f o r m   ( t u r b o p a c k : / / / [ t u r b o p a c k - n o d e ] / t r a n s f o r m s / p o s t c s s . t s : 7 0 : 3 4 )   [ C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \  
+ s e n d m a x - b o t \ b a c k o f f i c e _ w e b \ . n e x t \ b u i l d \ c h u n k s \ [ r o o t - o f - t h e - s e r v e r ] _ _ 6 d 5 1 c b 5 d . _ . j s : 1 7 2 : 3 6 ] )  
+         a t   a s y n c   r u n   ( t u r b o p a c k : / / / [ t u r b o p a c k - n o d e ] / i p c / e v a l u a t e . t s : 9 2 : 2 3 )   [ C : \ U s e r s \ e d i c s \ O n e D r i v e \ E s c r i t o r i o \ s e n d m a x - b o t \  
+ b a c k o f f i c e _ w e b \ . n e x t \ b u i l d \ c h u n k s \ [ r o o t - o f - t h e - s e r v e r ] _ _ 4 4 6 9 5 d 7 6 . _ . j s : 4 4 3 : 3 1 ] )  
+ 
+==================== GIT STATUS FINAL ====================
+
+O n   b r a n c h   m a i n  
+ Y o u r   b r a n c h   i s   u p   t o   d a t e   w i t h   ' o r i g i n / m a i n ' .  
+  
+ C h a n g e s   n o t   s t a g e d   f o r   c o m m i t :  
+     ( u s e   " g i t   a d d   < f i l e > . . . "   t o   u p d a t e   w h a t   w i l l   b e   c o m m i t t e d )  
+     ( u s e   " g i t   r e s t o r e   < f i l e > . . . "   t o   d i s c a r d   c h a n g e s   i n   w o r k i n g   d i r e c t o r y )  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / p a c k a g e - l o c k . j s o n  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / p a c k a g e . j s o n  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / d a i l y - c l o s e / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / g l o b a l s . c s s  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / l a y o u t . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / l o g i n / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / m e t r i c s / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / o p e r a t o r - o f f i c e / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / o r d e r s / [ i d ] / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / o r d e r s / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / o r i g i n / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / p a y m e n t - m e t h o d s / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / r o u t e s / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / s e t t i n g s / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / a p p / u s e r s / [ i d ] / p a g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / L a y o u t S h e l l . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / S i d e b a r . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / B a d g e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / B u t t o n . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / C a r d . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / I n p u t . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / M o d a l . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / c o m p o n e n t s / u i / T a b l e . t s x  
+ 	 m o d i f i e d :       b a c k o f f i c e _ w e b / s r c / l i b / a p i . t s  
+  
+ U n t r a c k e d   f i l e s :  
+     ( u s e   " g i t   a d d   < f i l e > . . . "   t o   i n c l u d e   i n   w h a t   w i l l   b e   c o m m i t t e d )  
+ 	 A D M I N _ B A C K E N D _ C O R E . t x t  
+ 	 A D M I N _ M O D U L E S _ D U M P . t x t  
+ 	 O P E R A T O R _ K E Y _ F I L E S . t x t  
+ 	 O P E R A T O R _ W E B _ D U M P . t x t  
+ 	 S Y S T E M _ R O U T E _ M A P . t x t  
+ 	 p h a s e 1 _ v a l i d a t i o n _ r e p o r t . t x t  
+  
+ n o   c h a n g e s   a d d e d   t o   c o m m i t   ( u s e   " g i t   a d d "   a n d / o r   " g i t   c o m m i t   - a " )  
+ 
+==================== REPORTE FINAL ====================
+
+Reporte guardado en: C:\Users\edics\OneDrive\Escritorio\sendmax-bot\phase1_validation_report.txt

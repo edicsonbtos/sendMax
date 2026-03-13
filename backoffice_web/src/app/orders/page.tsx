@@ -9,14 +9,6 @@ import {
   Select,
   FormControl,
 } from '@mui/material';
-import {
-  Visibility as ViewIcon,
-  Refresh as RefreshIcon,
-  Search as SearchIcon,
-  Download as DownloadIcon,
-  TrendingUp as GainIcon,
-  Close as ClearIcon,
-} from '@mui/icons-material';
 import { useAuth } from '@/components/AuthProvider';
 import api from '@/lib/api';
 import Card from '@/components/ui/Card';
@@ -24,6 +16,13 @@ import Button from '@/components/ui/Button';
 import Table from '@/components/ui/Table';
 import Input from '@/components/ui/Input';
 import Badge from '@/components/ui/Badge';
+import SectionHeader from '@/components/ui/SectionHeader';
+import MetricCard from '@/components/ui/MetricCard';
+import FilterBar from '@/components/ui/FilterBar';
+import EmptyState from '@/components/ui/EmptyState';
+import LoadingState from '@/components/ui/LoadingState';
+import MoneyCell from '@/components/ui/MoneyCell';
+import { DollarSign, RefreshCcw, Download, Search, FilterX, TrendingUp, Filter, Eye, AlertCircle } from 'lucide-react';
 
 interface Order {
   public_id: number | string;
@@ -219,7 +218,7 @@ export default function OrdersPage() {
       header: 'Ganancia',
       render: (o: Order) => (
         <div className="flex items-center justify-end gap-1 font-bold text-emerald-400">
-          {(o.profit_usdt || 0) > 0 && <GainIcon sx={{ fontSize: 14 }} />}
+          {(o.profit_usdt || 0) > 0 && <TrendingUp size={14} />}
           ${(o.profit_usdt || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
         </div>
       )
@@ -250,7 +249,7 @@ export default function OrdersPage() {
               }}
               className="text-white/40 hover:text-blue-400 hover:bg-white/5"
             >
-              <ViewIcon fontSize="small" />
+              <Eye size={16} />
             </IconButton>
           </Tooltip>
         </div>
@@ -263,154 +262,165 @@ export default function OrdersPage() {
   return (
     <div className="space-y-8 pb-10">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-4xl font-black text-white tracking-tight">
-            Órdenes
-          </h1>
-          <p className="text-gray-500 font-medium mt-1 flex items-center gap-2">
-            <span className="text-blue-400 font-bold">{filteredOrders.length}</span> de {orders.length} órdenes detectadas
-            {totalProfit > 0 && (
-              <>
-                <span className="text-gray-700">•</span>
-                <span>Ganancia acumulada: <span className="text-emerald-400 font-bold">${totalProfit.toFixed(2)}</span></span>
-              </>
-            )}
-          </p>
+      <SectionHeader
+        title="Órdenes"
+        subtitle={`${filteredOrders.length} de ${orders.length} órdenes detectadas`}
+        rightSlot={
+          <>
+            <Button
+              variant="secondary"
+              icon={<Download size={18} />}
+              onClick={exportCSV}
+              disabled={filteredOrders.length === 0}
+            >
+              Exportar
+            </Button>
+            <Button
+              variant="primary"
+              icon={<RefreshCcw size={18} className={loading ? "animate-spin" : ""} />}
+              onClick={fetchOrders}
+              loading={loading}
+            >
+              Actualizar
+            </Button>
+          </>
+        }
+      />
+
+      {/* Stats Summary */}
+      {totalProfit > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <MetricCard
+            label="Ganancia Comercial"
+            value={<MoneyCell value={totalProfit} emphasize />}
+            icon={<DollarSign size={24} />}
+            hint="Suma acumulada de órdenes filtradas"
+          />
         </div>
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <Button
-            variant="secondary"
-            icon={<DownloadIcon sx={{ fontSize: 18 }} />}
-            onClick={exportCSV}
-            disabled={filteredOrders.length === 0}
-            className="flex-1 md:flex-none"
-          >
-            Exportar CSV
-          </Button>
-          <Button
-            variant="primary"
-            icon={<RefreshIcon sx={{ fontSize: 18 }} />}
-            onClick={fetchOrders}
-            loading={loading}
-            className="flex-1 md:flex-none"
-          >
-            Actualizar
-          </Button>
-        </div>
-      </div>
+      )}
 
       {/* Filters Bar */}
-      <Card className="p-4 md:p-6 bg-primary-800/20">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
-          <div className="md:col-span-5">
-            <Input
-              label="Búsqueda rápida"
-              placeholder="Buscar por ID, país, estado..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              icon={<SearchIcon size={20} />}
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <FormControl fullWidth size="small" variant="outlined" className="group">
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Estado</label>
-              <Select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-white/5 border-white/10 text-white rounded-xl focus:ring-blue-500/20 group-hover:bg-white/10 transition-all font-medium text-sm"
-                MenuProps={{
-                  PaperProps: {
-                    className: "bg-primary-900 border border-white/10 text-white rounded-xl shadow-2xl"
-                  }
-                }}
-                sx={{
-                  color: 'white',
-                  '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.1) !important' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3b82f6 !important', borderWidth: '1px !important' },
-                  '.MuiSvgIcon-root': { color: 'rgba(255,255,255,0.4)' }
-                }}
-              >
-                <MenuItem value="all">Todos</MenuItem>
-                {uniqueStatuses.map(status => (
-                  <MenuItem key={status} value={status}>
-                    {statusLabels[status] || status}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </div>
-
-          <div className="md:col-span-2">
-            <FormControl fullWidth size="small" variant="outlined" className="group">
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">País</label>
-              <Select
-                value={countryFilter}
-                onChange={(e) => setCountryFilter(e.target.value)}
-                className="bg-white/5 border-white/10 text-white rounded-xl focus:ring-blue-500/20 group-hover:bg-white/10 transition-all font-medium text-sm"
-                MenuProps={{
-                  PaperProps: {
-                    className: "bg-primary-900 border border-white/10 text-white rounded-xl shadow-2xl"
-                  }
-                }}
-                sx={{
-                  color: 'white',
-                  '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.1) !important' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3b82f6 !important', borderWidth: '1px !important' },
-                  '.MuiSvgIcon-root': { color: 'rgba(255,255,255,0.4)' }
-                }}
-              >
-                <MenuItem value="all">Todos</MenuItem>
-                {uniqueCountries.map(country => (
-                  <MenuItem key={country} value={country}>
-                    {country}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </div>
-
-          <div className="md:col-span-1">
-            <Input
-              label="Límite"
-              type="number"
-              value={limit}
-              onChange={handleLimitChange}
-              className="min-w-[80px]"
-            />
-          </div>
-
-          {(searchTerm || statusFilter !== 'all' || countryFilter !== 'all') && (
-            <div className="md:col-span-2 pb-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<ClearIcon size={16} />}
-                onClick={clearFilters}
-                className="w-full"
-              >
-                Limpiar
-              </Button>
-            </div>
-          )}
+      <FilterBar>
+        <div className="flex-1 min-w-[300px]">
+          <Input
+            label="Búsqueda rápida"
+            placeholder="Buscar por ID, país, estado..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            icon={<Search size={18} />}
+          />
         </div>
-      </Card>
+
+        <div className="w-full lg:w-48">
+          <FormControl fullWidth size="small" variant="outlined" className="group">
+            <label className="block text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-2 ml-1">Estado</label>
+            <Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-white/5 border-white/10 text-white rounded-xl h-10 text-sm"
+              MenuProps={{
+                PaperProps: {
+                  className: "bg-primary-900 border border-white/10 text-white rounded-xl shadow-2xl"
+                }
+              }}
+              sx={{
+                color: 'white',
+                '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.1) !important' },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3b82f6 !important' },
+                '.MuiSvgIcon-root': { color: 'rgba(255,255,255,0.4)' }
+              }}
+            >
+              <MenuItem value="all">Todos los Estados</MenuItem>
+              {uniqueStatuses.map(status => (
+                <MenuItem key={status} value={status}>
+                  {statusLabels[status] || status}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </div>
+
+        <div className="w-full lg:w-48">
+          <FormControl fullWidth size="small" variant="outlined" className="group">
+            <label className="block text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-2 ml-1">País</label>
+            <Select
+              value={countryFilter}
+              onChange={(e) => setCountryFilter(e.target.value)}
+              className="bg-white/5 border-white/10 text-white rounded-xl h-10 text-sm"
+              MenuProps={{
+                PaperProps: {
+                  className: "bg-primary-900 border border-white/10 text-white rounded-xl shadow-2xl"
+                }
+              }}
+              sx={{
+                color: 'white',
+                '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.1) !important' },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3b82f6 !important' },
+                '.MuiSvgIcon-root': { color: 'rgba(255,255,255,0.4)' }
+              }}
+            >
+              <MenuItem value="all">Todos los Países</MenuItem>
+              {uniqueCountries.map(country => (
+                <MenuItem key={country} value={country}>
+                  {country}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </div>
+
+        <div className="w-full lg:w-24">
+          <Input
+            label="Límite"
+            type="number"
+            value={limit}
+            onChange={handleLimitChange}
+            className="h-10"
+          />
+        </div>
+
+        {(searchTerm || statusFilter !== 'all' || countryFilter !== 'all') && (
+          <div className="pb-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<FilterX size={16} />}
+              onClick={clearFilters}
+              className="lg:mt-6"
+            >
+              Limpiar
+            </Button>
+          </div>
+        )}
+      </FilterBar>
 
       {error && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 font-semibold flex items-center gap-3 animate-shake">
-          <ClearIcon />
+          <AlertCircle />
           {error}
         </div>
       )}
 
-      <Table
-        columns={columns}
-        data={filteredOrders}
-        loading={loading}
-        emptyMessage={orders.length === 0 ? 'No hay órdenes registradas' : 'No hay coincidencias para los filtros'}
-        className="animate-slide-up"
-      />
+      {loading ? (
+        <LoadingState title="Consultando historial de órdenes..." />
+      ) : filteredOrders.length === 0 ? (
+        <EmptyState
+          title="Sin órdenes encontradas"
+          description={orders.length === 0 ? 'No hay órdenes registradas en el sistema todavía.' : 'No hay coincidencias para los filtros aplicados.'}
+          action={
+            <Button variant="secondary" onClick={clearFilters} icon={<FilterX size={16} />}>
+              Limpiar filtros
+            </Button>
+          }
+        />
+      ) : (
+        <Table
+          columns={columns}
+          data={filteredOrders}
+          loading={loading}
+          className="animate-slide-up"
+        />
+      )}
     </div>
   );
 }

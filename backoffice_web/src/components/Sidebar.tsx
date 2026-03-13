@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import { cn } from "@/lib/cn";
 import {
   BarChart,
   Receipt,
@@ -16,7 +17,6 @@ import {
   Menu,
   X
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 const adminMenu = [
   { text: "Overview", path: "/admin", icon: BarChart, description: "Dashboard principal" },
