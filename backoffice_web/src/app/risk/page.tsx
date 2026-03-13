@@ -8,7 +8,7 @@ import LoadingState from '@/components/ui/LoadingState';
 import RiskBadge from '@/components/ui/RiskBadge';
 import MoneyCell from '@/components/ui/MoneyCell';
 import StatCard from '@/components/ui/StatCard';
-import { AlertTriangle, ShieldAlert, ZapOff } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, ZapOff, Fingerprint, Database } from 'lucide-react';
 import api from '@/lib/api';
 
 interface Anomaly {
@@ -35,25 +35,26 @@ export default function RiskExecutive() {
     fetchData();
   }, []);
 
-  if (loading) return <LoadingState title="Calculando vectores de riesgo operativo..." />;
+  if (loading) return <LoadingState title="Calculando vectores de riesgo operativo e integridad..." />;
 
   const stuck = data?.stuck_orders || {};
   const withdrawals = data?.pending_withdrawals || {};
   const anomalies: Anomaly[] = data?.anomalies || [];
+  const integrity = data?.integrity || {};
   const health = data?.health_score || 0;
 
   return (
     <div className="p-6 lg:p-10 space-y-10 animate-fade-in">
       <SectionHeader 
-        title="Riesgo Operativo" 
-        subtitle="Monitor de anomalías, estancamiento y exposición financiera"
+        title="Riesgo e Integridad" 
+        subtitle="Monitor de anomalías, integridad del ledger y exposición financiera"
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard 
           title="Health Score"
           value={`${health}%`}
-          subtitle={health > 80 ? "Operativa Saludable" : "Alerta de Estancamiento"}
+          subtitle={health > 80 ? "Operativa Saludable" : "Alerta de Integridad"}
           accentClassName={health > 80 ? "from-green-600/10 to-emerald-500/5" : "from-red-600/10 to-orange-500/5"}
           icon={<ShieldAlert className={health > 80 ? "text-green-400" : "text-red-400"} />}
         />
@@ -65,11 +66,58 @@ export default function RiskExecutive() {
           icon={<AlertTriangle className="text-orange-400" />}
         />
         <MetricCard 
-          label="Retiros Pendientes"
-          value={<MoneyCell value={withdrawals.amount || 0} />}
-          hint={`${withdrawals.count || 0} Solicitudes`}
-          icon={<ZapOff className="text-red-400" />}
+          label="Liquidez Estacionada"
+          value={integrity.stagnant_liquidity?.length || 0}
+          hint="Países sin sweep > 48h"
+          icon={<Database className="text-blue-400" />}
         />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400">
+              <Fingerprint size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white uppercase tracking-widest">Integridad Ledger</h3>
+              <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Lectura de consistencia transaccional</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {integrity.ledger_anomalies?.length === 0 ? (
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <p className="text-xs font-bold text-emerald-300">No se detectan discrepancias en balances del ledger.</p>
+              </div>
+            ) : (
+              integrity.ledger_anomalies?.map((a: any, i: number) => (
+                <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-red-500/5 border border-red-500/10">
+                  <p className="text-xs font-bold text-red-300 uppercase tracking-tighter">Wallet ID: {a.wallet_id}</p>
+                  <p className="text-xs font-black text-red-400"><MoneyCell value={a.balance} /></p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-red-500/10 text-red-400">
+              <ZapOff size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white uppercase tracking-widest">Retiros Pendientes</h3>
+              <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Exposición de salida inmediata</p>
+            </div>
+          </div>
+
+          <div className="flex items-baseline justify-between">
+            <span className="text-3xl font-black text-white"><MoneyCell value={withdrawals.amount} /></span>
+            <span className="text-xs font-bold text-white/40 uppercase tracking-widest">{withdrawals.count} Solicitudes</span>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-8">
