@@ -141,3 +141,7 @@ app.include_router(operator.router)
 app.include_router(vaults.router)
 app.include_router(daily_closure.router)
 app.include_router(executive.router)
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "service": "backoffice-api"}
