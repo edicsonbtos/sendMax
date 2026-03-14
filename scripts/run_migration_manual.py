@@ -1,7 +1,14 @@
 import psycopg
 import os
+import sys
 
-db_url = 'postgresql://neondb_owner:npg_8Eqh0xcTGVXQ@ep-damp-wave-ahgz5qnw-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require'
+# Ensure imports from root work
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+db_url = os.environ.get("DATABASE_URL")
+if not db_url:
+    print("Error: DATABASE_URL not set.")
+    sys.exit(1)
 
 sql = """
 CREATE TABLE IF NOT EXISTS daily_closures (

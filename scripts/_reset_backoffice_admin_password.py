@@ -1,6 +1,10 @@
 ﻿import os
 import psycopg
 import bcrypt
+import sys
+
+# Ensure imports from root work
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 EMAIL = "admin@sendmax.com"
 NEW_PASSWORD = "Admin123!"

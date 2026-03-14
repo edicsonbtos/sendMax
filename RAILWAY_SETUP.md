@@ -1,27 +1,48 @@
-# Configuración en Railway - Sistema Sendmax
+# Sendmax Monorepo Deployment Guide (Railway)
 
-## Variables de Entorno Requeridas
+This repository is a monorepo containing multiple separate applications. Because of this, it is critical that they are deployed as separate services in Railway to avoid routing conflicts (like `404 Not Found` errors) and dependency issues.
 
-### 1. Bot de Telegram (Servicio Bot)
-- `DATABASE_URL`: URL de conexión a la base de datos Neon.
-- `TELEGRAM_TOKEN`: Token obtenido de @BotFather.
+## 1. Create a New Service for Each Application
+You will need to create separate services within your Railway Project pointing to this exact same GitHub repository, but with different configurations.
 
-### 2. API Backend (`backoffice_api`)
-- `DATABASE_URL`: URL de conexión a la base de datos Neon.
-- `JWT_SECRET`: Una cadena aleatoria larga para firmar los tokens de sesión.
-- `BACKOFFICE_API_KEY`: Una clave secreta que compartirá con el Frontend para acciones administrativas.
-- `PORT`: (Asignado automáticamente por Railway).
+### Service 1: Sendmax Bot & Public API
+This is the main Telegram bot and the API consumed by the operator tools.
+- **Source:** GitHub Repo (`sendmax-bot`)
+- **Root Directory:** `/` (leave empty or set to root)
+- **Environment Variables Required:**
+  - `TELEGRAM_BOT_TOKEN`
+  - `DATABASE_URL`
+  - `WEBHOOK_URL` (The public URL of this specific Railway service)
+  - `PORT` (Provided by Railway)
+- **Start Command:** `uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8080}`
 
-### 3. Web Frontend (`backoffice_web`)
-- `NEXT_PUBLIC_API_URL`: La URL pública de tu servicio de API (ej: `https://api-sendmax.up.railway.app`).
-- `BACKOFFICE_API_KEY`: Debe coincidir con la configurada en el Backend.
+### Service 2: Backoffice API
+This is the protected HTTP backend used by the Admin panel.
+- **Source:** GitHub Repo (`sendmax-bot`)
+- **Root Directory:** `/backoffice_api`
+- **Environment Variables Required:**
+  - `DATABASE_URL`
+  - `SECRET_KEY` (or `JWT_SECRET`)
+  - `BACKOFFICE_API_KEY`
+  - `ALLOWED_ORIGINS` (Comma-separated list of allowed frontend URLs, e.g., `https://backoffice.midominio.com,http://localhost:3000`)
+- **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}` (Defined in its Dockerfile)
 
-## Orden de Despliegue Sugerido
-1. **Base de Datos**: Asegurar que las migraciones de Alembic se hayan ejecutado (`alembic upgrade head`).
-2. **API Backend**: Desplegar primero para que el Frontend pueda conectarse.
-3. **Bot**: Puede desplegarse en paralelo.
-4. **Web Frontend**: Desplegar al final, asegurando que `NEXT_PUBLIC_API_URL` apunte a la API real.
+### Service 3: Backoffice Web (Admin Panel)
+This is the Next.js frontend for administrators.
+- **Source:** GitHub Repo (`sendmax-bot`)
+- **Root Directory:** `/backoffice_web`
+- **Environment Variables Required:**
+  - `NEXT_PUBLIC_API_URL`: **Must point directly to the URL of Service 2 (Backoffice API).** Do not point this to the bot's URL.
 
-## Notas Técnicas
-- El sistema ahora usa **comisiones en decimal** (0.06 = 6%).
-- Las rutas se gestionan jerárquicamente: Ruta Específica > Destino > Origen > Default.
+### Service 4: Operator Web (If applicable)
+This is the frontend used by operators.
+- **Source:** GitHub Repo (`sendmax-bot`)
+- **Root Directory:** `/operator-web`
+- **Environment Variables Required:**
+  - Update any environment variables to point to the correct public API endpoints (Service 1) if necessary.
+
+## 2. Important Checks
+- **CORS:** Ensure `ALLOWED_ORIGINS` in the Backoffice API matches the actual URL assigned by Railway to your Backoffice Web service.
+- **Healthchecks:**
+  - Bot API: Visit `https://<bot-url>/health` -> Should return `{"status": "ok", "service": "sendmax-bot"}`.
+  - Backoffice API: Visit `https://<backoffice-url>/health` -> Should return a detailed JSON with `{"ok": true, ... "service": "backoffice-api"}`.
