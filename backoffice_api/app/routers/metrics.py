@@ -442,17 +442,16 @@ async def admin_metrics_vault(auth: dict = Depends(require_operator_or_admin)):
     if not _is_admin(auth):
         raise HTTPException(status_code=403, detail="Solo administradores pueden ver la bóveda central")
 
-    # Profit Histórico Total (Órdenes)
     row_profit = await fetch_one(
         "SELECT COALESCE(SUM(profit_real_usdt), 0) AS total_profit FROM orders WHERE status = 'PAGADA'"
     )
-    total_profit = float(row_profit["total_profit"] if row_profit else 0)
+    total_profit = float(row_profit["total_profit"]) if row_profit else 0.0
 
     # Retiros Totales (Withdrawals pagados)
     row_withdraw = await fetch_one(
         "SELECT COALESCE(SUM(amount), 0) AS total_withdrawals FROM withdrawals WHERE status ILIKE '%%PAID%%' OR status ILIKE '%%PAGADO%%'"
     )
-    total_withdrawals = float(row_withdraw["total_withdrawals"] if row_withdraw else 0)
+    total_withdrawals = float(row_withdraw["total_withdrawals"]) if row_withdraw else 0.0
 
     vault_balance = total_profit - total_withdrawals
 

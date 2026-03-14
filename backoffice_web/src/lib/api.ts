@@ -18,10 +18,16 @@ const api = axios.create({
 
 let isRedirecting = false;
 
-// Request Interceptor: Inject API Key if present
+// Request Interceptor: Inject JWT and API Key if present
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     if (typeof window !== 'undefined') {
+      // Prioritize auth_token (standardized)
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('admin_token') || localStorage.getItem('token');
+      if (token && config.headers) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const apiKey = localStorage.getItem('api_key');
       if (apiKey && config.headers) {
         config.headers['X-API-KEY'] = apiKey;
@@ -39,6 +45,9 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !isRedirecting) {
       isRedirecting = true;
       if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_role');
+        localStorage.removeItem('auth_name');
         localStorage.removeItem('admin_token');
         localStorage.removeItem('token');
         localStorage.removeItem('admin_user');

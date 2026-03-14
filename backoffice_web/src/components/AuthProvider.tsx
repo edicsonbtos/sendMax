@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -33,13 +33,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [fullName, setFullName] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('auth_token') || localStorage.getItem('token') || localStorage.getItem('admin_token');
-    const storedRole = localStorage.getItem('auth_role');
-    const storedName = localStorage.getItem('auth_name');
+    // Standardized key is 'auth_token', but we read others for backward compatibility
+    const storedToken = localStorage.getItem('auth_token') || localStorage.getItem('admin_token') || localStorage.getItem('token');
+    const storedRole = localStorage.getItem('auth_role') || localStorage.getItem('role');
+    const storedName = localStorage.getItem('auth_name') || localStorage.getItem('admin_user');
 
-    setToken(storedToken);
-    setRole(storedRole);
-    setFullName(storedName);
+    if (storedToken) setToken(storedToken);
+    if (storedRole) setRole(storedRole);
+    if (storedName) setFullName(storedName);
+    
     setIsReady(true);
 
     if (typeof window !== 'undefined') {
@@ -55,11 +57,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [isReady, token, pathname, router]);
 
   const login = (newToken: string, newRole: string, newName: string) => {
-    localStorage.setItem('admin_token', newToken);
-    localStorage.setItem('auth_role', newRole);
-    localStorage.setItem('admin_user', newName); // Keeping backwards compat with custom keys depending on the endpoint response
+    // Store in all keys to be ultra-safe during migration/execution
     localStorage.setItem('auth_token', newToken);
+    localStorage.setItem('auth_role', newRole);
     localStorage.setItem('auth_name', newName);
+    
+    // Legacy support
+    localStorage.setItem('admin_token', newToken);
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('admin_user', newName);
+    localStorage.setItem('role', newRole);
+
     setToken(newToken);
     setRole(newRole);
     setFullName(newName);
