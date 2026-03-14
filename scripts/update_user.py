@@ -1,6 +1,10 @@
 import os
 import bcrypt
 import psycopg2
+import sys
+
+# Ensure imports from root work
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def main():
     db_url = os.environ.get("DATABASE_URL")

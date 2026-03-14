@@ -17,6 +17,7 @@ from .routers import (
     daily_closure, executive,
 )
 from .db import close_pools
+# IMPORTANT: ALLOWED_ORIGINS is explicitly imported from .config here.
 from .config import validate_config, IS_PRODUCTION, ALLOWED_ORIGINS
 from .middleware_limiter import rate_limit_middleware
 
@@ -71,14 +72,7 @@ async def apply_rate_limit(request: Request, call_next):
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "https://backoffice-admin-production-48c9.up.railway.app",
-        "https://operator-web-production.up.railway.app",
-        "https://sendmax-web-production.up.railway.app",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,5 +1,10 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
+// ==========================================
+// CENTRALIZED API BASE URL (Single Source of Truth)
+// NOTE: Ensure NEXT_PUBLIC_API_URL points to the backoffice-api URL
+//       and NOT the sendmax-bot (public API) URL in Railway.
+// ==========================================
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 const api = axios.create({
