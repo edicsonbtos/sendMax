@@ -29,7 +29,7 @@ async def execute_daily_closure(
     auth: dict = Depends(require_admin)
 ):
     d = payload.closure_date
-    start_utc, end_utc = _parse_date_range(d)
+    start_utc, end_utc = await _parse_date_range(d)
 
     # 1. Check if already exists
     existing = await fetch_one("SELECT id FROM daily_closures WHERE closure_date = %s", (d,))
