@@ -31,11 +31,8 @@ export default function LoginPage() {
       const data = res.data;
       login(data.access_token, data.role, data.full_name);
 
-      if (data.role === 'admin' || data.role === 'superadmin') {
-        router.push('/admin');
-      } else {
-        router.push('/operator-office');
-      }
+      router.push('/control-center');
+
     } catch (err: any) {
       setError(err?.response?.data?.detail || err.message || 'Error de conexión');
     } finally {

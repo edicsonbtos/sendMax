@@ -18,13 +18,18 @@ const api = axios.create({
 
 let isRedirecting = false;
 
-// Request Interceptor: Inject API Key if present
+// Request Interceptor: Inject API Key and Auth Token if present
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     if (typeof window !== 'undefined') {
       const apiKey = localStorage.getItem('api_key');
       if (apiKey && config.headers) {
         config.headers['X-API-KEY'] = apiKey;
+      }
+
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || localStorage.getItem('admin_token');
+      if (token && config.headers) {
+        config.headers['Authorization'] = `Bearer ${token}`;
       }
     }
     return config;

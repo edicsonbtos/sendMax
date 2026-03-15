@@ -120,22 +120,31 @@ export default function SettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiRequest<{
-        active: RateVersion;
-        recent: RateVersion[];
-        margins: any;
-        profit_split: any;
-      }>('/admin/settings/advanced');
+      // Fetch all items from the items array returned by the actual API
+      const { data: responseData } = await api.get('/admin/settings');
+      const items = responseData.items || [];
+      const dbData: any = {};
+      items.forEach((item: any) => {
+        dbData[item.key] = item.value_json;
+      });
 
-      setActiveVersion(data.active);
-      setHistory(data.recent);
-      setMarginDefault(data.margins.margin_default || "10.0");
-      setMarginDestVenez(data.margins.margin_dest_venez || "6.0");
-      setMarginRouteUsaVenez(data.margins.margin_route_usa_venez || "10.0");
+      // Get active version separately since it's not in general settings
+      const { data: versionData } = await api.get('/api/v1/rates/active');
+      const { data: versionsListData } = await api.get('/api/v1/rates/versions?limit=5');
 
-      setOpWithSponsor(data.profit_split.operator_with_sponsor || "35");
-      setSponsorPct(data.profit_split.sponsor_percentage || "15");
-      setOpSolo(data.profit_split.operator_solo || "50");
+      setActiveVersion(versionData.version || null);
+      setHistory(versionsListData.versions || []);
+
+      const margins = dbData['margins'] || {};
+      const profitSplit = dbData['profit-split'] || {};
+
+      setMarginDefault(margins.margin_default || "10.0");
+      setMarginDestVenez(margins.margin_dest_venez || "6.0");
+      setMarginRouteUsaVenez(margins.margin_route_usa_venez || "10.0");
+
+      setOpWithSponsor(profitSplit.operator_with_sponsor || "35");
+      setSponsorPct(profitSplit.sponsor_percentage || "15");
+      setOpSolo(profitSplit.operator_solo || "50");
 
     } catch (e: any) {
       setError(e.message || "Error cargando configuración");
@@ -147,7 +156,7 @@ export default function SettingsPage() {
   const manualRegen = async () => {
     setSaving(true);
     try {
-      await api.post('/admin/rates/regenerate', { reason: "Manual regen from Admin Panel" });
+      await api.post('/api/v1/rates/regenerate', { reason: "Manual regen from Admin Panel" });
       setSuccess("Proceso de regeneración iniciado correctamente");
       load();
     } catch (e: any) {
@@ -160,10 +169,12 @@ export default function SettingsPage() {
     setConfirmOpen(false);
     try {
       await api.put('/admin/settings/margins', {
-        margin_default: marginDefault,
-        margin_dest_venez: marginDestVenez,
-        margin_route_usa_venez: marginRouteUsaVenez,
-        regenerate: regenerateNow
+        value_json: {
+          margin_default: marginDefault,
+          margin_dest_venez: marginDestVenez,
+          margin_route_usa_venez: marginRouteUsaVenez,
+          regenerate: regenerateNow
+        }
       });
       setSuccess("Márgenes actualizados correctamente");
       load();
@@ -184,9 +195,11 @@ export default function SettingsPage() {
       }
 
       await api.put('/admin/settings/profit-split', {
-        operator_with_sponsor: w_sp,
-        sponsor_percentage: sp,
-        operator_solo: ops,
+        value_json: {
+          operator_with_sponsor: w_sp,
+          sponsor_percentage: sp,
+          operator_solo: ops,
+        }
       });
       setSuccess("Distribución de profit actualizada");
     } catch (e: unknown) {
