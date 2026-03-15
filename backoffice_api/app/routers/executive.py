@@ -6,6 +6,7 @@ Consolida vistas de Control Center, Treasury, Vaults, Risk y Audit con logs de a
 from __future__ import annotations
 import asyncio
 import datetime
+from typing import Any, Dict
 from fastapi import APIRouter, Depends, Query, HTTPException
 from ..db import fetch_one, fetch_all
 from ..auth import require_operator_or_admin, require_admin
@@ -13,8 +14,27 @@ from .metrics import metrics_overview, admin_metrics_vault, metrics_operator_lea
 from .origin_wallets import origin_wallets_current_balances
 from .vaults import vault_radar, list_vaults
 from ..audit import get_stuck_orders
+from decimal import Decimal
 
 router = APIRouter(prefix="/executive", tags=["Executive"])
+
+def _ser(row: dict | Any) -> Any:
+    if not isinstance(row, dict):
+        return row
+    out = {}
+    for k, v in row.items():
+        if v is None:
+            out[k] = None
+        elif isinstance(v, Decimal):
+            out[k] = float(v)
+        elif hasattr(v, "isoformat"):
+            out[k] = v.isoformat()
+        else:
+            out[k] = v
+    return out
+
+def _ser_list(rows: list[dict] | None) -> list[dict]:
+    return [_ser(r) for r in (rows or [])]
 
 # ============================================================
 # GET /executive/control-center
@@ -62,7 +82,7 @@ async def executive_control_center(auth: dict = Depends(require_operator_or_admi
             "overview": overview,
             "leaderboard": leaderboard.get("leaderboard", []),
             "vault": vault,
-            "recent_activity": recent_orders,
+            "recent_activity": _ser_list(recent_orders),
             "risk_alerts": risk_summary,
             "config": {
                 "role": auth.get("role"),
@@ -92,8 +112,8 @@ async def executive_treasury(auth: dict = Depends(require_admin)):
     return {
         "ok": True,
         "data": {
-            "balances": orig_balances.get("items", []),
-            "by_country": list(by_country.values())
+            "balances": _ser_list(orig_balances.get("items", [])),
+            "by_country": _ser_list(list(by_country.values()))
         }
     }
 
@@ -111,9 +131,9 @@ async def executive_vaults(auth: dict = Depends(require_admin)):
     return {
         "ok": True,
         "data": {
-            "central_vault": central,
-            "radar": radar,
-            "vaults": vaults_list.get("vaults", [])
+            "central_vault": _ser(central),
+            "radar": _ser(radar),
+            "vaults": _ser_list(vaults_list.get("vaults", []))
         }
     }
 
@@ -157,15 +177,15 @@ async def executive_risk(auth: dict = Depends(require_admin)):
     return {
         "ok": True,
         "data": {
-            "stuck_orders": stuck,
+            "stuck_orders": _ser(stuck),
             "pending_withdrawals": {
                 "count": int(pending_withdrawals["count"]) if pending_withdrawals else 0,
                 "amount": float(pending_withdrawals["total"]) if pending_withdrawals and pending_withdrawals["total"] else 0.0
             },
-            "anomalies": anomalies,
+            "anomalies": _ser_list(anomalies),
             "integrity": {
-                "ledger_anomalies": ledger_anomalies,
-                "stagnant_liquidity": stagnant_liquidity
+                "ledger_anomalies": _ser_list(ledger_anomalies),
+                "stagnant_liquidity": _ser_list(stagnant_liquidity)
             },
             "health_score": health_score
         }

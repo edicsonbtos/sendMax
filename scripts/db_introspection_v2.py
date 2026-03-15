@@ -1,7 +1,16 @@
 import psycopg
 import json
+import sys
+import os
 
-db_url = 'postgresql://neondb_owner:npg_8Eqh0xcTGVXQ@ep-damp-wave-ahgz5qnw-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require'
+# Ensure imports from root work
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+db_url = os.environ.get("DATABASE_URL")
+if not db_url:
+    print("Error: DATABASE_URL not set.")
+    sys.exit(1)
+
 results = {}
 
 try:
@@ -12,16 +21,16 @@ try:
             results['orders_status'] = [r[0] for r in cur.fetchall()]
             
             # 2. Orders Columns
-            cur.execute("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'orders'")
-            results['orders_cols'] = {r[0]: r[1] for r in cur.fetchall()}
+            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'orders'")
+            results['orders_cols'] = [r[0] for r in cur.fetchall()]
             
             # 3. Users Columns
-            cur.execute("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users'")
-            results['users_cols'] = {r[0]: r[1] for r in cur.fetchall()}
+            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")
+            results['users_cols'] = [r[0] for r in cur.fetchall()]
             
             # 4. Withdrawals Columns
-            cur.execute("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'withdrawals'")
-            results['withdrawals_cols'] = {r[0]: r[1] for r in cur.fetchall()}
+            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'withdrawals'")
+            results['withdrawals_cols'] = [r[0] for r in cur.fetchall()]
             
             # 5. Withdrawals Status
             cur.execute("SELECT DISTINCT status FROM withdrawals")
@@ -31,8 +40,6 @@ try:
             cur.execute("SELECT table_name FROM information_schema.tables WHERE table_name LIKE '%wallet%' OR table_name LIKE '%origin%'")
             results['wallet_tables'] = [r[0] for r in cur.fetchall()]
 
-    with open('db_audit_results.json', 'w') as f:
-        json.dump(results, f, indent=2)
-    print("DONE_AUDIT")
+    print(json.dumps(results, indent=2))
 except Exception as e:
     print(f"Error: {e}")

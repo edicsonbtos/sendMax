@@ -10,7 +10,7 @@ from typing import Optional, List
 from ..auth import require_admin
 from ..db import fetch_one, fetch_all, run_in_transaction
 
-router = APIRouter(prefix="/api/v1/rates", tags=["rates_admin"])
+router = APIRouter(prefix="/admin/rates", tags=["rates_admin"])
 logger = logging.getLogger(__name__)
 
 class RegenerateRequest(BaseModel):
@@ -105,6 +105,15 @@ async def get_active_version(auth: dict = Depends(require_admin)):
     version = await fetch_one(sql)
     if not version:
         return {"ok": False, "detail": "No hay versión activa"}
+    
+    # Serializar datetime
+    if version.get("created_at"):
+        version["created_at"] = version["created_at"].isoformat()
+    if version.get("effective_from"):
+        version["effective_from"] = version["effective_from"].isoformat()
+    if version.get("effective_to"):
+        version["effective_to"] = version["effective_to"].isoformat()
+
     return {"ok": True, "version": version}
 
 @router.get("/versions")
@@ -117,4 +126,16 @@ async def list_versions(limit: int = Query(default=20, ge=1, le=100), auth: dict
         LIMIT %s;
     """
     versions = await fetch_all(sql, (limit,))
-    return {"ok": True, "count": len(versions), "versions": versions}
+    
+    # Serializar datetimes
+    serialized = []
+    for v in versions:
+        if v.get("created_at"):
+            v["created_at"] = v["created_at"].isoformat()
+        if v.get("effective_from"):
+            v["effective_from"] = v["effective_from"].isoformat()
+        if v.get("effective_to"):
+            v["effective_to"] = v["effective_to"].isoformat()
+        serialized.append(v)
+
+    return {"ok": True, "count": len(serialized), "versions": serialized}

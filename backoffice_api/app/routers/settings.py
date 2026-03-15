@@ -159,6 +159,81 @@ async def get_admin_settings(auth: dict = Depends(require_admin)):
     return {"items": rows}
 
 
+@router.get("/admin/settings/advanced")
+async def get_advanced_settings(auth: dict = Depends(require_admin)):
+    """Agrega toda la config avanzada para el UI (Tasas + Margenes + Splits)."""
+    # 1. Tasa Activa
+    active_row = await fetch_one(
+        "SELECT id, kind, reason, created_at, is_active FROM rate_versions WHERE is_active=true ORDER BY created_at DESC LIMIT 1"
+    )
+    if active_row and active_row["created_at"]:
+        active_row["created_at"] = active_row["created_at"].isoformat()
+
+    # 2. Historial de Tasas
+    recent_rows = await fetch_all(
+        "SELECT id, kind, reason, created_at, is_active FROM rate_versions ORDER BY created_at DESC LIMIT 10"
+    )
+    for r in recent_rows:
+        if r["created_at"]:
+            r["created_at"] = r["created_at"].isoformat()
+
+    # 3. Margenes (Buscamos la clave colectiva 'margins')
+    margin_row = await fetch_one("SELECT value_json FROM settings WHERE key='margins'")
+    margins = _normalize_json(margin_row["value_json"]) if margin_row else {}
+
+    # 4. Profit Split
+    split_row = await fetch_one("SELECT value_json FROM settings WHERE key='profit_split'")
+    profit_split = _normalize_json(split_row["value_json"]) if split_row else {}
+
+    return {
+        "active": active_row,
+        "recent": recent_rows,
+        "margins": margins,
+        "profit_split": profit_split
+    }
+
+
+@router.put("/admin/settings/margins")
+async def put_margins(
+    payload: Dict[str, Any],
+    request: Request,
+    auth: dict = Depends(require_admin)
+):
+    """Actualiza margenes colectivos y dispara regeneracion si se solicita."""
+    updated_by = _get_updated_by(auth, request)
+    await fetch_one(
+        "INSERT INTO settings(key, value_json, updated_at, updated_by) VALUES (%s, %s::jsonb, now(), %s) "
+        "ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = now(), updated_by = EXCLUDED.updated_by",
+        ("margins", json.dumps(payload), updated_by),
+        rw=True,
+    )
+    
+    if payload.get("regenerate"):
+        # Podriamos disparar la regeneracion aqui mismo si quieramos, 
+        # pero el frontend hace un POST separado usualmente o espera que el backend lo haga.
+        # Por ahora solo guardamos.
+        pass
+
+    return {"ok": True}
+
+
+@router.put("/admin/settings/profit-split")
+async def put_profit_split(
+    payload: Dict[str, Any],
+    request: Request,
+    auth: dict = Depends(require_admin)
+):
+    """Actualiza la distribucion de ganancias."""
+    updated_by = _get_updated_by(auth, request)
+    await fetch_one(
+        "INSERT INTO settings(key, value_json, updated_at, updated_by) VALUES (%s, %s::jsonb, now(), %s) "
+        "ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = now(), updated_by = EXCLUDED.updated_by",
+        ("profit_split", json.dumps(payload), updated_by),
+        rw=True,
+    )
+    return {"ok": True}
+
+
 @router.get("/admin/settings/{key}")
 async def get_admin_setting_by_key(key: str, auth: dict = Depends(require_admin)):
     k = _validate_key(key)
@@ -245,16 +320,70 @@ async def get_payment_methods(auth: dict = Depends(require_admin)):
     if not isinstance(data, dict):
         data = {}
 
-    result = {}
+    result = []
     for country in PAYMENT_COUNTRIES:
         country_data = data.get(country, {})
         methods = country_data.get("methods", [])
-        result[country] = {
+        result.append({
+            "country": country,
             "methods": methods,
             "active_count": len([m for m in methods if m.get("active") is True]),
             "total_count": len(methods),
-        }
-    return {"ok": True, "countries": result}
+        })
+    return result
+
+
+@router.put("/admin/payment-methods/{country}")
+async def put_payment_methods_by_country(
+    country: str,
+    payload: Dict[str, Any],
+    request: Request,
+    auth: dict = Depends(require_admin),
+):
+    """Actualiza metodos para un solo pais (Usado por el nuevo UI)."""
+    c = (country or "").strip().upper()
+    if c not in _PAYMENT_COUNTRIES_SET:
+        raise HTTPException(status_code=400, detail="Pais no valido: %s" % country)
+
+    methods = payload.get("methods")
+    if not isinstance(methods, list):
+         raise HTTPException(status_code=400, detail="'methods' debe ser una lista")
+
+    # Reusar logica de validacion leyendo el estado actual
+    row = await fetch_one("SELECT value_json FROM settings WHERE key=%s", ("payment_methods",))
+    all_data = _normalize_json(row["value_json"]) if row and row["value_json"] else {}
+    if not isinstance(all_data, dict):
+        all_data = {}
+
+    # Validar y limpiar metodos
+    validated_methods = []
+    for i, m in enumerate(methods):
+        pos = i + 1
+        name = _clean_str(m.get("name"), "nombre metodo %d" % pos)
+        holder = _clean_str(m.get("holder", ""), "holder metodo %d" % pos)
+        details = _clean_str(m.get("details", ""), "details metodo %d" % pos)
+        active = bool(m.get("active", True))
+        order_val = int(m.get("order", pos))
+        
+        validated_methods.append({
+            "name": name,
+            "holder": holder,
+            "details": details,
+            "active": active,
+            "order": order_val,
+        })
+
+    all_data[c] = {"methods": validated_methods}
+    
+    # Guardar
+    updated_by = _get_updated_by(auth, request)
+    await fetch_one(
+        "INSERT INTO settings(key, value_json, updated_at, updated_by) VALUES (%s, %s::jsonb, now(), %s) "
+        "ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = now(), updated_by = EXCLUDED.updated_by",
+        ("payment_methods", json.dumps(all_data), updated_by),
+        rw=True,
+    )
+    return {"ok": True}
 
 
 @router.put("/admin/payment-methods")

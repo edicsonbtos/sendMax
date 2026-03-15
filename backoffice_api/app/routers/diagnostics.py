@@ -32,7 +32,7 @@ async def health():
         "ok": db_ok,
         "status": "ok" if not degraded else "degraded",
         "service": "backoffice-api",
-        "version": "0.7.0",
+        "version": "1.1.0",
         "db": "connected" if db_ok else "unreachable",
         "secret_key_present": secret_key_present,
         "api_key_present": api_key_present,

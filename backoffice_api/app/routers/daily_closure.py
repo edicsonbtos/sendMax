@@ -10,7 +10,7 @@ from ..auth import require_admin
 from ..db import fetch_one, fetch_all, run_in_transaction
 from ..schemas.daily_closure import DailyClosureExecuteRequest, DailyClosureResponse, ClosureMetrics, ClosureWarning
 
-router = APIRouter(prefix="/api/admin/daily-close", tags=["daily-close"])
+router = APIRouter(prefix="/daily_closure", tags=["daily-close"])
 
 VET = timezone(timedelta(hours=-4))
 
@@ -29,7 +29,7 @@ async def execute_daily_closure(
     auth: dict = Depends(require_admin)
 ):
     d = payload.closure_date
-    start_utc, end_utc = _parse_date_range(d)
+    start_utc, end_utc = await _parse_date_range(d)
 
     # 1. Check if already exists
     existing = await fetch_one("SELECT id FROM daily_closures WHERE closure_date = %s", (d,))
@@ -131,6 +131,48 @@ async def execute_daily_closure(
 
     new_record = await run_in_transaction(_create_record)
     return new_record
+
+@router.post("/close")
+async def close_day_alias(
+    payload: DailyClosureExecuteRequest,
+    auth: dict = Depends(require_admin)
+):
+    """Alias para execute_daily_closure usado por el frontend."""
+    return await execute_daily_closure(payload, auth)
+
+@router.get("/report")
+async def get_daily_report(day: str = Query(...), auth: dict = Depends(require_admin)):
+    """Genera el reporte de entradas/salidas por pais."""
+    try:
+        d = date.fromisoformat(day)
+    except:
+        raise HTTPException(status_code=400, detail="Formato de fecha invalido (YYYY-MM-DD)")
+    
+    start_utc, end_utc = await _parse_date_range(d)
+    
+    rows = await fetch_all("""
+        SELECT 
+            origin_country as country,
+            'USDT' as currency,
+            COALESCE(SUM(amount_origin), 0) as total_in,
+            COALESCE(SUM(amount_origin - profit_real_usdt), 0) as total_out,
+            COALESCE(SUM(profit_real_usdt), 0) as net_balance
+        FROM orders
+        WHERE status = 'COMPLETADA' 
+          AND paid_at >= %s AND paid_at < %s
+        GROUP BY origin_country
+    """, (start_utc, end_utc))
+    
+    result = []
+    for r in rows:
+        result.append({
+            "country": r["country"],
+            "currency": r["currency"],
+            "total_in": float(r["total_in"]),
+            "total_out": float(r["total_out"]),
+            "net_balance": float(r["net_balance"])
+        })
+    return result
 
 @router.get("/history", response_model=List[DailyClosureResponse])
 async def get_closure_history(

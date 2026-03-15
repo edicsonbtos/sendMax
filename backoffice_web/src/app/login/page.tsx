@@ -31,10 +31,11 @@ export default function LoginPage() {
       const data = res.data;
       login(data.access_token, data.role, data.full_name);
 
-      if (data.role === 'admin' || data.role === 'superadmin') {
-        router.push('/admin');
+      // Simple redirect based on role
+      if (data.role === 'admin' || data.role === 'superadmin' || data.role === 'ADMIN') {
+        router.replace('/control-center'); // Use replace to avoid back-nav to login
       } else {
-        router.push('/operator-office');
+        router.replace('/operator-office');
       }
     } catch (err: any) {
       setError(err?.response?.data?.detail || err.message || 'Error de conexión');

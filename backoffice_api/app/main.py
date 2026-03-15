@@ -17,6 +17,7 @@ from .routers import (
     daily_closure, executive,
 )
 from .db import close_pools
+# IMPORTANT: ALLOWED_ORIGINS is explicitly imported from .config here.
 from .config import validate_config, IS_PRODUCTION, ALLOWED_ORIGINS
 from .middleware_limiter import rate_limit_middleware
 
@@ -134,3 +135,7 @@ app.include_router(operator.router)
 app.include_router(vaults.router)
 app.include_router(daily_closure.router)
 app.include_router(executive.router)
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "service": "backoffice-api"}

@@ -19,7 +19,7 @@ async def rate_limit_middleware(request: Request, call_next):
         return await call_next(request)
 
     # Saltos (Skip)
-    if request.url.path == "/health":
+    if request.url.path in ("/health", "/") or request.method == "OPTIONS":
         return await call_next(request)
 
     now = time.time()

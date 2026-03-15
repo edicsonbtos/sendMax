@@ -1,0 +1,30 @@
+﻿=== AUDITORIA BACKOFFICE_WEB ===
+Fecha: 03/14/2026 13:29:35
+
+--- ESTRUCTURA PRINCIPAL ---
+
+
+--- DIRECTORIOS CLAVE ---
+
+
+--- ARCHIVOS FUENTE RELEVANTES ---
+
+
+--- API / ENV / BASE URL ---
+
+--- ENDPOINTS CONSUMIDOS ---
+
+--- LOGIN / AUTH / GUARDS ---
+
+--- PAGINAS / RUTAS ADMIN ---
+
+
+--- OPENAPI SNAPSHOT ---
+No existe openapi_snapshot.json
+
+--- PACKAGE.JSON ---
+
+--- NEXT CONFIG ---
+
+--- ARCHIVOS SOSPECHOSOS / CLAVE ---
+
