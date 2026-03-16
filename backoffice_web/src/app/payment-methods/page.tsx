@@ -1,51 +1,28 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Stack,
-  IconButton,
-  Button,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  MenuItem,
-  CircularProgress,
-  Alert,
-  Tooltip,
-  Snackbar,
-  Switch,
-  FormControlLabel,
-  Avatar,
-  Divider,
+  Box, Typography, Card, CardContent, Stack, Button, TextField,
+  Alert, CircularProgress, IconButton, Chip, Dialog, DialogTitle,
+  DialogContent, DialogActions, Switch, FormControlLabel,
+  Snackbar, Avatar, Tooltip,
 } from '@mui/material';
 import {
-  Refresh as RefreshIcon,
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Save as SaveIcon,
-  DragIndicator as DragIcon,
-  CheckCircle as ActiveIcon,
-  Cancel as InactiveIcon,
+  Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon,
+  Save as SaveIcon, Refresh as RefreshIcon, DragIndicator as DragIcon,
+  CheckCircle as ActiveIcon, Cancel as InactiveIcon,
 } from '@mui/icons-material';
 import { useAuth } from '@/components/AuthProvider';
-import api from '@/lib/api';
+import { apiRequest } from '@/lib/api';
 
 const COUNTRIES = [
-  { code: 'VENEZUELA', label: 'Venezuela', flag: '🇻🇪', color: '#FFD700' },
-  { code: 'USA', label: 'Estados Unidos', flag: '🇺🇸', color: '#3C3B6E' },
-  { code: 'CHILE', label: 'Chile', flag: '🇨🇱', color: '#D52B1E' },
-  { code: 'PERU', label: 'Perú', flag: '🇵🇪', color: '#D91023' },
-  { code: 'COLOMBIA', label: 'Colombia', flag: '🇨🇴', color: '#FCD116' },
-  { code: 'MEXICO', label: 'México', flag: '🇲🇽', color: '#006847' },
-  { code: 'ARGENTINA', label: 'Argentina', flag: '🇦🇷', color: '#75AADB' },
+  { code: 'USA', flag: '🇺🇸', label: 'Estados Unidos', color: '#3C3B6E' },
+  { code: 'VENEZUELA', flag: '🇻🇪', label: 'Venezuela', color: '#FFCD00' },
+  { code: 'CHILE', flag: '🇨🇱', label: 'Chile', color: '#0039A6' },
+  { code: 'PERU', flag: '🇵🇪', label: 'Perú', color: '#D91023' },
+  { code: 'COLOMBIA', flag: '🇨🇴', label: 'Colombia', color: '#FCD116' },
+  { code: 'MEXICO', flag: '🇲🇽', label: 'México', color: '#006847' },
+  { code: 'ARGENTINA', flag: '🇦🇷', label: 'Argentina', color: '#74ACDF' },
 ];
 
 interface PaymentMethod {
@@ -53,151 +30,156 @@ interface PaymentMethod {
   holder: string;
   details: string;
   active: boolean;
-  priority?: number;
+  order: number;
 }
 
-interface CountryData {
-  country: string;
+interface CountryMethods {
   methods: PaymentMethod[];
-  total_count: number;
   active_count: number;
+  total_count: number;
 }
 
 export default function PaymentMethodsPage() {
   const { token } = useAuth();
+  const [data, setData] = useState<Record<string, CountryMethods>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<CountryData[]>([]);
-
+  const [error, setError] = useState('');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
   const [editCountry, setEditCountry] = useState<string | null>(null);
-  const [editIndex, setEditIndex] = useState<number>(-1);
   const [editMethod, setEditMethod] = useState<PaymentMethod | null>(null);
-
+  const [editIndex, setEditIndex] = useState<number>(-1);
   const [deleteTarget, setDeleteTarget] = useState<{ country: string; index: number } | null>(null);
 
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
-
-  const load = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setError('');
     try {
-      const res = await api.get<CountryData[]>('/admin/payment-methods');
-      setData(res.data || []);
-    } catch (e: any) {
-      console.error(e);
-      setError(e.message || 'Error cargando métodos de pago');
+      const res = await apiRequest<{ ok: boolean; countries: Record<string, CountryMethods> }>('/admin/payment-methods');
+      setData(res.countries || {});
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error cargando');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (token) load();
-  }, [token, load]);
+  useEffect(() => { if (token) fetchData(); }, [token, fetchData]);
+
+  const saveAll = async (newData: Record<string, CountryMethods>) => {
+    setSaving(true);
+    try {
+      const payload: Record<string, { methods: PaymentMethod[] }> = {};
+      Object.entries(newData).forEach(([country, cd]) => {
+        if (cd.methods.length > 0) {
+          payload[country] = { methods: cd.methods };
+        }
+      });
+      await apiRequest('/admin/payment-methods', {
+        method: 'PUT',
+        body: JSON.stringify({ value_json: payload }),
+      });
+      setSnackbar({ open: true, message: 'Guardado correctamente', severity: 'success' });
+      await fetchData();
+    } catch (err: unknown) {
+      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Error', severity: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleAddMethod = (country: string) => {
     setEditCountry(country);
     setEditIndex(-1);
-    setEditMethod({ name: '', holder: '', details: '', active: true });
+    setEditMethod({ name: '', holder: '', details: '', active: true, order: (data[country]?.methods?.length || 0) + 1 });
   };
 
   const handleEditMethod = (country: string, index: number) => {
-    const method = data.find(d => d.country === country)?.methods[index];
-    if (method) {
-      setEditCountry(country);
-      setEditIndex(index);
-      setEditMethod({ ...method });
-    }
+    setEditCountry(country);
+    setEditIndex(index);
+    setEditMethod({ ...data[country].methods[index] });
   };
 
   const handleSaveMethod = async () => {
-    if (!editCountry || !editMethod) return;
-    setSaving(true);
-    try {
-      const newData = [...data];
-      const countryData = newData.find(d => d.country === editCountry);
-      if (countryData) {
-        if (editIndex >= 0) {
-          countryData.methods[editIndex] = editMethod;
-        } else {
-          countryData.methods.push(editMethod);
-        }
-
-        await api.put(`/admin/payment-methods/${editCountry}`, { methods: countryData.methods });
-        setSnackbar({ open: true, message: 'Método guardado correctamente', severity: 'success' });
-        setEditMethod(null);
-        setEditCountry(null);
-        load();
-      }
-    } catch (e: any) {
-      setSnackbar({ open: true, message: e.message || 'Error guardando método', severity: 'error' });
-    } finally {
-      setSaving(false);
+    if (!editCountry || !editMethod || !editMethod.name.trim()) return;
+    const newData = { ...data };
+    if (!newData[editCountry]) {
+      newData[editCountry] = { methods: [], active_count: 0, total_count: 0 };
     }
-  };
-
-  const handleToggleActive = async (country: string, index: number) => {
-    const countryData = data.find(d => d.country === country);
-    if (!countryData) return;
-
-    const methods = [...countryData.methods];
-    methods[index].active = !methods[index].active;
-
-    setSaving(true);
-    try {
-      await api.put(`/admin/payment-methods/${country}`, { methods });
-      load();
-    } catch (e: any) {
-      setSnackbar({ open: true, message: e.message || 'Error actualizando estado', severity: 'error' });
-    } finally {
-      setSaving(false);
+    const methods = [...newData[editCountry].methods];
+    if (editIndex >= 0) {
+      methods[editIndex] = editMethod;
+    } else {
+      methods.push(editMethod);
     }
+    newData[editCountry] = {
+      methods,
+      active_count: methods.filter(m => m.active).length,
+      total_count: methods.length,
+    };
+    setData(newData);
+    setEditCountry(null);
+    setEditMethod(null);
+    await saveAll(newData);
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
-    setSaving(true);
-    try {
-      const countryData = data.find(d => d.country === deleteTarget.country);
-      if (countryData) {
-        const methods = countryData.methods.filter((_, i) => i !== deleteTarget.index);
-        await api.put(`/admin/payment-methods/${deleteTarget.country}`, { methods });
-        setSnackbar({ open: true, message: 'Método eliminado', severity: 'success' });
-        setDeleteTarget(null);
-        load();
-      }
-    } catch (e: any) {
-      setSnackbar({ open: true, message: e.message || 'Error eliminando método', severity: 'error' });
-    } finally {
-      setSaving(false);
-    }
+    const newData = { ...data };
+    const methods = [...newData[deleteTarget.country].methods];
+    methods.splice(deleteTarget.index, 1);
+    methods.forEach((m, i) => { m.order = i + 1; });
+    newData[deleteTarget.country] = {
+      methods,
+      active_count: methods.filter(m => m.active).length,
+      total_count: methods.length,
+    };
+    setData(newData);
+    setDeleteTarget(null);
+    await saveAll(newData);
+  };
+
+  const handleToggleActive = async (country: string, index: number) => {
+    const newData = { ...data };
+    const methods = [...newData[country].methods];
+    methods[index] = { ...methods[index], active: !methods[index].active };
+    newData[country] = {
+      methods,
+      active_count: methods.filter(m => m.active).length,
+      total_count: methods.length,
+    };
+    setData(newData);
+    await saveAll(newData);
   };
 
   return (
-    <Box sx={{ p: 4, pb: 10 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+    <Box className="fade-in">
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, color: '#1E293B' }}>Métodos de Pago</Typography>
-          <Typography variant="body2" color="text.secondary">Configuración de cuentas receptoras por país</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>Métodos de Pago</Typography>
+          <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
+            Administra los métodos de pago por país que ven los operadores en Telegram
+          </Typography>
         </Box>
-        <IconButton onClick={load} disabled={loading} color="primary" sx={{ bgcolor: '#F1F5F9' }}>
-          <RefreshIcon />
-        </IconButton>
+        <Button variant="contained" startIcon={<RefreshIcon />} onClick={fetchData} disabled={loading}>
+          Actualizar
+        </Button>
       </Stack>
 
-      {error && <Alert severity="error" sx={{ mb: 4 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress sx={{ color: '#4B2E83' }} />
+        </Box>
       ) : (
         <Stack spacing={3}>
           {COUNTRIES.map((country) => {
-            const cd = data.find(d => d.country === country.code) || { methods: [], total_count: 0, active_count: 0 };
+            const cd = data[country.code] || { methods: [], active_count: 0, total_count: 0 };
             return (
-              <Card key={country.code} elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: 4 }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+              <Card key={country.code} sx={{ borderLeft: `4px solid ${country.color}` }}>
+                <CardContent sx={{ p: 2.5 }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                     <Stack direction="row" spacing={1.5} alignItems="center">
                       <Avatar sx={{ width: 36, height: 36, fontSize: '1.2rem', bgcolor: country.color }}>
                         {country.flag}

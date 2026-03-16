@@ -1,191 +1,195 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
+import * as React from "react";
 import {
   Box,
+  Paper,
   Typography,
-  Card,
-  CardContent,
-  Stack,
   TextField,
   Button,
-  CircularProgress,
   Alert,
-  Divider,
-  Paper,
-  Chip,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  CircularProgress,
+  Stack,
   Checkbox,
   FormControlLabel,
+  Divider,
+  Chip,
+  Tooltip,
+  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TableContainer,
 } from "@mui/material";
 import {
-  Refresh as RefreshIcon,
   Save as SaveIcon,
-  Sync as SyncIcon,
-  SettingsSuggest as EngineIcon,
-  Percent as MarginIcon,
+  Refresh as RefreshIcon,
+  TrendingUp as MarginIcon,
+  Speed as EngineIcon,
   History as HistoryIcon,
-  Check as CheckIcon,
-  CurrencyExchange as CashIcon,
+  CheckCircle as CheckIcon,
+  Sync as SyncIcon,
 } from "@mui/icons-material";
 import { useAuth } from "@/components/AuthProvider";
-import api, { apiRequest } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 
+/* ============ Types ============ */
 interface RateVersion {
   id: number;
   kind: string;
-  reason: string;
-  is_active: boolean;
+  reason: string | null;
   created_at: string;
+  effective_from: string;
+  is_active: boolean;
 }
 
-function CashDeliveryPanel({ saving, setSaving, setError, setSuccess }: any) {
-  const [cashDeliveryEnable, setCashDeliveryEnable] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  React.useEffect(() => {
-    async function init() {
-      try {
-        const val = await api.get('/admin/settings/cash_delivery');
-        setCashDeliveryEnable(val.data === 'true' || val.data === true);
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
-    }
-    init();
-  }, []);
-
-  const handleToggle = async (val: boolean) => {
-    setSaving(true);
-    setCashDeliveryEnable(val);
-    try {
-      await api.put('/admin/settings/cash_delivery', { value: val ? 'true' : 'false' });
-      setSuccess("Configuración de entrega en efectivo actualizada");
-    } catch (e: any) {
-      setError(e.message || "Error guardando cache delivery config");
-    } finally { setSaving(false); }
+interface CommissionsConfig {
+  margin_default?: { percent: number };
+  margin_dest_venez?: { percent: number };
+  margin_route_usa_venez?: { percent: number };
+  profit_split?: {
+    operator_with_sponsor: number;
+    sponsor: number;
+    operator_solo: number;
   };
-
-  if (loading) return null;
-
-  return (
-    <Card variant="outlined" sx={{ p: 2, bgcolor: "#F8FAFC" }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <CashIcon sx={{ color: "#0052FF" }} />
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>Entrega en Efectivo (USD)</Typography>
-            <Typography variant="caption" color="text.secondary">Habilitar/Deshabilitar esta opción para operadores</Typography>
-          </Box>
-        </Stack>
-        <Switch checked={cashDeliveryEnable} onChange={(e) => handleToggle(e.target.checked)} disabled={saving} />
-      </Stack>
-    </Card>
-  );
 }
 
+/* ============ Helpers ============ */
+function toNum(label: string, v: string): number {
+  const n = Number(String(v).replace(",", "."));
+  if (!Number.isFinite(n)) throw new Error(`${label}: debe ser numerico`);
+  return n;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleString("es-VE", {
+    day: "numeric", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+/* ============ Component ============ */
 export default function SettingsPage() {
   const { token } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [success, setSuccess] = React.useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
 
-  const [activeVersion, setActiveVersion] = useState<RateVersion | null>(null);
-  const [history, setHistory] = useState<RateVersion[]>([]);
+  // Margins
+  const [marginDefault, setMarginDefault] = React.useState("10");
+  const [marginDestVenez, setMarginDestVenez] = React.useState("6");
+  const [marginRouteUsaVenez, setMarginRouteUsaVenez] = React.useState("10");
+  const [regenerateNow, setRegenerateNow] = React.useState(false);
 
-  // Form states
-  const [marginDefault, setMarginDefault] = useState("10.0");
-  const [marginDestVenez, setMarginDestVenez] = useState("6.0");
-  const [marginRouteUsaVenez, setMarginRouteUsaVenez] = useState("10.0");
-  const [regenerateNow, setRegenerateNow] = useState(true);
+  // Profit Split
+  const [opWithSponsor, setOpWithSponsor] = React.useState("45");
+  const [sponsorPct, setSponsorPct] = React.useState("10");
+  const [opSolo, setOpSolo] = React.useState("50");
 
-  // Splits
-  const [opWithSponsor, setOpWithSponsor] = useState("35");
-  const [sponsorPct, setSponsorPct] = useState("15");
-  const [opSolo, setOpSolo] = useState("50");
+  // Rates info
+  const [activeVersion, setActiveVersion] = React.useState<RateVersion | null>(null);
+  const [history, setHistory] = React.useState<RateVersion[]>([]);
 
-  const [confirmOpen, setConfirmOpen] = useState(false);
-
-  const load = async () => {
+  async function load() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiRequest<{
-        active: RateVersion;
-        recent: RateVersion[];
-        margins: any;
-        profit_split: any;
-      }>('/admin/settings/advanced');
+      const [commRes, activeRes, historyRes] = await Promise.all([
+        apiGet<CommissionsConfig>("/api/v1/config/commissions"),
+        apiGet<{ ok: boolean; version?: RateVersion }>("/api/v1/rates/active"),
+        apiGet<{ versions: RateVersion[] }>("/api/v1/rates/versions?limit=10"),
+      ]);
 
-      setActiveVersion(data.active);
-      setHistory(data.recent);
-      setMarginDefault(data.margins.margin_default || "10.0");
-      setMarginDestVenez(data.margins.margin_dest_venez || "6.0");
-      setMarginRouteUsaVenez(data.margins.margin_route_usa_venez || "10.0");
+      if (commRes) {
+        setMarginDefault(String((commRes.margin_default?.percent ?? 0.1) * 100));
+        setMarginDestVenez(String((commRes.margin_dest_venez?.percent ?? 0.06) * 100));
+        setMarginRouteUsaVenez(String((commRes.margin_route_usa_venez?.percent ?? 0.1) * 100));
 
-      setOpWithSponsor(data.profit_split.operator_with_sponsor || "35");
-      setSponsorPct(data.profit_split.sponsor_percentage || "15");
-      setOpSolo(data.profit_split.operator_solo || "50");
+        if (commRes.profit_split) {
+          setOpWithSponsor(String(commRes.profit_split.operator_with_sponsor * 100));
+          setSponsorPct(String(commRes.profit_split.sponsor * 100));
+          setOpSolo(String(commRes.profit_split.operator_solo * 100));
+        }
+      }
 
-    } catch (e: any) {
-      setError(e.message || "Error cargando configuración");
+      if (activeRes?.ok) {
+        setActiveVersion(activeRes.version || null);
+      }
+      setHistory(historyRes?.versions || []);
+
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error cargando ajustes");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const manualRegen = async () => {
+  async function saveMargins() {
     setSaving(true);
+    setError(null);
+    setSuccess(null);
     try {
-      await api.post('/admin/rates/regenerate', { reason: "Manual regen from Admin Panel" });
-      setSuccess("Proceso de regeneración iniciado correctamente");
-      load();
-    } catch (e: any) {
-      setError(e.message || "Error regenerando tasas");
-    } finally { setSaving(false); }
-  };
+      const md = toNum("Margen general", marginDefault) / 100;
+      const mv = toNum("Margen Venezuela", marginDestVenez) / 100;
+      const musv = toNum("Margen USA-VE", marginRouteUsaVenez) / 100;
 
-  const saveMargins = async () => {
-    setSaving(true);
-    setConfirmOpen(false);
-    try {
-      await api.put('/admin/settings/margins', {
-        margin_default: marginDefault,
-        margin_dest_venez: marginDestVenez,
-        margin_route_usa_venez: marginRouteUsaVenez,
-        regenerate: regenerateNow
+      await apiPost("/api/v1/config/margins", {
+        margin_default: md,
+        margin_dest_venez: mv,
+        margin_route_usa_venez: musv,
+        regenerate: regenerateNow,
       });
-      setSuccess("Márgenes actualizados correctamente");
-      load();
-    } catch (e: any) {
-      setError(e.message || "Error guardando márgenes");
-    } finally { setSaving(false); }
-  };
 
-  const saveProfitSplit = async () => {
+      setSuccess("Márgenes guardados correctamente" + (regenerateNow ? " y tasas regeneradas" : ""));
+      setConfirmOpen(false);
+      load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error guardando márgenes");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function manualRegen() {
+    if (!confirm("¿Seguro que quieres regenerar todas las tasas ahora?")) return;
     setSaving(true);
     try {
-      const w_sp = parseFloat(opWithSponsor);
-      const sp = parseFloat(sponsorPct);
-      const ops = parseFloat(opSolo);
+      await apiPost("/api/v1/rates/regenerate", {
+        kind: "manual",
+        reason: "Desde Settings UI",
+        activate: true,
+      });
+      setSuccess("Tasas regeneradas exitosamente");
+      load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error regenerando tasas");
+    } finally {
+      setSaving(false);
+    }
+  }
 
-      if (w_sp + sp !== 100 && w_sp + sp !== ops) {
-         // logic error but allow it if they want
-      }
+  async function saveProfitSplit() {
+    setSaving(true);
+    setError(null);
+    try {
+      const opws = toNum("Op con sponsor", opWithSponsor) / 100;
+      const sp = toNum("Sponsor", sponsorPct) / 100;
+      const ops = toNum("Op solo", opSolo) / 100;
 
-      await api.put('/admin/settings/profit-split', {
-        operator_with_sponsor: w_sp,
-        sponsor_percentage: sp,
+      if (opws + sp > 1) throw new Error("La suma de Operador + Sponsor no puede superar el 100%");
+
+      await apiPost("/api/v1/config/profit-split", {
+        operator_with_sponsor: opws,
+        sponsor: sp,
         operator_solo: ops,
       });
       setSuccess("Distribución de profit actualizada");
@@ -195,8 +199,6 @@ export default function SettingsPage() {
       setSaving(false);
     }
   }
-
-  const formatDate = (ds: string) => new Date(ds).toLocaleString();
 
   React.useEffect(() => { if (token) load(); }, [token]);
 
@@ -209,7 +211,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <Box className="fade-in" sx={{ p: 4, pb: 6 }}>
+    <Box className="fade-in" sx={{ pb: 6 }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 700 }}>Configuración Avanzada</Typography>
@@ -373,10 +375,6 @@ export default function SettingsPage() {
             </Button>
           </Box>
         </Paper>
-
-        {/* 💵 Entrega en Efectivo USD */}
-        <CashDeliveryPanel saving={saving} setSaving={setSaving} setError={setError} setSuccess={setSuccess} />
-
       </Stack>
 
       {/* Confirm Dialog */}
