@@ -1,12 +1,16 @@
-'use client';
+﻿'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { Box, CircularProgress } from '@mui/material';
 
 interface AuthContextType {
   token: string | null;
   role: string | null;
   fullName: string | null;
+  apiKey: string | null;
+  setApiKey: (key: string) => void;
+  clearApiKey: () => void;
   login: (token: string, role: string, name: string) => void;
   logout: () => void;
   isReady: boolean;
@@ -16,8 +20,11 @@ const AuthContext = createContext<AuthContextType>({
   token: null,
   role: null,
   fullName: null,
-  login: () => { },
-  logout: () => { },
+  apiKey: null,
+  setApiKey: () => {},
+  clearApiKey: () => {},
+  login: () => {},
+  logout: () => {},
   isReady: false,
 });
 
@@ -31,22 +38,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
+  const [apiKey, setApiKeyState] = useState<string | null>(null);
 
   useEffect(() => {
-    // Standardized key is 'auth_token', but we read others for backward compatibility
-    const storedToken = localStorage.getItem('auth_token') || localStorage.getItem('admin_token') || localStorage.getItem('token');
-    const storedRole = localStorage.getItem('auth_role') || localStorage.getItem('role');
-    const storedName = localStorage.getItem('auth_name') || localStorage.getItem('admin_user');
+    const storedToken = localStorage.getItem('auth_token');
+    const storedRole = localStorage.getItem('auth_role');
+    const storedName = localStorage.getItem('auth_name');
+    const storedApiKey = localStorage.getItem('BACKOFFICE_API_KEY');
 
-    if (storedToken) setToken(storedToken);
-    if (storedRole) setRole(storedRole);
-    if (storedName) setFullName(storedName);
-    
+    setToken(storedToken);
+    setRole(storedRole);
+    setFullName(storedName);
+    setApiKeyState(storedApiKey);
     setIsReady(true);
-
-    if (typeof window !== 'undefined') {
-      console.log("AuthProvider: API_URL detectada:", process.env.NEXT_PUBLIC_API_URL);
-    }
   }, []);
 
   useEffect(() => {
@@ -57,17 +61,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [isReady, token, pathname, router]);
 
   const login = (newToken: string, newRole: string, newName: string) => {
-    // Store in all keys to be ultra-safe during migration/execution
     localStorage.setItem('auth_token', newToken);
     localStorage.setItem('auth_role', newRole);
     localStorage.setItem('auth_name', newName);
-    
-    // Legacy support
-    localStorage.setItem('admin_token', newToken);
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('admin_user', newName);
-    localStorage.setItem('role', newRole);
-
     setToken(newToken);
     setRole(newRole);
     setFullName(newName);
@@ -77,25 +73,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_role');
     localStorage.removeItem('auth_name');
-    localStorage.removeItem('admin_token');
-    localStorage.removeItem('token');
-    localStorage.removeItem('admin_user');
     setToken(null);
     setRole(null);
     setFullName(null);
     router.push('/login');
   };
 
+  const setApiKey = (key: string) => {
+    localStorage.setItem('BACKOFFICE_API_KEY', key);
+    setApiKeyState(key);
+  };
+
+  const clearApiKey = () => {
+    localStorage.removeItem('BACKOFFICE_API_KEY');
+    setApiKeyState(null);
+    logout();
+  };
+
   const value = useMemo(
-    () => ({ token, role, fullName, login, logout, isReady }),
-    [token, role, fullName, isReady]
+    () => ({ token, role, fullName, apiKey, setApiKey, clearApiKey, login, logout, isReady }),
+    [token, role, fullName, apiKey, isReady]
   );
 
   if (!isReady) {
     return (
-      <div className="flex justify-center items-center h-screen bg-[#0a0f1e]">
-        <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
-      </div>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+          backgroundColor: '#FAF8FF',
+        }}
+      >
+        <CircularProgress />
+      </Box>
     );
   }
 

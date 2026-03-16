@@ -1,102 +1,74 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKOFFICE_API_BASE || '';
 
-// ==========================================
-// CENTRALIZED API BASE URL (Single Source of Truth)
-// NOTE: Ensure NEXT_PUBLIC_API_URL points to the backoffice-api URL
-//       and NOT the sendmax-bot (public API) URL in Railway.
-// ==========================================
-const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+export function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('auth_token');
+}
 
-const api = axios.create({
-  baseURL: API_BASE,
-  headers: {
+export function getApiKey(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('BACKOFFICE_API_KEY');
+}
+
+export async function apiRequest<T = unknown>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = getToken();
+  const apiKey = getApiKey();
+
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-  },
-  timeout: 30000,
-  withCredentials: true,
-});
+    ...(options.headers as Record<string, string> || {}),
+  };
 
-let isRedirecting = false;
+  if (token) {
+    headers['Authorization'] = 'Bearer ' + token;
+  }
 
-// Request Interceptor: Inject JWT and API Key if present
-api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    if (typeof window !== 'undefined') {
-      // Prioritize auth_token (standardized)
-      const token = localStorage.getItem('auth_token') || localStorage.getItem('admin_token') || localStorage.getItem('token');
-      if (token && config.headers) {
-        config.headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      const apiKey = localStorage.getItem('api_key');
-      if (apiKey && config.headers) {
-        config.headers['X-API-KEY'] = apiKey;
-      }
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+  if (apiKey) {
+    headers['X-API-KEY'] = apiKey;
+  }
 
-// Response Interceptor: Handle errors
-api.interceptors.response.use(
-  (response) => response,
-  (error: AxiosError) => {
-    if (error.response?.status === 401 && !isRedirecting) {
-      isRedirecting = true;
-      if (typeof window !== 'undefined') {
+  const response = await fetch(API_BASE + endpoint, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      if (typeof window !== 'undefined' && !endpoint.includes('/auth/login')) {
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_role');
         localStorage.removeItem('auth_name');
-        localStorage.removeItem('admin_token');
-        localStorage.removeItem('token');
-        localStorage.removeItem('admin_user');
         window.location.href = '/login';
       }
-      setTimeout(() => { isRedirecting = false; }, 3000);
+      const errorText = await response.text().catch(() => '');
+      throw new Error(errorText || 'UNAUTHORIZED');
     }
-    return Promise.reject(error);
-  }
-);
-
-export default api;
-
-// Helper exports
-export const apiGet = <T = any>(url: string, config = {}) =>
-  api.get<T>(url, config);
-
-export const apiPost = <T = any>(url: string, data?: any, config = {}) =>
-  api.post<T>(url, data, config);
-
-export const apiPut = <T = any>(url: string, data?: any, config = {}) =>
-  api.put<T>(url, data, config);
-
-export const apiDelete = <T = any>(url: string, config = {}) =>
-  api.delete<T>(url, config);
-
-export const apiPatch = <T = any>(url: string, data?: any, config = {}) =>
-  api.patch<T>(url, data, config);
-
-/**
- * Legacy/Compatible helper that returns data directly.
- * Matches original functional logic of restored pages.
- */
-export async function apiRequest<T = any>(url: string, options: any = {}): Promise<T> {
-  const method = (options.method || 'GET').toLowerCase();
-  const config = {
-    ...options,
-    method,
-  };
-  
-  // If options.body exists (from fetch-style calls), move to config.data for axios
-  if (options.body && !config.data) {
-    config.data = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+    const errorText = await response.text().catch(() => '');
+    throw new Error(errorText || 'HTTP ' + response.status);
   }
 
-  const response = await api.request<T>({
-    url,
-    ...config,
-  });
-  
-  return response.data;
+  return response.json();
 }
+
+export async function apiGet<T>(endpoint: string): Promise<T> {
+  return apiRequest<T>(endpoint, { method: 'GET' });
+}
+
+export async function apiPost<T>(endpoint: string, body: unknown): Promise<T> {
+  return apiRequest<T>(endpoint, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function apiPut<T>(endpoint: string, body: unknown): Promise<T> {
+  return apiRequest<T>(endpoint, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export { API_BASE };

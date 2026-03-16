@@ -1,81 +1,54 @@
-'use client';
+"use client";
 
 import React, { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useAuth } from "@/components/AuthProvider";
-import { cn } from "@/lib/cn";
 import {
-  BarChart,
-  Receipt,
-  Wallet,
-  Settings,
-  LineChart,
-  Calendar,
-  Users,
-  CreditCard,
-  LogOut,
-  Menu,
-  X
-} from "lucide-react";
+  Button, Drawer, List, ListItem, ListItemButton, ListItemIcon,
+  ListItemText, Box, Typography, Divider, Avatar, Stack, Chip,
+  IconButton, useMediaQuery, useTheme,
+} from "@mui/material";
+import {
+  Dashboard as DashboardIcon, Receipt as ReceiptIcon,
+  AccountBalance as WalletIcon, EventNote as CalendarIcon,
+  Settings as SettingsIcon, Assessment as MetricsIcon,
+  Menu as MenuIcon, Close as CloseIcon, Logout as LogoutIcon,
+  People as PeopleIcon,
+} from "@mui/icons-material";
+import { useAuth } from "@/components/AuthProvider";
+
+const drawerWidth = 264;
 
 const adminMenu = [
-  { 
-    category: "Control Ejecutivo",
-    items: [
-      { text: "Control Center", path: "/control-center", icon: BarChart, description: "Dashboard estratégico" },
-      { text: "Riesgo Operativo", path: "/risk", icon: LineChart, description: "Monitor de anomalías" },
-      { text: "Auditoría Log", path: "/audit", icon: Receipt, description: "Feed de eventos" },
-    ]
-  },
-  {
-    category: "Operación",
-    items: [
-      { text: "Órdenes", path: "/orders", icon: Receipt, description: "Gestión de remesas" },
-      { text: "Usuarios", path: "/users", icon: Users, description: "Operadores y perfiles" },
-      { text: "Métodos de Pago", path: "/payment-methods", icon: CreditCard, description: "Configuración local" },
-    ]
-  },
-  {
-    category: "Tesorería",
-    items: [
-      { text: "Billeteras Origen", path: "/origin", icon: Wallet, description: "Entradas y sweeps" },
-      { text: "Tesorería Central", path: "/treasury", icon: Wallet, description: "Balances corporativos" },
-      { text: "Bóvedas / Vaults", path: "/vaults", icon: Wallet, description: "Radar de liquidez" },
-    ]
-  },
-  {
-    category: "Configuración",
-    items: [
-      { text: "Métricas", path: "/metrics", icon: LineChart, description: "KPIs históricos" },
-      { text: "Cierre Diario", path: "/daily-close", icon: Calendar, description: "Snapshots legales" },
-      { text: "Rutas Comisión", path: "/routes", icon: Receipt, description: "Márgenes" },
-      { text: "Ajustes", path: "/settings", icon: Settings, description: "Sistema" },
-      { text: "Overview Original", path: "/admin", icon: BarChart, description: "Admin legacy" },
-    ]
-  }
+  { text: "Overview", path: "/", icon: <DashboardIcon />, description: "Dashboard principal" },
+  { text: "Ordenes", path: "/orders", icon: <ReceiptIcon />, description: "Gestionar ordenes" },
+  { text: "Billeteras Origen", path: "/origin", icon: <WalletIcon />, description: "Entradas y sweeps" },
+  { text: "Metricas", path: "/metrics", icon: <MetricsIcon />, description: "Profit y volumen" },
+  { text: "Cierre Diario", path: "/daily-close", icon: <CalendarIcon />, description: "Reportes y cierres" },
+  { text: "Usuarios", path: "/users", icon: <PeopleIcon />, description: "Gestionar operadores" },
+  { text: "Rutas Comisión", path: "/routes", icon: <ReceiptIcon />, description: "Márgenes por ruta" },
+  { text: "Configuracion", path: "/settings", icon: <SettingsIcon />, description: "Reglas y margenes" },
+  { text: "Metodos de Pago", path: "/payment-methods", icon: <WalletIcon />, description: "Metodos por pais" },
 ];
 
 const operatorMenu = [
-  { 
-    category: "Mi Operativa",
-    items: [
-      { text: "Escritorio", path: "/", icon: BarChart, description: "Mis números" },
-      { text: "Tablero Órdenes", path: "/orders", icon: Receipt, description: "Operaciones" },
-      { text: "Mis Métricas", path: "/metrics", icon: LineChart, description: "Rendimiento" },
-    ]
-  }
+  { text: "Mi Dashboard", path: "/", icon: <DashboardIcon />, description: "Mis metricas" },
+  { text: "Mis Ordenes", path: "/orders", icon: <ReceiptIcon />, description: "Mis operaciones" },
+  { text: "Metricas", path: "/metrics", icon: <MetricsIcon />, description: "Mi rendimiento" },
 ];
 
-export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boolean, setMobileOpen: (open: boolean) => void }) {
+export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { logout, fullName, role, token } = useAuth();
 
-  const menuItems = (role === "admin" || role === "superadmin") ? adminMenu : operatorMenu;
+  const menuItems = role === "admin" ? adminMenu : operatorMenu;
 
   const handleNav = (path: string) => {
     router.push(path);
-    setMobileOpen(false);
+    if (isMobile) setMobileOpen(false);
   };
 
   const getInitials = (name: string | null) => {
@@ -83,126 +56,60 @@ export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boo
     return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
   };
 
-  const SidebarContent = (
-    <div className="flex flex-col h-full sidebar w-64 flex-col shrink-0">
-      {/* Logo Header */}
-      <div className="p-6 border-b border-white/10">
-        <div
-          onClick={() => handleNav("/")}
-          className="flex items-center gap-3 cursor-pointer transition-transform hover:scale-[1.02]"
-        >
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <BarChart className="text-white w-6 h-6" />
-          </div>
-          <div className="flex flex-col">
-            <h2 className="font-bold text-white text-lg leading-tight tracking-tight">SendMax</h2>
-            <span className="text-blue-400 text-[10px] uppercase tracking-widest font-bold opacity-80">Backoffice</span>
-          </div>
-        </div>
-        <button
-          onClick={() => setMobileOpen(false)}
-          className="lg:hidden text-white/60 hover:text-white p-1.5 rounded-lg transition-colors"
-        >
-          <X size={20} />
-        </button>
-      </div>
+  const drawerContent = (
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <Box sx={{ p: 2.5, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Box onClick={() => handleNav("/")} sx={{ display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer", transition: "opacity 0.2s ease", "&:hover": { opacity: 0.8 } }}>
+          <Box component="img" src="/logo.png" alt="Sendmax" sx={{ height: 36, width: "auto", objectFit: "contain" }} />
+          <Stack spacing={0}>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: "#4B2E83", fontSize: "1.1rem", lineHeight: 1.2, letterSpacing: "-0.01em" }}>Sendmax</Typography>
+            <Typography variant="caption" sx={{ color: "#64748B", fontSize: "0.65rem", lineHeight: 1, letterSpacing: "0.05em", textTransform: "uppercase" }}>Backoffice</Typography>
+          </Stack>
+        </Box>
+        {isMobile && (<IconButton onClick={() => setMobileOpen(false)} size="small"><CloseIcon /></IconButton>)}
+      </Box>
 
-      {/* Navigation Menu */}
-      <div className="flex-1 overflow-y-auto py-6 custom-scrollbar">
-        <nav className="px-3 space-y-8">
-          {menuItems.map((group) => (
-            <div key={group.category} className="space-y-2">
-              <h3 className="px-4 text-[10px] font-black text-white/20 uppercase tracking-[0.2em]">
-                {group.category}
-              </h3>
-              <ul className="space-y-1">
-                {group.items.map((item) => {
-                  const isActive = item.path === "/" ? pathname === "/" : pathname.startsWith(item.path);
-                  const Icon = item.icon;
+      <Divider sx={{ borderColor: "#E9E3F7", mx: 2 }} />
 
-                  return (
-                    <li key={item.path}>
-                      <button
-                        onClick={() => handleNav(item.path)}
-                        className={cn(
-                          "sidebar-item w-full flex items-center gap-3 py-2 px-4 rounded-xl text-sm font-semibold transition-all duration-200",
-                          isActive 
-                            ? "bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.1)]" 
-                            : "text-white/40 hover:text-white hover:bg-white/5 border border-transparent"
-                        )}
-                      >
-                        <div className={cn(
-                          "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
-                          isActive ? "bg-blue-500/20 text-blue-400" : "text-white/20 group-hover:text-white/40"
-                        )}>
-                          <Icon className="w-5 h-5" />
-                        </div>
-                        <span>{item.text}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </nav>
-      </div>
+      <List sx={{ px: 1.5, py: 2, flex: 1 }}>
+        {menuItems.map((item) => {
+          const isActive = item.path === "/" ? pathname === "/" : pathname.startsWith(item.path);
+          return (
+            <ListItem key={item.path} disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton onClick={() => handleNav(item.path)} sx={{ borderRadius: "12px", py: 1.25, px: 1.5, backgroundColor: isActive ? "#EFEAFF" : "transparent", border: isActive ? "1px solid #D8CCFF" : "1px solid transparent", "&:hover": { backgroundColor: isActive ? "#EFEAFF" : "#FAF8FF", border: isActive ? "1px solid #D8CCFF" : "1px solid #E9E3F7" }, transition: "all 0.2s ease" }}>
+                <ListItemIcon sx={{ color: isActive ? "#4B2E83" : "#6B7280", minWidth: 36, "& .MuiSvgIcon-root": { fontSize: 20 } }}>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.text} secondary={!isActive ? item.description : undefined} primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: isActive ? 700 : 500, color: isActive ? "#4B2E83" : "#111827", lineHeight: 1.3 }} secondaryTypographyProps={{ fontSize: "0.65rem", color: "#64748B", lineHeight: 1.2, mt: 0.25 }} />
+                {isActive && (<Box sx={{ width: 4, height: 24, borderRadius: 2, backgroundColor: "#4B2E83", ml: 1 }} />)}
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
+      </List>
 
-      {/* User Profile Footer */}
-      <div className="p-4 border-t border-white/10">
-        {token && (
-          <button
-            onClick={logout}
-            className="sidebar-item w-full text-red-400 hover:bg-red-500/10 mb-4"
-          >
-            <LogOut size={16} />
-            <span>Cerrar Sesión</span>
-          </button>
-        )}
+      <Divider sx={{ borderColor: "#E9E3F7", mx: 2 }} />
 
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
-          <div className="w-9 h-9 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold border border-blue-500/30">
-            {getInitials(fullName)}
-          </div>
-          <div className="flex flex-col">
-            <span className="text-white font-medium text-xs">
-              {fullName || "Usuario"}
-            </span>
-            <span className="text-gray-500 text-[10px] font-medium uppercase tracking-wider">
-              {role === "admin" ? "Administrador" : "Operador"}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
+      <Box sx={{ p: 2, pb: 2.5 }}>
+        {token && (<Button fullWidth variant="outlined" startIcon={<LogoutIcon />} onClick={logout} sx={{ mb: 1.5, borderColor: "#E9E3F7", color: "#64748B", fontSize: "0.8rem", "&:hover": { borderColor: "#DC2626", color: "#DC2626", backgroundColor: "#FDECEC" } }}>Cerrar Sesion</Button>)}
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Avatar sx={{ width: 32, height: 32, backgroundColor: "#EFEAFF", color: "#4B2E83", fontSize: "0.75rem", fontWeight: 700 }}>{getInitials(fullName)}</Avatar>
+          <Stack spacing={0}>
+            <Typography variant="caption" sx={{ color: "#111827", fontWeight: 600, fontSize: "0.75rem", lineHeight: 1.2 }}>{fullName || "Usuario"}</Typography>
+            <Typography variant="caption" sx={{ color: "#64748B", fontSize: "0.65rem", lineHeight: 1.2 }}>{role === "admin" ? "Administrador" : "Operador"}</Typography>
+          </Stack>
+        </Stack>
+        <Chip label="v1.3.0" size="small" sx={{ mt: 1.5, backgroundColor: "#EFEAFF", color: "#4B2E83", fontWeight: 600, fontSize: "0.65rem", height: 20 }} />
+      </Box>
+    </Box>
   );
-
 
   return (
     <>
-      {/* Mobile Backdrop */}
-      <div
-        className={cn(
-          "fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300",
-          mobileOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-        )}
-        onClick={() => setMobileOpen(false)}
-      />
-
-      {/* Sidebar Desktop */}
-      <aside className="fixed top-0 left-0 z-50 h-screen transition-transform -translate-x-full lg:translate-x-0 lg:static">
-        {SidebarContent}
-      </aside>
-
-      {/* Sidebar Mobile */}
-      <aside
-        className={cn(
-          "fixed top-0 left-0 z-50 w-64 h-screen transition-transform duration-300 lg:hidden",
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        {SidebarContent}
-      </aside>
+      {isMobile && (<IconButton onClick={() => setMobileOpen(true)} sx={{ position: "fixed", top: 12, left: 12, zIndex: 1300, backgroundColor: "#FFFFFF", border: "1px solid #E9E3F7", boxShadow: "0 2px 8px rgba(17,24,39,.08)", "&:hover": { backgroundColor: "#FAF8FF" } }}><MenuIcon sx={{ color: "#4B2E83" }} /></IconButton>)}
+      {isMobile ? (
+        <Drawer variant="temporary" open={mobileOpen} onClose={() => setMobileOpen(false)} ModalProps={{ keepMounted: true }} sx={{ "& .MuiDrawer-paper": { width: drawerWidth, boxSizing: "border-box", background: "linear-gradient(180deg, #FFFFFF 0%, #FAF8FF 100%)", borderRight: "1px solid #E9E3F7" } }}>{drawerContent}</Drawer>
+      ) : (
+        <Drawer variant="permanent" sx={{ width: drawerWidth, flexShrink: 0, "& .MuiDrawer-paper": { width: drawerWidth, boxSizing: "border-box", background: "linear-gradient(180deg, #FFFFFF 0%, #FAF8FF 100%)", borderRight: "1px solid #E9E3F7", display: "flex", flexDirection: "column" } }}>{drawerContent}</Drawer>
+      )}
     </>
   );
 }

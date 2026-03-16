@@ -1,33 +1,27 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import {
+  Box, Typography, Card, CardContent, Stack, Button,
+  Alert, CircularProgress, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Chip, Divider,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  IconButton,
+} from '@mui/material';
+import {
+  ArrowBack as BackIcon,
+  AccountBalanceWallet as WalletIcon,
+  LockReset as PasswordIcon,
+  ContentCopy as CopyIcon,
+  TrendingUp as ProfitIcon,
+  CalendarMonth as MonthIcon,
+  People as ReferralsIcon,
+} from '@mui/icons-material';
 import { useAuth } from '@/components/AuthProvider';
-import api from '@/lib/api';
-import { cn } from '@/lib/cn';
+import { apiRequest } from '@/lib/api';
 
-// UI Components
-import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
-import SectionHeader from '@/components/ui/SectionHeader';
-import Badge from '@/components/ui/Badge';
-import LoadingState from '@/components/ui/LoadingState';
-import MetricCard from '@/components/ui/MetricCard';
-
-// Icons
-import { 
-  ArrowLeft, 
-  User, 
-  Mail, 
-  Shield, 
-  Activity, 
-  Calendar,
-  Wallet,
-  ArrowUpRight,
-  Lock,
-  UserX,
-  UserCheck
-} from 'lucide-react';
+/* ── tipos ─────────────────────────────────────────────── */
 
 interface UserDetail {
   id: number;
@@ -35,140 +29,535 @@ interface UserDetail {
   alias: string;
   full_name: string | null;
   email: string | null;
+  phone: string | null;
+  address_short: string | null;
   role: string;
   is_active: boolean;
+  sponsor_id: number | null;
+  payout_country: string | null;
+  payout_method_text: string | null;
   kyc_status: string;
-  balance_usdt: string;
-  total_orders: number;
+  kyc_submitted_at: string | null;
+  kyc_reviewed_at: string | null;
+  kyc_review_reason: string | null;
+  created_at: string;
+  updated_at: string | null;
+  balance_usdt: string | null;
+}
+
+interface Metrics {
+  profit_today: string;
+  profit_month: string;
+  referrals_month: string;
+}
+
+interface LedgerEntry {
+  id: number;
+  amount_usdt: string;
+  type: string;
+  ref_order_public_id: number | null;
+  memo: string | null;
   created_at: string;
 }
 
-export default function UserDetailPage() {
-  const { id } = useParams();
-  const router = useRouter();
-  const { token, isReady } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState<UserDetail | null>(null);
+interface WithdrawalEntry {
+  id: number;
+  amount_usdt: string;
+  status: string;
+  dest_text: string | null;
+  country: string | null;
+  fiat: string | null;
+  fiat_amount: string | null;
+  reject_reason: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
 
-  const load = useCallback(async () => {
+interface OrderEntry {
+  public_id: number;
+  origin_country: string;
+  dest_country: string;
+  amount_origin: string;
+  payout_dest: string;
+  profit_usdt: string | null;
+  status: string;
+  created_at: string;
+}
+
+interface UserDetailResponse {
+  user: UserDetail;
+  metrics: Metrics;
+  ledger: LedgerEntry[];
+  withdrawals: WithdrawalEntry[];
+  referrals_count: number;
+  orders: OrderEntry[];
+}
+
+/* ── helpers ────────────────────────────────────────────── */
+
+function formatUsd(value: string | null | undefined): string {
+  if (!value) return '$ 0.00';
+  const num = parseFloat(value);
+  if (isNaN(num)) return '$ 0.00';
+  return `$ ${num.toFixed(2)}`;
+}
+
+function formatDate(d: string | null | undefined): string {
+  if (!d) return '-';
+  return new Date(d).toLocaleDateString('es-ES', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  });
+}
+
+function formatDateTime(d: string | null | undefined): string {
+  if (!d) return '-';
+  return new Date(d).toLocaleString('es-ES', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+/* ── constantes de UI ───────────────────────────────────── */
+
+const KYC_MAP: Record<string, { color: 'success' | 'warning' | 'error' | 'default'; label: string }> = {
+  APPROVED:  { color: 'success', label: 'Aprobado' },
+  SUBMITTED: { color: 'warning', label: 'Enviado' },
+  REJECTED:  { color: 'error',   label: 'Rechazado' },
+  PENDING:   { color: 'default', label: 'Pendiente' },
+};
+
+const ORDER_STATUS_COLORS: Record<string, 'success' | 'warning' | 'error' | 'info' | 'default'> = {
+  PAGADA: 'success', EN_PROCESO: 'warning', CANCELADA: 'error', CREADA: 'info',
+};
+
+const WD_STATUS_COLORS: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
+  RESUELTA: 'success', SOLICITADA: 'warning', RECHAZADA: 'error',
+};
+
+const LEDGER_LABELS: Record<string, string> = {
+  ORDER_PROFIT: 'Ganancia orden',
+  SPONSOR_COMMISSION: 'Comision referido',
+  WITHDRAWAL_HOLD: 'Retiro (hold)',
+  WITHDRAWAL_HOLD_REVERSAL: 'Retiro revertido',
+};
+
+/* ── sub-componentes ────────────────────────────────────── */
+
+type IconComponent = React.ElementType<{ sx?: object }>;
+
+interface StatCardProps {
+  title: string;
+  value: string;
+  Icon: IconComponent;
+  color: string;
+}
+
+function StatCard({ title, value, Icon, color }: StatCardProps) {
+  return (
+    <Card sx={{ flex: '1 1 calc(25% - 16px)', minWidth: 200 }}>
+      <CardContent sx={{ p: 2.5 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+          <Box>
+            <Typography variant="body2" sx={{ color: '#64748B', fontSize: '0.8rem', mb: 0.5 }}>
+              {title}
+            </Typography>
+            <Typography variant="h4" sx={{ fontWeight: 800, color: '#111827', lineHeight: 1.1 }}>
+              {value}
+            </Typography>
+          </Box>
+          <Box sx={{
+            backgroundColor: color + '12',
+            borderRadius: '14px', p: 1.25,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Icon sx={{ color, fontSize: 26 }} />
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <Box sx={{ minWidth: 200, py: 0.5 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" sx={{ fontWeight: 500 }}>{value || '-'}</Typography>
+    </Box>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <Typography variant="h6" sx={{ fontWeight: 700, mt: 4, mb: 2 }}>
+      {children}
+    </Typography>
+  );
+}
+
+function EmptyRow({ cols, text }: { cols: number; text: string }) {
+  return (
+    <TableRow>
+      <TableCell colSpan={cols} align="center" sx={{ py: 4 }}>
+        <Typography variant="body2" color="text.secondary">{text}</Typography>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/* ── pagina principal ───────────────────────────────────── */
+
+export default function UserDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const { token } = useAuth();
+
+  const userId = params?.id as string;
+
+  const [data, setData] = useState<UserDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Password reset
+  const [resetOpen, setResetOpen] = useState(false);
+  const [tempPass, setTempPass] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const fetchDetail = useCallback(async () => {
+    if (!userId) return;
     setLoading(true);
-    setError(null);
+    setError('');
     try {
-      const res = await api.get<UserDetail>(`/users/${id}`);
-      setUser(res.data);
-    } catch (e: any) {
-      setError('Error cargando usuario');
+      const res = await apiRequest<UserDetailResponse>(`/users/${userId}`);
+      setData(res);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error cargando usuario');
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [userId]);
 
-  useEffect(() => {
-    if (isReady && token && id) load();
-  }, [isReady, token, id, load]);
-
-  const handleToggleActive = async () => {
+  const handleResetPassword = async () => {
+    if (!confirm('¿Seguro que quieres resetear el password de este usuario?')) return;
+    setResetLoading(true);
     try {
-      await api.put(`/users/${id}/toggle`);
-      load();
-    } catch (e: any) {
-      alert('Error al cambiar estado');
+      const res = await apiRequest<{ ok: boolean; temp_password?: string }>(`/users/${userId}/password`, {
+        method: 'PUT',
+      });
+      if (res.ok && res.temp_password) {
+        setTempPass(res.temp_password);
+        setResetOpen(true);
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error reseteando password');
+    } finally {
+      setResetLoading(false);
     }
   };
 
-  if (!isReady || !token) return null;
-  if (loading) return <LoadingState title="Consultando perfil..." />;
-  if (!user) return <div className="p-8 text-rose-500 font-bold bg-rose-500/10 rounded-2xl">Usuario no encontrado</div>;
+  const handleCopy = () => {
+    navigator.clipboard.writeText(tempPass);
+    alert('Password copiado al portapapeles');
+  };
+
+  useEffect(() => {
+    if (token) fetchDetail();
+  }, [token, fetchDetail]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 12 }}>
+        <CircularProgress sx={{ color: '#4B2E83' }} />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 4 }}>
+        <Button startIcon={<BackIcon />} onClick={() => router.push('/users')} sx={{ mb: 2 }}>
+          Volver a usuarios
+        </Button>
+        <Alert severity="error">{error}</Alert>
+      </Box>
+    );
+  }
+
+  if (!data) return null;
+
+  const { user, metrics, ledger, withdrawals, referrals_count, orders } = data;
+  const kycCfg = KYC_MAP[user.kyc_status] ?? KYC_MAP.PENDING;
 
   return (
-    <div className="space-y-8 pb-10">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => router.back()} icon={<ArrowLeft size={20} />} />
-        <div className="flex flex-col">
-          <h1 className="text-2xl font-black text-white">{user.alias}</h1>
-          <div className="flex gap-2 mt-1">
-             <Badge color={user.role === 'admin' ? 'danger' : 'info'}>{user.role.toUpperCase()}</Badge>
-             <Badge color={user.is_active ? 'success' : 'warning'}>{user.is_active ? 'ACTIVO' : 'INACTIVO'}</Badge>
-          </div>
-        </div>
-      </div>
+    <Box className="fade-in" sx={{ maxWidth: 1200, mx: 'auto' }}>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Profile Card */}
-        <Card className="p-8 flex flex-col items-center text-center">
-           <div className={cn(
-             "w-24 h-24 rounded-full flex items-center justify-center mb-6",
-             user.role === 'admin' ? "bg-rose-500/20 text-rose-500" : "bg-blue-500/20 text-blue-500"
-           )}>
-             <User size={48} />
-           </div>
-           
-           <h2 className="text-xl font-black text-white mb-1">{user.full_name || user.alias}</h2>
-           <p className="text-sm text-gray-500 mb-6">@{user.alias}</p>
-           
-           <div className="w-full space-y-3">
-             <Button 
-                variant="secondary" 
-                className="w-full" 
-                icon={<Lock size={16} />} 
-                onClick={() => {}}
-             >
-               Reset Password
-             </Button>
-             <Button 
-                variant={user.is_active ? "ghost" : "primary"} 
-                className={cn("w-full", user.is_active ? "text-rose-500 hover:bg-rose-500/10" : "")} 
-                icon={user.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
-                onClick={handleToggleActive}
-             >
-               {user.is_active ? 'Desactivar Cuenta' : 'Activar Cuenta'}
-             </Button>
-           </div>
-        </Card>
+      {/* ── HEADER ── */}
+      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+        <Button
+          startIcon={<BackIcon />}
+          onClick={() => router.push('/users')}
+          variant="outlined"
+          size="small"
+        >
+          Volver
+        </Button>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>
+            {user.full_name || user.alias}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            @{user.alias} &middot; ID #{user.id}
+          </Typography>
+        </Box>
+        <Chip
+          label={user.role}
+          color={user.role === 'admin' ? 'error' : 'primary'}
+          sx={{ fontWeight: 700 }}
+        />
+        <Chip
+          label={user.is_active ? 'Activo' : 'Inactivo'}
+          color={user.is_active ? 'success' : 'default'}
+        />
+        <Chip label={kycCfg.label} color={kycCfg.color} />
+        {user.role !== 'admin' && (
+          <Button
+            variant="contained"
+            color="warning"
+            startIcon={<PasswordIcon />}
+            size="small"
+            onClick={handleResetPassword}
+            disabled={resetLoading}
+          >
+            Reset Password
+          </Button>
+        )}
+      </Stack>
 
-        {/* Stats & Details */}
-        <div className="lg:col-span-2 space-y-8">
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <MetricCard
-                label="Balance USDT"
-                value={`$${parseFloat(user.balance_usdt).toFixed(2)}`}
-                icon={<Wallet size={24} />}
-                hint="Fondos líquidos disponibles"
-              />
-              <MetricCard
-                label="Órdenes Totales"
-                value={user.total_orders.toString()}
-                icon={<Activity size={24} />}
-                hint="Procesadas históricamente"
-              />
-           </div>
+      {/* ── METRICAS ── */}
+      <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mb: 3 }}>
+        <StatCard title="Balance Wallet" value={formatUsd(user.balance_usdt)} Icon={WalletIcon} color="#4B2E83" />
+        <StatCard title="Profit Hoy" value={formatUsd(metrics.profit_today)} Icon={ProfitIcon} color="#16A34A" />
+        <StatCard title="Profit Mes" value={formatUsd(metrics.profit_month)} Icon={MonthIcon} color="#2563EB" />
+        <StatCard title="Comisiones Referidos" value={formatUsd(metrics.referrals_month)} Icon={ReferralsIcon} color="#D97706" />
+      </Stack>
 
-           <Card className="p-6">
-              <h3 className="text-sm font-bold text-gray-400 mb-6 uppercase tracking-widest">Información de Cuenta</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                 <div className="space-y-1">
-                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Telegram ID</p>
-                   <p className="text-white font-bold font-mono">{user.telegram_user_id}</p>
-                 </div>
-                 <div className="space-y-1">
-                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Email</p>
-                   <p className="text-white font-bold">{user.email || 'No configurado'}</p>
-                 </div>
-                 <div className="space-y-1">
-                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">KYC Status</p>
-                   <Badge color={user.kyc_status === 'VERIFIED' ? 'success' : 'warning'}>{user.kyc_status}</Badge>
-                 </div>
-                 <div className="space-y-1">
-                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Miembro desde</p>
-                   <div className="flex items-center gap-2 text-white font-medium">
-                     <Calendar size={14} className="text-gray-500" /> {new Date(user.created_at).toLocaleDateString()}
-                   </div>
-                 </div>
-              </div>
-           </Card>
-        </div>
-      </div>
-    </div>
+      {/* ── INFO PERSONAL ── */}
+      <Card sx={{ mb: 1 }}>
+        <CardContent>
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Informacion</Typography>
+          <Stack direction="row" flexWrap="wrap" gap={2.5}>
+            <InfoRow label="Telegram ID" value={
+              <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                {user.telegram_user_id || '-'}
+              </Typography>
+            } />
+            <InfoRow label="Email" value={user.email} />
+            <InfoRow label="Telefono" value={user.phone} />
+            <InfoRow label="Direccion" value={user.address_short} />
+            <InfoRow label="Pais pago" value={user.payout_country} />
+            <InfoRow label="Metodo pago" value={user.payout_method_text} />
+            <InfoRow label="Sponsor" value={user.sponsor_id ? `#${user.sponsor_id}` : '-'} />
+            <InfoRow label="Referidos" value={String(referrals_count)} />
+            <InfoRow label="Registrado" value={formatDate(user.created_at)} />
+            <InfoRow label="Actualizado" value={formatDate(user.updated_at)} />
+            <InfoRow label="KYC enviado" value={formatDate(user.kyc_submitted_at)} />
+            <InfoRow label="KYC revisado" value={formatDate(user.kyc_reviewed_at)} />
+          </Stack>
+          {user.kyc_review_reason && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="caption" color="text.secondary">Razon KYC</Typography>
+              <Typography variant="body2">{user.kyc_review_reason}</Typography>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      <Divider sx={{ my: 2 }} />
+
+      {/* ── LEDGER ── */}
+      <SectionTitle>Movimientos Wallet</SectionTitle>
+      <Card>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700 }}>Tipo</TableCell>
+                <TableCell sx={{ fontWeight: 700 }} align="right">Monto USDT</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Ref Orden</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Memo</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Fecha</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {ledger.length === 0 ? (
+                <EmptyRow cols={5} text="Sin movimientos" />
+              ) : (
+                ledger.map((l) => {
+                  const amount = parseFloat(l.amount_usdt || '0');
+                  const isPositive = amount >= 0;
+                  return (
+                    <TableRow key={l.id}>
+                      <TableCell>
+                        <Chip
+                          label={LEDGER_LABELS[l.type] ?? l.type}
+                          size="small"
+                          color={isPositive ? 'success' : 'error'}
+                          variant="outlined"
+                          sx={{ fontSize: 12 }}
+                        />
+                      </TableCell>
+                      <TableCell align="right" sx={{
+                        fontWeight: 600,
+                        color: isPositive ? '#16A34A' : '#DC2626',
+                      }}>
+                        {isPositive ? '+' : ''}{formatUsd(l.amount_usdt)}
+                      </TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 13 }}>
+                        {l.ref_order_public_id ? `#${l.ref_order_public_id}` : '-'}
+                      </TableCell>
+                      <TableCell sx={{
+                        maxWidth: 200, overflow: 'hidden',
+                        textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {l.memo || '-'}
+                      </TableCell>
+                      <TableCell>{formatDateTime(l.created_at)}</TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Card>
+
+      {/* ── RETIROS ── */}
+      <SectionTitle>Retiros</SectionTitle>
+      <Card>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700 }}>#</TableCell>
+                <TableCell sx={{ fontWeight: 700 }} align="right">Monto USDT</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Destino</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Pais / Fiat</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Fecha</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {withdrawals.length === 0 ? (
+                <EmptyRow cols={6} text="Sin retiros" />
+              ) : (
+                withdrawals.map((w) => (
+                  <TableRow key={w.id}>
+                    <TableCell>{w.id}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600 }}>
+                      {formatUsd(w.amount_usdt)}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={w.status}
+                        size="small"
+                        color={WD_STATUS_COLORS[w.status] ?? 'default'}
+                        sx={{ fontWeight: 600, fontSize: 12 }}
+                      />
+                    </TableCell>
+                    <TableCell sx={{
+                      maxWidth: 180, overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {w.dest_text || '-'}
+                    </TableCell>
+                    <TableCell>
+                      {[w.country, w.fiat].filter(Boolean).join(' / ') || '-'}
+                      {w.fiat_amount ? ` (${parseFloat(w.fiat_amount).toFixed(0)})` : ''}
+                    </TableCell>
+                    <TableCell>{formatDateTime(w.created_at)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Card>
+
+      {/* ── ORDENES ── */}
+      <SectionTitle>Ordenes Recientes</SectionTitle>
+      <Card sx={{ mb: 4 }}>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700 }}>ID</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Ruta</TableCell>
+                <TableCell sx={{ fontWeight: 700 }} align="right">Monto</TableCell>
+                <TableCell sx={{ fontWeight: 700 }} align="right">Pago</TableCell>
+                <TableCell sx={{ fontWeight: 700 }} align="right">Profit</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Fecha</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {orders.length === 0 ? (
+                <EmptyRow cols={7} text="Sin ordenes" />
+              ) : (
+                orders.map((o) => (
+                  <TableRow key={o.public_id}>
+                    <TableCell sx={{ fontFamily: 'monospace' }}>#{o.public_id}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>
+                      {o.origin_country} → {o.dest_country}
+                    </TableCell>
+                    <TableCell align="right">{formatUsd(o.amount_origin)}</TableCell>
+                    <TableCell align="right">{formatUsd(o.payout_dest)}</TableCell>
+                    <TableCell align="right" sx={{ color: '#16A34A', fontWeight: 600 }}>
+                      {formatUsd(o.profit_usdt)}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={o.status}
+                        size="small"
+                        color={ORDER_STATUS_COLORS[o.status] ?? 'default'}
+                        sx={{ fontWeight: 600, fontSize: 12 }}
+                      />
+                    </TableCell>
+                    <TableCell>{formatDateTime(o.created_at)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Card>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Nuevo Password Temporal</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Este password solo se mostrará <b>UNA VEZ</b>. Cópialo y envíaselo al usuario.
+          </Alert>
+          <Box sx={{
+            p: 2, bgcolor: '#F1F5F9', borderRadius: 2,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            border: '1px solid #E2E8F0'
+          }}>
+            <Typography sx={{ fontWeight: 800, fontFamily: 'monospace', fontSize: '1.2rem', color: '#1E293B' }}>
+              {tempPass}
+            </Typography>
+            <IconButton onClick={handleCopy} color="primary" size="small">
+              <CopyIcon />
+            </IconButton>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5 }}>
+          <Button onClick={() => setResetOpen(false)} variant="contained" fullWidth>
+            Entendido, ya lo copié
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }

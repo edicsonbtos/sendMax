@@ -1,32 +1,24 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import api from '@/lib/api';
-import { useAuth } from '@/components/AuthProvider';
 import {
-  Search,
-  RefreshCcw,
-  X,
-  Eye,
-  Shield,
-  ShieldAlert,
-  ToggleLeft,
-  ToggleRight,
-  AlertCircle
-} from 'lucide-react';
-import { cn } from '@/lib/cn';
-import { formatCurrency } from '@/lib/formatters';
+  Box, Typography, Card, Stack, Button, TextField,
+  Alert, CircularProgress, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Chip, IconButton, Tooltip, InputAdornment,
+} from '@mui/material';
+import {
+  Refresh as RefreshIcon,
+  ToggleOn as ActiveIcon,
+  ToggleOff as InactiveIcon,
+  Visibility as ViewIcon,
+  Search as SearchIcon,
+  Close as ClearIcon,
+} from '@mui/icons-material';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/components/AuthProvider';
+import { apiRequest } from '@/lib/api';
 
-// UI Components
-import SectionHeader from '@/components/ui/SectionHeader';
-import FilterBar from '@/components/ui/FilterBar';
-import Input from '@/components/ui/Input';
-import Button from '@/components/ui/Button';
-import LoadingState from '@/components/ui/LoadingState';
-import EmptyState from '@/components/ui/EmptyState';
-import DataTable, { DataTableColumn } from '@/components/ui/DataTable';
-import Badge from '@/components/ui/Badge';
+/* ── tipos ─────────────────────────────────────────────── */
 
 interface User {
   id: number;
@@ -42,15 +34,31 @@ interface User {
   created_at: string;
 }
 
-const KYC_MAP: Record<string, { color: 'success' | 'warning' | 'danger' | 'default'; label: string }> = {
-  APPROVED: { color: 'success', label: 'Aprobado' },
+/* ── helpers ────────────────────────────────────────────── */
+
+const KYC_MAP: Record<string, { color: 'success' | 'warning' | 'error' | 'default'; label: string }> = {
+  APPROVED:  { color: 'success', label: 'Aprobado' },
   SUBMITTED: { color: 'warning', label: 'Enviado' },
-  REJECTED: { color: 'danger', label: 'Rechazado' },
-  PENDING: { color: 'default', label: 'Pendiente' },
+  REJECTED:  { color: 'error',   label: 'Rechazado' },
+  PENDING:   { color: 'default', label: 'Pendiente' },
 };
 
+function KycChip({ status }: { status: string }) {
+  const cfg = KYC_MAP[status] ?? KYC_MAP.PENDING;
+  return <Chip label={cfg.label} size="small" color={cfg.color} sx={{ fontWeight: 600, fontSize: 12 }} />;
+}
+
+function formatUsd(value: string | null | undefined): string {
+  if (!value) return '$ 0.00';
+  const num = parseFloat(value);
+  if (isNaN(num)) return '$ 0.00';
+  return `$ ${num.toFixed(2)}`;
+}
+
+/* ── componente principal ───────────────────────────────── */
+
 export default function UsersPage() {
-  const { token, isReady } = useAuth();
+  const { token } = useAuth();
   const router = useRouter();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -60,25 +68,28 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  /* ── fetch con búsqueda server-side ── */
+
   const fetchUsers = useCallback(async (q: string = '') => {
-    if (!token) return;
     setLoading(true);
     setError('');
     try {
       const query = q.trim() ? `?search=${encodeURIComponent(q.trim())}` : '';
-      const res = await api.get<{ count: number; users: User[] }>(`/users${query}`);
-      setUsers(res.data?.users || []);
+      const res = await apiRequest<{ count: number; users: User[] }>(`/users${query}`);
+      setUsers(res.users ?? []);
       setActiveSearch(q.trim());
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || err.message || 'Error cargando usuarios');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error cargando usuarios');
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
-    if (isReady && token) fetchUsers();
-  }, [isReady, token, fetchUsers]);
+    if (token) fetchUsers();
+  }, [token, fetchUsers]);
+
+  /* ── debounce 400ms al escribir ── */
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -93,175 +104,163 @@ export default function UsersPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  const handleToggle = useCallback(async (userId: number, e: React.MouseEvent) => {
-    e.stopPropagation();
+  /* ── toggle activo/inactivo ── */
+
+  const handleToggle = useCallback(async (userId: number) => {
     try {
-      await api.put(`/users/${userId}/toggle`);
+      await apiRequest(`/users/${userId}/toggle`, { method: 'PUT' });
       await fetchUsers(activeSearch);
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || err.message || 'Error al cambiar estado');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error al cambiar estado');
     }
   }, [activeSearch, fetchUsers]);
 
-  const columns: DataTableColumn<User>[] = [
-    {
-      key: 'id',
-      header: 'ID',
-      className: 'w-16 font-mono text-gray-400 font-bold',
-      render: (u) => u.id
-    },
-    {
-      key: 'alias',
-      header: 'Usuario',
-      className: 'font-bold text-gray-200',
-      render: (u) => (
-        <div>
-          <div>{u.alias}</div>
-          <div className="text-[10px] text-gray-500 font-mono">TG: {u.telegram_user_id || '-'}</div>
-        </div>
-      )
-    },
-    {
-      key: 'full_name',
-      header: 'Nombre Completo',
-      render: (u) => u.full_name || '-'
-    },
-    {
-      key: 'role',
-      header: 'Rol',
-      render: (u) => (
-        <Badge color={u.role === 'admin' ? 'danger' : 'info'}>
-          <div className="flex items-center gap-1.5 uppercase tracking-widest text-[10px]">
-            {u.role === 'admin' ? <ShieldAlert size={12} /> : <Shield size={12} />}
-            {u.role}
-          </div>
-        </Badge>
-      )
-    },
-    {
-      key: 'kyc_status',
-      header: 'KYC',
-      render: (u) => {
-        const kyc = KYC_MAP[u.kyc_status] || KYC_MAP.PENDING;
-        return <Badge color={kyc.color}>{kyc.label}</Badge>;
-      }
-    },
-    {
-      key: 'balance',
-      header: 'Balance',
-      className: 'text-right font-bold text-gray-200',
-      render: (u) => formatCurrency(Number(u.balance_usdt || 0))
-    },
-    {
-      key: 'status',
-      header: 'Estado',
-      className: 'text-center',
-      render: (u) => (
-        <Badge color={u.is_active ? 'success' : 'default'}>
-          {u.is_active ? 'Activo' : 'Inactivo'}
-        </Badge>
-      )
-    },
-    {
-      key: 'actions',
-      header: 'Acciones',
-      className: 'text-center',
-      render: (u) => (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              router.push(`/users/${u.id}`);
-            }}
-            className="p-1.5 text-gray-400 hover:text-cyan-400"
-            title="Ver detalle"
-          >
-            <Eye size={18} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => handleToggle(u.id, e)}
-            className={cn(
-              "p-1.5",
-              u.is_active ? "text-emerald-400" : "text-gray-500 hover:text-yellow-400"
-            )}
-            title={u.is_active ? 'Desactivar' : 'Activar'}
-          >
-            {u.is_active ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-          </Button>
-        </div>
-      )
-    }
-  ];
-
-  if (!isReady || !token) return null;
+  /* ── render ── */
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
-      <SectionHeader
-        title="Usuarios"
-        subtitle={`${users.length} operadores y administradores gestionados`}
-        rightSlot={
-          <Button
-            variant="primary"
-            icon={<RefreshCcw size={16} className={cn(loading && "animate-spin")} />}
-            onClick={() => fetchUsers(activeSearch)}
-            loading={loading}
-          >
-            Actualizar
-          </Button>
-        }
+    <Box className="fade-in">
+
+      {/* header */}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>Usuarios</Typography>
+          <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
+            {users.length} operadores y administradores
+            {activeSearch && (
+              <Chip
+                label={`Filtro: "${activeSearch}"`}
+                size="small"
+                onDelete={handleClearSearch}
+                sx={{ ml: 1, fontSize: 11 }}
+              />
+            )}
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          startIcon={<RefreshIcon />}
+          onClick={() => fetchUsers(activeSearch)}
+          disabled={loading}
+        >
+          Actualizar
+        </Button>
+      </Stack>
+
+      {/* búsqueda con debounce */}
+      <TextField
+        placeholder="Buscar por alias, nombre o email..."
+        size="small"
+        value={search}
+        onChange={(e) => handleSearchChange(e.target.value)}
+        sx={{ mb: 3, width: 420 }}
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" sx={{ color: '#94A3B8' }} />
+              </InputAdornment>
+            ),
+            endAdornment: search ? (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={handleClearSearch}>
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ) : null,
+          },
+        }}
       />
 
-      <FilterBar>
-        <div className="relative flex-1 max-w-md">
-          <Input
-            placeholder="Buscar por alias, nombre o email..."
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            icon={<Search size={18} />}
-          />
-          {search && (
-            <button
-              onClick={handleClearSearch}
-              className="absolute right-3 top-10 p-1.5 text-gray-500 hover:text-white rounded-lg transition"
-            >
-              <X size={16} />
-            </button>
-          )}
-        </div>
-      </FilterBar>
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-      {error && (
-        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-sm font-medium flex items-center gap-3">
-          <AlertCircle size={18} /> {error}
-        </div>
-      )}
-
-      {loading && users.length === 0 ? (
-        <LoadingState title="Consultando base de usuarios..." />
-      ) : users.length === 0 ? (
-        <EmptyState
-          title={activeSearch ? `Sin resultados para "${activeSearch}"` : "No hay usuarios registrados"}
-          description="Ajusta los filtros de búsqueda o verifica la conexión con el servidor."
-          action={
-            <Button variant="secondary" onClick={handleClearSearch}>
-              Limpiar búsqueda
-            </Button>
-          }
-        />
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress sx={{ color: '#4B2E83' }} />
+        </Box>
       ) : (
-        <DataTable
-          columns={columns}
-          data={users}
-          loading={loading}
-          rowKey={(u) => u.id}
-          className="animate-slide-up"
-        />
+        <Card>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700 }}>ID</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Alias</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Nombre</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Telegram</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Rol</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>KYC</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }} align="right">Balance</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }} align="right">Ordenes</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Estado</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Acciones</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {activeSearch ? `Sin resultados para "${activeSearch}"` : 'Sin usuarios'}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  users.map((u) => (
+                    <TableRow
+                      key={u.id}
+                      hover
+                      onClick={() => router.push(`/users/${u.id}`)}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      <TableCell>{u.id}</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>{u.alias}</TableCell>
+                      <TableCell>{u.full_name ?? '-'}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 13 }}>
+                        {u.telegram_user_id || '-'}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={u.role}
+                          size="small"
+                          color={u.role === 'admin' ? 'error' : 'primary'}
+                          sx={{ fontWeight: 700, fontSize: 12 }}
+                        />
+                      </TableCell>
+                      <TableCell><KycChip status={u.kyc_status} /></TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>
+                        {formatUsd(u.balance_usdt)}
+                      </TableCell>
+                      <TableCell align="right">{u.total_orders ?? 0}</TableCell>
+                      <TableCell>
+                        <Chip
+                          icon={u.is_active ? <ActiveIcon /> : <InactiveIcon />}
+                          label={u.is_active ? 'Activo' : 'Inactivo'}
+                          size="small"
+                          color={u.is_active ? 'success' : 'default'}
+                        />
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Stack direction="row" spacing={0.5}>
+                          <Tooltip title="Ver detalle">
+                            <IconButton size="small" onClick={() => router.push(`/users/${u.id}`)}>
+                              <ViewIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title={u.is_active ? 'Desactivar' : 'Activar'}>
+                            <IconButton size="small" onClick={() => handleToggle(u.id)}>
+                              {u.is_active ? <InactiveIcon color="warning" /> : <ActiveIcon color="success" />}
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Card>
       )}
-    </div>
+    </Box>
   );
 }
