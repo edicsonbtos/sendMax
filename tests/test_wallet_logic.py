@@ -11,8 +11,8 @@ async def test_add_ledger_entry_tx_logic():
     mock_conn.cursor.return_value.__aenter__.return_value = mock_cur
 
     # Simulate first time insert (RETURNING id returns something)
-    mock_cur.fetchone.side_effect = [
-        (123,), # RETURNING id for ledger
+    mock_cur.fetchall.side_effect = [
+        [(123,)], # RETURNING id for ledger
     ]
 
     await wallet_repo.add_ledger_entry_tx(
@@ -36,8 +36,8 @@ async def test_add_ledger_entry_tx_idempotency_logic():
     mock_conn.cursor.return_value.__aenter__.return_value = mock_cur
 
     # Simulate conflict (RETURNING id returns None)
-    mock_cur.fetchone.side_effect = [
-        None, # INSERT ledger (conflict DO NOTHING returning nothing)
+    mock_cur.fetchall.side_effect = [
+        [], # INSERT ledger (conflict DO NOTHING returning nothing)
     ]
 
     await wallet_repo.add_ledger_entry_tx(
