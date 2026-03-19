@@ -7,8 +7,8 @@ ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://sendmax11-production.up.r
 
 WORKDIR /app
 
-# Copiar package.json y package-lock.json
-COPY package.json package-lock.json ./
+# Copiar package.json y package-lock.json desde la subcarpeta
+COPY operator-web/package.json operator-web/package-lock.json ./
 
 # Inyección para invalidar la caché de Railway (Fase 4 clean build)
 ARG CACHEBUST=20260311_v2_grandprix
@@ -17,8 +17,8 @@ ENV CACHEBUST=$CACHEBUST
 # Instalación reproducible con npm ci (no npm install)
 RUN npm ci
 
-# Copiar el resto del código
-COPY . .
+# Copiar el resto del código de la subcarpeta
+COPY operator-web/ .
 
 # Variables de entorno de build
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -35,6 +35,7 @@ WORKDIR /app
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
+# Si existe la carpeta public, la copiamos
 COPY --from=builder /app/public ./public
 
 # Exponer el puerto
