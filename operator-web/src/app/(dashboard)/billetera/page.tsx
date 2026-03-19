@@ -15,6 +15,8 @@ interface WithdrawInfo {
     method_text: string;
     available_balance: number;
     formatted_balance: string;
+    fiat?: string;
+    rate?: number;
 }
 
 interface Withdrawal {
@@ -248,6 +250,21 @@ export default function BilleteraPage() {
                                 <span>Disponible real: <strong className="text-green-400">{withdrawInfo.formatted_balance}</strong></span>
                             </p>
                         </div>
+                        
+                        {withdrawInfo.rate && withdrawInfo.fiat && amount && parseFloat(amount) >= 10 && (
+                            <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg flex justify-between items-center animate-fade-in">
+                                <div>
+                                    <p className="text-blue-400/80 text-xs font-medium uppercase tracking-wider mb-1">Tasa de Cambio</p>
+                                    <p className="text-white text-sm font-mono">1 USDT = {withdrawInfo.rate} {withdrawInfo.fiat}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-blue-400/80 text-xs font-medium uppercase tracking-wider mb-1">Recibirás (Aprox)</p>
+                                    <p className="text-blue-400 font-bold text-xl drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]">
+                                        {safeToFixed(parseFloat(amount) * withdrawInfo.rate, 2)} {withdrawInfo.fiat}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
                         <button
                             type="submit"

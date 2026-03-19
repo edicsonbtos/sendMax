@@ -19,6 +19,12 @@ from decimal import Decimal
 import logging
 from uuid import uuid4
 import json
+import unicodedata
+
+def _normalize_country(c: str) -> str:
+    if not c: return ""
+    s = unicodedata.normalize('NFKD', c).encode('ASCII', 'ignore').decode('utf-8')
+    return s.upper().strip()
 
 
 from src.db.connection import get_async_conn
@@ -409,6 +415,8 @@ class WithdrawInfoResponse(BaseModel):
     method_text: str
     available_balance: Decimal
     formatted_balance: str
+    fiat: Optional[str] = None
+    rate: Optional[Decimal] = None
 
 @router.get("/wallet/withdraw-info", response_model=WithdrawInfoResponse)
 async def get_withdraw_info(user_id: int = Depends(get_current_operator)):
@@ -423,6 +431,16 @@ async def get_withdraw_info(user_id: int = Depends(get_current_operator)):
             detail="No tienes metodo de cobro configurado. Completa tu KYC."
         )
 
+    norm_country = _normalize_country(country)
+    rate_res = await rates_repo.get_latest_active_country_sell(country=norm_country)
+    if not rate_res:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No hay tasa de cambio activa para {country} ({norm_country})"
+        )
+    fiat, sell_price = rate_res
+    sell_price = Decimal(str(sell_price))
+
     # Buscar el balance validado
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
@@ -435,7 +453,9 @@ async def get_withdraw_info(user_id: int = Depends(get_current_operator)):
         country=country,
         method_text=method_text,
         available_balance=available,
-        formatted_balance=f"{available:.2f} USDT"
+        formatted_balance=f"{available:.2f} USDT",
+        fiat=fiat,
+        rate=sell_price
     )
 
 class WithdrawRequest(BaseModel):
@@ -462,7 +482,8 @@ async def request_withdrawal(
         raise HTTPException(status_code=400, detail="No tienes método de cobro configurado. Completa tu KYC.")
 
     # Obtener tasa activa del pais
-    result = await rates_repo.get_latest_active_country_sell(country=country)
+    norm_country = _normalize_country(country)
+    result = await rates_repo.get_latest_active_country_sell(country=norm_country)
     if not result:
         raise HTTPException(status_code=400, detail=f"No hay tasa de venta activa para {country}")
     
