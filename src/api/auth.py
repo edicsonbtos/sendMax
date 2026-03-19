@@ -1,5 +1,11 @@
 """
-Auth endpoint LEGACY — ahora redirige al sistema JWT del backoffice.
+Auth endpoint — DEPRECATED.
+
+╔══════════════════════════════════════════════════════════════╗
+║  DEPRECATED: Este módulo está DEPRECADO.                     ║
+║  Fuente canónica de auth admin: backoffice_api/app/routers/auth.py  ║
+║  NO extender. NO agregar endpoints. Se eliminará en fase futura.    ║
+╚══════════════════════════════════════════════════════════════╝
 
 ANTES: Credenciales hardcodeadas (admin@sendmax.com / Maxi2204#)
 AHORA: Valida contra la DB con bcrypt + retorna JWT firmado.
@@ -16,6 +22,7 @@ router = APIRouter()
 _logger = logging.getLogger("auth")
 
 
+
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -27,13 +34,15 @@ class LoginResponse(BaseModel):
     full_name: str
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse, deprecated=True)
 async def login(req: LoginRequest):
     """
-    Login para administradores.
-    Valida contra la DB (users table) con bcrypt.
-    Retorna JWT firmado (NO token estático).
+    DEPRECATED — Login para administradores.
+    Fuente canónica: backoffice_api/app/routers/auth.py POST /auth/login
+    Valida contra la DB (users table) con bcrypt. Retorna JWT.
     """
+    _logger.warning("DEPRECATED endpoint /login called — use backoffice_api /auth/login instead")
+
     email = req.email.strip().lower()
     pwd = req.password.strip()
 

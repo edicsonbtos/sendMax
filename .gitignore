@@ -50,3 +50,22 @@ SUPER_PROMPTS_*.txt
 *.bak
 *.bak2
 *.bak_*
+
+# Diagnostic dumps & audits
+*_DUMP.txt
+*_DUMP*.txt
+*_audit*.txt
+*_audit*.json
+*_analysis*.txt
+*_CORE.txt
+*_KEY_FILES.txt
+SYSTEM_ROUTE_MAP.txt
+VALIDATION_REPORT*.md
+REPORTE_*.md
+phase*_validation_report*.txt
+tools/
+tmp_web_files/
+*.webp
+backoffice_web/audit/
+backoffice_web/*_audit*.txt
+backoffice_web/build_err*.txt

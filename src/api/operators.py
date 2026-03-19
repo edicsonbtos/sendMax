@@ -1,3 +1,16 @@
+"""
+Endpoints de operadores para el proceso bot/operator-web.
+
+╔══════════════════════════════════════════════════════════════╗
+║  DEPRECATED (READS): Los endpoints de lectura (dashboard,   ║
+║  stats, top-clients, queue, ledger, earnings, withdrawals)  ║
+║  están deprecados. Fuente canónica:                         ║
+║    backoffice_api/app/routers/operator.py                   ║
+║  ACTIVOS (WRITES): create order, withdraw, get_current_op   ║
+║  NO BORRAR get_current_operator — lo usan beneficiaries,     ║
+║  clients y client_ranking.                                  ║
+╚══════════════════════════════════════════════════════════════╝
+"""
 from fastapi import APIRouter, HTTPException, Depends, Header
 from pydantic import BaseModel
 from typing import List, Optional
@@ -6,6 +19,7 @@ from decimal import Decimal
 import logging
 from uuid import uuid4
 import json
+
 
 from src.db.connection import get_async_conn
 from src.db.repositories.users_repo import get_payout_method
@@ -94,8 +108,9 @@ async def get_current_operator(authorization: str = Header(None)) -> int:
     user_id = int(payload.get("sub"))
     return user_id
 
-@router.get("/dashboard/stats", response_model=OperatorStatsResponse)
+@router.get("/dashboard/stats", response_model=OperatorStatsResponse, deprecated=True)
 async def get_dashboard_stats(user_id: int = Depends(get_current_operator)):
+    """DEPRECATED — Use backoffice_api GET /operator/me/dashboard instead."""
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
@@ -146,8 +161,9 @@ async def get_dashboard_stats(user_id: int = Depends(get_current_operator)):
                 rank_position=rank
             )
 
-@router.get("/dashboard/top-clients", response_model=List[TopClientResponse])
+@router.get("/dashboard/top-clients", response_model=List[TopClientResponse], deprecated=True)
 async def get_top_clients(user_id: int = Depends(get_current_operator), limit: int = 5):
+    """DEPRECATED — Use backoffice_api GET /operator/me/dashboard instead."""
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
@@ -163,8 +179,9 @@ async def get_top_clients(user_id: int = Depends(get_current_operator), limit: i
             rows = await cur.fetchall()
             return [TopClientResponse(name=r[0][:50], total_volume_usdt=r[1], total_orders=r[2]) for r in rows]
 
-@router.get("/orders/queue", response_model=List[OrderQueueItem])
+@router.get("/orders/queue", response_model=List[OrderQueueItem], deprecated=True)
 async def get_order_queue(user_id: int = Depends(get_current_operator)):
+    """DEPRECATED — Use backoffice_api GET /operator/me/dashboard instead."""
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
@@ -180,8 +197,9 @@ async def get_order_queue(user_id: int = Depends(get_current_operator)):
                 origin_country=r[3], dest_country=r[4], status=r[5], created_at=r[6]
             ) for r in rows]
 
-@router.get("/earnings/by-country", response_model=List[EarningsByCountry])
+@router.get("/earnings/by-country", response_model=List[EarningsByCountry], deprecated=True)
 async def get_earnings_by_country(user_id: int = Depends(get_current_operator), days: int = 30):
+    """DEPRECATED — Use backoffice_api GET /operator/me/dashboard instead."""
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
@@ -312,8 +330,9 @@ class WalletSummaryResponse(BaseModel):
     lifetime_earnings_usdt: Decimal
     pending_withdrawals_usdt: Decimal
 
-@router.get("/wallet/summary", response_model=WalletSummaryResponse)
+@router.get("/wallet/summary", response_model=WalletSummaryResponse, deprecated=True)
 async def get_wallet_summary(user_id: int = Depends(get_current_operator)):
+    """DEPRECATED — Use backoffice_api GET /operator/me/dashboard instead."""
     summary = WalletSummaryResponse(balance_usdt=Decimal("0"), lifetime_earnings_usdt=Decimal("0"), pending_withdrawals_usdt=Decimal("0"))
     try:
         async with get_async_conn() as conn:
@@ -359,8 +378,9 @@ class LedgerItem(BaseModel):
     description: str
     created_at: datetime
 
-@router.get("/wallet/ledger", response_model=List[LedgerItem])
+@router.get("/wallet/ledger", response_model=List[LedgerItem], deprecated=True)
 async def get_wallet_ledger(limit: int = 50, user_id: int = Depends(get_current_operator)):
+    """DEPRECATED — Use backoffice_api GET /operator/me/dashboard instead."""
     items = []
     try:
         async with get_async_conn() as conn:
@@ -516,16 +536,12 @@ async def request_withdrawal(
     }
 
 
-@router.get("/wallet/withdrawals")
+@router.get("/wallet/withdrawals", deprecated=True)
 async def get_withdrawals(
     limit: int = 50,
     user_id: int = Depends(get_current_operator)
 ):
-    """
-    Obtiene el historial de retiros del operador.
-    
-    Retorna lista de retiros ordenados por fecha (más recientes primero).
-    """
+    """DEPRECATED — Use backoffice_api GET /operator/me/dashboard instead."""
     async with get_async_conn() as conn:
         async with conn.cursor() as cur:
             await cur.execute(

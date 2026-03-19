@@ -1,4 +1,4 @@
-﻿"""
+"""
 Router de gestion de usuarios (admin only).
 - GET  /users              - listar con KYC, balance, busqueda
 - GET  /users/{user_id}    - detalle completo
@@ -19,6 +19,11 @@ from pydantic import BaseModel, field_validator
 from ..auth import require_admin
 from ..auth_jwt import get_password_hash
 from ..db import fetch_one, fetch_all
+from ..services.financial_reads import (
+    get_user_profit_metrics,
+    get_user_ledger,
+    get_user_withdrawals,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -161,51 +166,14 @@ async def get_user_detail(user_id: int, auth=Depends(require_admin)):
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    metrics = await fetch_one(
-        """
-        SELECT
-            COALESCE((
-                SELECT SUM(amount_usdt) FROM wallet_ledger
-                WHERE user_id = %s AND type = 'ORDER_PROFIT'
-                  AND created_at >= date_trunc('day', now())
-            ), 0) AS profit_today,
-            COALESCE((
-                SELECT SUM(amount_usdt) FROM wallet_ledger
-                WHERE user_id = %s AND type = 'ORDER_PROFIT'
-                  AND created_at >= date_trunc('month', now())
-            ), 0) AS profit_month,
-            COALESCE((
-                SELECT SUM(amount_usdt) FROM wallet_ledger
-                WHERE user_id = %s AND type = 'SPONSOR_COMMISSION'
-                  AND created_at >= date_trunc('month', now())
-            ), 0) AS referrals_month
-        """,
-        (user_id, user_id, user_id),
-    )
+    # Centralizado en financial_reads (fuente única de verdad)
+    metrics = await get_user_profit_metrics(user_id)
 
-    ledger = await fetch_all(
-        """
-        SELECT id, amount_usdt, type, ref_order_public_id, memo, created_at
-        FROM wallet_ledger
-        WHERE user_id = %s
-        ORDER BY created_at DESC
-        LIMIT 15
-        """,
-        (user_id,),
-    )
+    # Centralizado en financial_reads (fuente única de verdad)
+    ledger = await get_user_ledger(user_id, limit=15)
 
-    withdrawals = await fetch_all(
-        """
-        SELECT id, amount_usdt, status, dest_text, country,
-               fiat, fiat_amount, reject_reason,
-               created_at, resolved_at
-        FROM withdrawals
-        WHERE user_id = %s
-        ORDER BY created_at DESC
-        LIMIT 10
-        """,
-        (user_id,),
-    )
+    # Centralizado en financial_reads (fuente única de verdad)
+    withdrawals = await get_user_withdrawals(user_id, limit=10)
 
     ref_row = await fetch_one(
         "SELECT COUNT(*) AS cnt FROM users WHERE sponsor_id = %s",

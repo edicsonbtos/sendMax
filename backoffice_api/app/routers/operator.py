@@ -9,6 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from decimal import Decimal
 from ..auth import require_operator_or_admin
 from ..db import fetch_one, fetch_all
+from ..services.financial_reads import (
+    get_user_profit_metrics,
+    get_user_ledger,
+    get_user_withdrawals,
+    get_operator_leaderboard,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/operator", tags=["Operator"])
@@ -66,31 +72,8 @@ async def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)
         raise HTTPException(status_code=404, detail="Operador no encontrado")
 
     # ── Métricas de ganancias (hoy / mes / referidos) ──────────────────────
-    metrics = await fetch_one(
-        """
-        SELECT
-            COALESCE((
-                SELECT SUM(amount_usdt) FROM wallet_ledger
-                WHERE user_id = %s AND type = 'ORDER_PROFIT'
-                  AND created_at >= date_trunc('day', now())
-            ), 0) AS profit_today,
-            COALESCE((
-                SELECT SUM(amount_usdt) FROM wallet_ledger
-                WHERE user_id = %s AND type = 'ORDER_PROFIT'
-                  AND created_at >= date_trunc('month', now())
-            ), 0) AS profit_month,
-            COALESCE((
-                SELECT SUM(amount_usdt) FROM wallet_ledger
-                WHERE user_id = %s AND type = 'SPONSOR_COMMISSION'
-                  AND created_at >= date_trunc('month', now())
-            ), 0) AS referrals_month,
-            COALESCE((
-                SELECT SUM(amount_usdt) FROM wallet_ledger
-                WHERE user_id = %s AND type = 'ORDER_PROFIT'
-            ), 0) AS profit_total
-        """,
-        (user_id, user_id, user_id, user_id),
-    )
+    # Centralizado en financial_reads (fuente única de verdad)
+    metrics = await get_user_profit_metrics(user_id)
 
     # ── Ganancias desglosadas por país de origen ───────────────────────────
     profit_by_country = await fetch_all(
@@ -121,30 +104,12 @@ async def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)
     )
 
     # ── Últimos 10 retiros ─────────────────────────────────────────────────
-    withdrawals = await fetch_all(
-        """
-        SELECT id, amount_usdt, status, dest_text, country,
-               fiat, fiat_amount, reject_reason,
-               created_at, resolved_at
-        FROM withdrawals
-        WHERE user_id = %s
-        ORDER BY created_at DESC
-        LIMIT 10
-        """,
-        (user_id,),
-    )
+    # Centralizado en financial_reads (fuente única de verdad)
+    withdrawals = await get_user_withdrawals(user_id, limit=10)
 
     # ── Últimas 10 entradas del ledger ─────────────────────────────────────
-    ledger = await fetch_all(
-        """
-        SELECT id, amount_usdt, type, ref_order_public_id, memo, created_at
-        FROM wallet_ledger
-        WHERE user_id = %s
-        ORDER BY created_at DESC
-        LIMIT 10
-        """,
-        (user_id,),
-    )
+    # Centralizado en financial_reads (fuente única de verdad)
+    ledger = await get_user_ledger(user_id, limit=10)
 
     # ── Referidos (count) ──────────────────────────────────────────────────
     ref_row = await fetch_one(
@@ -185,27 +150,8 @@ async def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)
     trust_score = float(ts_row["trust_score"]) if ts_row else 50.0
 
     # ── Leaderboard: Top 10 operadores por trust_score ─────────────────────
-    leaderboard = await fetch_all(
-        """
-        SELECT u.id, u.alias, u.full_name,
-               COALESCE(u.trust_score, 50) AS trust_score,
-               u.kyc_status,
-               COALESCE((
-                   SELECT SUM(wl.amount_usdt) FROM wallet_ledger wl
-                   WHERE wl.user_id = u.id AND wl.type = 'ORDER_PROFIT'
-                     AND wl.created_at >= date_trunc('month', now())
-               ), 0) AS profit_month,
-               COALESCE((
-                   SELECT COUNT(*) FROM orders o
-                   WHERE o.operator_user_id = u.id AND o.status = 'PAGADA'
-                     AND o.created_at >= date_trunc('month', now())
-               ), 0) AS orders_month
-        FROM users u
-        WHERE u.role IN ('operator', 'admin')
-        ORDER BY u.trust_score DESC NULLS LAST, profit_month DESC
-        LIMIT 10
-        """,
-    )
+    # Centralizado en financial_reads (fuente única de verdad)
+    leaderboard = await get_operator_leaderboard(limit=10)
 
     # ── Órdenes completadas hoy ────────────────────────────────────────────
     orders_today_row = await fetch_one(

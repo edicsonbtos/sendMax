@@ -1,3 +1,14 @@
+"""
+Ranking de Operadores — DEPRECATED.
+
+╔══════════════════════════════════════════════════════════════╗
+║  DEPRECATED: Este módulo está DEPRECADO.                     ║
+║  Fuente canónica: backoffice_api/app/routers/metrics.py      ║
+║    GET /metrics/operator-leaderboard                         ║
+║    GET /operators/ranking                                    ║
+║  NO extender. Se eliminará en fase futura.                   ║
+╚══════════════════════════════════════════════════════════════╝
+"""
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List
