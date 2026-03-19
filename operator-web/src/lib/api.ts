@@ -10,7 +10,15 @@ const api = axios.create({
 
 // Interceptor para peticiones
 api.interceptors.request.use(
-    (config) => config,
+    (config) => {
+        if (typeof window !== 'undefined') {
+            const token = localStorage.getItem('token');
+            if (token) {
+                config.headers.Authorization = `Bearer ${token}`;
+            }
+        }
+        return config;
+    },
     (error) => Promise.reject(error)
 );
 
