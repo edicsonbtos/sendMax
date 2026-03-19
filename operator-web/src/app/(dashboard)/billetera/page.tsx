@@ -117,7 +117,7 @@ export default function BilleteraPage() {
         }
     };
 
-    if (loading) {
+    if (loading && !summary) {
         return (
             <div className="p-8 max-w-7xl mx-auto">
                 <div className="card-glass p-6">
@@ -174,7 +174,7 @@ export default function BilleteraPage() {
                 <div className="card-glass p-6">
                     <p className="text-white/60 text-sm mb-2">Balance Disponible</p>
                     <p className="text-3xl font-bold text-white">
-                        ${safeToFixed(summary?.balance_usdt, 2)}
+                        ${safeToFixed(summary?.balance_usdt || 0, 2)}
                     </p>
                     <p className="text-white/40 text-xs mt-1">USDT</p>
                 </div>
@@ -182,21 +182,21 @@ export default function BilleteraPage() {
                 <div className="card-glass p-6">
                     <p className="text-white/60 text-sm mb-2">Total Ganado</p>
                     <p className="text-2xl font-bold text-green-400">
-                        ${safeToFixed(summary?.total_earned, 2)}
+                        ${safeToFixed(summary?.total_earned || 0, 2)}
                     </p>
                 </div>
 
                 <div className="card-glass p-6">
                     <p className="text-white/60 text-sm mb-2">Total Retirado</p>
                     <p className="text-2xl font-bold text-blue-400">
-                        ${safeToFixed(summary?.total_withdrawn, 2)}
+                        ${safeToFixed(summary?.total_withdrawn || 0, 2)}
                     </p>
                 </div>
 
                 <div className="card-glass p-6">
                     <p className="text-white/60 text-sm mb-2">Retiros Pendientes</p>
                     <p className="text-2xl font-bold text-yellow-400">
-                        ${safeToFixed(summary?.pending_withdrawals, 2)}
+                        ${safeToFixed(summary?.pending_withdrawals || 0, 2)}
                     </p>
                 </div>
             </div>

@@ -570,12 +570,12 @@ async def get_withdrawals(
                 SELECT 
                     id,
                     amount_usdt,
-                    type,
-                    memo,
+                    status,
+                    dest_text,
+                    reject_reason,
                     created_at
-                FROM wallet_ledger
+                FROM withdrawals
                 WHERE user_id = %s 
-                  AND type IN ('WITHDRAWAL_PENDING', 'WITHDRAWAL_APPROVED', 'WITHDRAWAL_REJECTED')
                 ORDER BY created_at DESC
                 LIMIT %s
                 """,
@@ -586,27 +586,22 @@ async def get_withdrawals(
             
             withdrawals = []
             for row in rows:
-                try:
-                    metadata = json.loads(row[3]) if row[3] else {}
-                except Exception:
-                    metadata = {"text": str(row[3])}
-                
-                # Determinar estado
+                status_db = row[2]
                 status_map = {
-                    "WITHDRAWAL_PENDING": "pending",
-                    "WITHDRAWAL_APPROVED": "approved",
-                    "WITHDRAWAL_REJECTED": "rejected"
+                    "SOLICITADA": "pending",
+                    "RESUELTA": "approved",
+                    "RECHAZADA": "rejected"
                 }
                 
                 withdrawals.append({
                     "id": str(row[0]),
                     "amount": float(row[1]),
-                    "status": status_map.get(row[2], "unknown"),
-                    "method": metadata.get("method", "N/A"),
-                    "account": metadata.get("account", "N/A"),
-                    "notes": metadata.get("notes", ""),
-                    "created_at": row[4].isoformat(),
-                    "description": metadata.get("text", "Retiro")
+                    "status": status_map.get(status_db, "unknown"),
+                    "method": "Transferencia",
+                    "account": row[3] or "N/A",
+                    "notes": row[4] or "",
+                    "created_at": row[5].isoformat(),
+                    "description": "Retiro"
                 })
             
             return {
