@@ -333,19 +333,26 @@ async def get_my_order_detail(
 
 class WalletSummaryResponse(BaseModel):
     balance_usdt: Decimal
-    lifetime_earnings_usdt: Decimal
-    pending_withdrawals_usdt: Decimal
+    total_earned: Decimal
+    total_withdrawn: Decimal
+    pending_withdrawals: Decimal
 
 @router.get("/wallet/summary", response_model=WalletSummaryResponse, deprecated=True)
 async def get_wallet_summary(user_id: int = Depends(get_current_operator)):
     """DEPRECATED — Use backoffice_api GET /operator/me/dashboard instead."""
-    summary = WalletSummaryResponse(balance_usdt=Decimal("0"), lifetime_earnings_usdt=Decimal("0"), pending_withdrawals_usdt=Decimal("0"))
+    summary = WalletSummaryResponse(
+        balance_usdt=Decimal("0"), 
+        total_earned=Decimal("0"), 
+        total_withdrawn=Decimal("0"),
+        pending_withdrawals=Decimal("0")
+    )
+    
     try:
         async with get_async_conn() as conn:
             async with conn.cursor() as cur:
+                # 1. Balance Disponible (Suma total del ledger)
                 await cur.execute("""
-                    SELECT 
-                        COALESCE(SUM(amount_usdt), 0) as balance 
+                    SELECT COALESCE(SUM(amount_usdt), 0)
                     FROM wallet_ledger 
                     WHERE user_id = %s
                 """, (user_id,))
@@ -353,27 +360,38 @@ async def get_wallet_summary(user_id: int = Depends(get_current_operator)):
                 if res_balance:
                     summary.balance_usdt = res_balance[0]
 
+                # 2. Total Ganado (Suma estricta de ganancias operativas netas)
                 await cur.execute("""
-                    SELECT 
-                        COALESCE(SUM(amount_usdt), 0) as lifetime 
+                    SELECT COALESCE(SUM(amount_usdt), 0)
                     FROM wallet_ledger 
                     WHERE user_id = %s AND amount_usdt > 0 AND type = 'EARNING'
                 """, (user_id,))
-                res_life = await cur.fetchone()
-                if res_life:
-                    summary.lifetime_earnings_usdt = res_life[0]
+                res_earned = await cur.fetchone()
+                if res_earned:
+                    summary.total_earned = res_earned[0]
 
+                # 3. Total Retirado (De la nueva tabla withdrawals, estado RESUELTA)
                 await cur.execute("""
-                    SELECT 
-                        COALESCE(SUM(ABS(amount_usdt)), 0) as pending 
-                    FROM wallet_ledger 
-                    WHERE user_id = %s AND type = 'WITHDRAWAL_PENDING'
+                    SELECT COALESCE(SUM(amount_usdt), 0)
+                    FROM withdrawals 
+                    WHERE user_id = %s AND status = 'RESUELTA'
+                """, (user_id,))
+                res_withdrawn = await cur.fetchone()
+                if res_withdrawn:
+                    summary.total_withdrawn = res_withdrawn[0]
+
+                # 4. Retiros Pendientes (De la nueva tabla withdrawals, estado SOLICITADA)
+                await cur.execute("""
+                    SELECT COALESCE(SUM(amount_usdt), 0)
+                    FROM withdrawals 
+                    WHERE user_id = %s AND status = 'SOLICITADA'
                 """, (user_id,))
                 res_pend = await cur.fetchone()
                 if res_pend:
-                    summary.pending_withdrawals_usdt = res_pend[0]
+                    summary.pending_withdrawals = res_pend[0]
+                    
     except Exception as e:
-        logger.warning(f"Wallet ledger table info failed (might not exist): {e}")
+        logger.warning(f"Error fetching wallet summary fields: {e}")
 
     return summary
 
