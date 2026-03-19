@@ -1,3 +1,0 @@
--- Migración de Bóvedas (Sprint 4)
-ALTER TABLE vaults ADD COLUMN IF NOT EXISTS type VARCHAR(50);
-ALTER TABLE vaults ADD COLUMN IF NOT EXISTS tipo VARCHAR(50);
