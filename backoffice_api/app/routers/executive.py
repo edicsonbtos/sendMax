@@ -147,26 +147,36 @@ async def executive_risk(auth: dict = Depends(require_admin)):
     stuck = await get_stuck_orders()
     
     # Retiros pendientes
-    pending_withdrawals = await fetch_one(
-        "SELECT COUNT(*) as count, SUM(amount_usdt) as total FROM withdrawals WHERE status = 'SOLICITADA'"
-    )
+    try:
+        pending_withdrawals = await fetch_one(
+            "SELECT COUNT(*) as count, COALESCE(SUM(amount_usdt), 0) as total FROM withdrawals WHERE status = 'SOLICITADA'"
+        )
+    except Exception:
+        pending_withdrawals = {"count": 0, "total": 0}
     
     # Anomalías severas
-    anomalies = await fetch_all(
-        "SELECT public_id, status, profit_usdt FROM orders WHERE profit_usdt < 0 OR (status = 'CANCELADA' AND updated_at > NOW() - INTERVAL '4 hours') LIMIT 10"
-    )
+    try:
+        anomalies = await fetch_all(
+            "SELECT public_id, status, profit_usdt FROM orders WHERE profit_usdt < 0 OR (status = 'CANCELADA' AND updated_at > NOW() - INTERVAL '4 hours') LIMIT 10"
+        )
+    except Exception:
+        anomalies = []
 
     # Check de integridad de Ledger (lectura simple)
-    # Detectar si hay wallets con balance != suma de ledger (si aplica)
-    # Por ahora detectamos balances negativos anómalos en ledger
-    ledger_anomalies = await fetch_all(
-        "SELECT wallet_id, SUM(amount_usdt) as balance FROM wallet_ledger GROUP BY wallet_id HAVING SUM(amount_usdt) < -0.01 LIMIT 5"
-    )
+    try:
+        ledger_anomalies = await fetch_all(
+            "SELECT wallet_id, SUM(amount_usdt) as balance FROM wallet_ledger GROUP BY wallet_id HAVING SUM(amount_usdt) < -0.01 LIMIT 5"
+        )
+    except Exception:
+        ledger_anomalies = []
 
-    # Detección de liquidez estacionada (> 48h sin sweep en origin)
-    stagnant_liquidity = await fetch_all(
-        "SELECT origin_country, current_balance FROM origin_wallets WHERE current_balance > 100 AND (last_sweep_at < NOW() - INTERVAL '48 hours' OR last_sweep_at IS NULL)"
-    )
+    # Detección de liquidez estacionada (>48h sin sweep en origin)
+    try:
+        stagnant_liquidity = await fetch_all(
+            "SELECT origin_country, current_balance FROM origin_wallets WHERE current_balance > 100 AND (last_sweep_at < NOW() - INTERVAL '48 hours' OR last_sweep_at IS NULL)"
+        )
+    except Exception:
+        stagnant_liquidity = []
 
     health_score = 100
     health_score -= (int(stuck.get("stuck_origin_verification_count", 0)) * 2)

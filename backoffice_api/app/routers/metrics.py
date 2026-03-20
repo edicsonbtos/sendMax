@@ -129,9 +129,9 @@ async def metrics_overview(auth: dict = Depends(require_operator_or_admin)):
 # ============================================================
 
 @router.get("/metrics/profit_daily")
-def profit_daily(days: int = Query(default=30, le=90), auth: dict = Depends(require_operator_or_admin)):
+async def profit_daily(days: int = Query(default=30, le=90), auth: dict = Depends(require_operator_or_admin)):
     from ..audit import get_profit_daily
-    return {"days": days, "profit_by_day": get_profit_daily(days)}
+    return {"days": days, "profit_by_day": await get_profit_daily(days)}
 
 
 # ============================================================
@@ -139,9 +139,9 @@ def profit_daily(days: int = Query(default=30, le=90), auth: dict = Depends(requ
 # ============================================================
 
 @router.get("/operators/ranking")
-def operators_ranking(days: int = Query(default=7, le=90), auth: dict = Depends(require_operator_or_admin)):
+async def operators_ranking(days: int = Query(default=7, le=90), auth: dict = Depends(require_operator_or_admin)):
     from ..audit import get_operators_ranking
-    return {"ok": True, "days": days, "operators": get_operators_ranking(days)}
+    return {"ok": True, "days": days, "operators": await get_operators_ranking(days)}
 
 
 # ============================================================
@@ -149,9 +149,9 @@ def operators_ranking(days: int = Query(default=7, le=90), auth: dict = Depends(
 # ============================================================
 
 @router.get("/metrics/corridors")
-def metrics_corridors(days: int = Query(default=30, le=90), auth: dict = Depends(require_operator_or_admin)):
+async def metrics_corridors(days: int = Query(default=30, le=90), auth: dict = Depends(require_operator_or_admin)):
     from ..audit import get_corridors
-    return {"ok": True, "days": days, "corridors": get_corridors(days)}
+    return {"ok": True, "days": days, "corridors": await get_corridors(days)}
 
 
 # ============================================================
@@ -449,13 +449,22 @@ async def admin_metrics_vault(auth: dict = Depends(require_operator_or_admin)):
 
     # Retiros Totales (Withdrawals pagados)
     row_withdraw = await fetch_one(
-        "SELECT COALESCE(SUM(amount), 0) AS total_withdrawals FROM withdrawals WHERE status ILIKE '%%PAID%%' OR status ILIKE '%%PAGADO%%'"
+        "SELECT COALESCE(SUM(amount_usdt), 0) AS total_withdrawals FROM withdrawals WHERE status ILIKE '%%PAID%%' OR status ILIKE '%%PAGADO%%'"
     )
     total_withdrawals = float(row_withdraw["total_withdrawals"]) if row_withdraw else 0.0
 
     vault_balance = total_profit - total_withdrawals
 
     import datetime
+    return {
+        "ok": True,
+        "vault_balance": vault_balance,
+        "total_profit": total_profit,
+        "total_withdrawals": total_withdrawals,
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+
+
 # ============================================================
 # GET /metrics/control-center (AGREGADOR FASE 3)
 # ============================================================

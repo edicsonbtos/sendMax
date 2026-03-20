@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import csv
 import io
+import json
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
 
@@ -41,11 +42,11 @@ async def execute_daily_closure(
     counts = await fetch_one(
         """
         SELECT 
-            COUNT(*) FILTER (WHERE status = 'COMPLETADA') as completed_count,
+            COUNT(*) FILTER (WHERE status IN ('PAGADA', 'COMPLETADA')) as completed_count,
             COUNT(*) FILTER (WHERE status = 'CANCELADA') as cancelled_count,
-            COALESCE(SUM(amount_origin) FILTER (WHERE status = 'COMPLETADA'), 0) as total_volume,
-            COALESCE(SUM(profit_usdt) FILTER (WHERE status = 'COMPLETADA'), 0) as total_profit,
-            COALESCE(SUM(profit_real_usdt) FILTER (WHERE status = 'COMPLETADA'), 0) as total_profit_real
+            COALESCE(SUM(amount_origin) FILTER (WHERE status IN ('PAGADA', 'COMPLETADA')), 0) as total_volume,
+            COALESCE(SUM(profit_usdt) FILTER (WHERE status IN ('PAGADA', 'COMPLETADA')), 0) as total_profit,
+            COALESCE(SUM(profit_real_usdt) FILTER (WHERE status IN ('PAGADA', 'COMPLETADA')), 0) as total_profit_real
         FROM orders 
         WHERE (paid_at >= %s AND paid_at < %s) OR (status = 'CANCELADA' AND updated_at >= %s AND updated_at < %s)
         """,
@@ -61,7 +62,7 @@ async def execute_daily_closure(
         SELECT u.id, u.alias, COUNT(o.id) as order_count
         FROM orders o
         JOIN users u ON o.operator_user_id = u.id
-        WHERE o.status = 'COMPLETADA' AND o.paid_at >= %s AND o.paid_at < %s
+        WHERE o.status IN ('PAGADA', 'COMPLETADA') AND o.paid_at >= %s AND o.paid_at < %s
         GROUP BY u.id, u.alias
         ORDER BY order_count DESC
         LIMIT 1
@@ -71,11 +72,11 @@ async def execute_daily_closure(
 
     # Best Countries
     best_origin = await fetch_one(
-        "SELECT origin_country, COUNT(*) as cnt FROM orders WHERE status = 'COMPLETADA' AND paid_at >= %s AND paid_at < %s GROUP BY origin_country ORDER BY cnt DESC LIMIT 1",
+        "SELECT origin_country, COUNT(*) as cnt FROM orders WHERE status IN ('PAGADA', 'COMPLETADA') AND paid_at >= %s AND paid_at < %s GROUP BY origin_country ORDER BY cnt DESC LIMIT 1",
         (start_utc, end_utc)
     )
     best_dest = await fetch_one(
-        "SELECT dest_country, COUNT(*) as cnt FROM orders WHERE status = 'COMPLETADA' AND paid_at >= %s AND paid_at < %s GROUP BY dest_country ORDER BY cnt DESC LIMIT 1",
+        "SELECT dest_country, COUNT(*) as cnt FROM orders WHERE status IN ('PAGADA', 'COMPLETADA') AND paid_at >= %s AND paid_at < %s GROUP BY dest_country ORDER BY cnt DESC LIMIT 1",
         (start_utc, end_utc)
     )
 
@@ -95,7 +96,13 @@ async def execute_daily_closure(
         """
     )
 
-    # 3. Create Record
+    def _json_dumps(data):
+        return json.dumps(data, default=str)
+
+    # Build record with json-serialized snapshots
+    vaults_json = _json_dumps(vaults)
+    wallets_json = _json_dumps(wallets)
+
     async def _create_record(cur):
         if existing:
             await cur.execute("DELETE FROM daily_closures WHERE closure_date = %s", (d,))
@@ -119,15 +126,11 @@ async def execute_daily_closure(
                 best_op['id'] if best_op else None, best_op['alias'] if best_op else None,
                 best_origin['origin_country'] if best_origin else None, best_dest['dest_country'] if best_dest else None,
                 withdrawals['cnt'], withdrawals['total'],
-                import_json_if_needed(vaults), import_json_if_needed(wallets),
+                vaults_json, wallets_json,
                 payload.notes, auth['user_id']
             )
         )
         return await cur.fetchone()
-
-    import json
-    async def import_json_if_needed(data):
-        return json.dumps(data, default=str)
 
     new_record = await run_in_transaction(_create_record)
     return new_record
@@ -158,7 +161,7 @@ async def get_daily_report(day: str = Query(...), auth: dict = Depends(require_a
             COALESCE(SUM(amount_origin - profit_real_usdt), 0) as total_out,
             COALESCE(SUM(profit_real_usdt), 0) as net_balance
         FROM orders
-        WHERE status = 'COMPLETADA' 
+        WHERE status IN ('PAGADA', 'COMPLETADA') 
           AND paid_at >= %s AND paid_at < %s
         GROUP BY origin_country
     """, (start_utc, end_utc))

@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("Apagando API, cerrando pools de base de datos...")
     try:
-        close_pools()
+        await close_pools()
         logger.info("Pools cerrados. Shutdown limpio.")
     except Exception:
         logger.exception("Error cerrando pools en shutdown")

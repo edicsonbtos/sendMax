@@ -138,9 +138,17 @@ async def get_operator_dashboard(auth: dict = Depends(require_operator_or_admin)
 
     # ── Meta mensual (configurable en settings) ────────────────────────────
     goal_row = await fetch_one(
-        "SELECT value FROM settings WHERE key = 'monthly_goal_usdt' LIMIT 1"
+        "SELECT value_json FROM settings WHERE key = 'monthly_goal_usdt' LIMIT 1"
     )
-    monthly_goal = float(goal_row["value"]) if goal_row and goal_row.get("value") else 500.0
+    monthly_goal = 500.0
+    if goal_row and goal_row.get("value_json"):
+        import json as _json
+        vj = goal_row["value_json"]
+        parsed = _json.loads(vj) if isinstance(vj, str) else vj
+        try:
+            monthly_goal = float(parsed.get("value", parsed) if isinstance(parsed, dict) else parsed)
+        except (TypeError, ValueError):
+            pass
 
     # ── Trust Score del operador ───────────────────────────────────────────
     ts_row = await fetch_one(

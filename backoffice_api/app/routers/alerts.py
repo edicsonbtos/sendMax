@@ -14,9 +14,9 @@ router = APIRouter(tags=["alerts"])
 
 
 @router.get("/alerts/stuck")
-def alerts_stuck(auth: dict = Depends(require_operator_or_admin)):
+async def alerts_stuck(auth: dict = Depends(require_operator_or_admin)):
     from ..audit import get_stuck_orders
-    return get_stuck_orders()
+    return await get_stuck_orders()
 
 
 @router.get("/alerts/stuck-30m")
@@ -79,7 +79,7 @@ async def alerts_stuck_30m(
     def iso(x: Any) -> Optional[str]:
         return x.isoformat() if x else None
 
-    async def minutes_since(ts: Any) -> Optional[int]:
+    def minutes_since(ts: Any) -> Optional[int]:
         if not ts:
             return None
         try:

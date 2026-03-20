@@ -1,4 +1,4 @@
-﻿"""Router: Ordenes y Trades"""
+"""Router: Ordenes y Trades"""
 
 import logging
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -72,7 +72,7 @@ async def list_orders(limit: int = Query(default=20, le=100), auth: dict = Depen
 
 @router.get("/orders/{public_id}")
 async def order_detail(public_id: int, auth: dict = Depends(require_operator_or_admin)):
-    _verify_order_access(public_id, auth)
+    await _verify_order_access(public_id, auth)
     where_extra, params_extra = _operator_filter(auth)
     order = await fetch_one(
         f"SELECT * FROM orders o WHERE o.public_id=%s {where_extra} LIMIT 1",
