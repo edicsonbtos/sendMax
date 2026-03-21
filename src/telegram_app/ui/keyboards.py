@@ -1,5 +1,5 @@
 ﻿"""
-Teclados (ReplyKeyboardMarkup) — Menú Principal v1.2.
+Teclados (ReplyKeyboardMarkup) – Menú Principal v1.2.
 6 botones: Tasas, Nuevo envío, Métodos de pago, Referidos, Billetera, Soporte.
 Admin añade 7.º botón si procede.
 """

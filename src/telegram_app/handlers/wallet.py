@@ -1,5 +1,5 @@
-"""
-wallet.py v1.2 — Billetera Inteligente (Balance-Only).
+﻿"""
+wallet.py v1.2 – Billetera Inteligente (Balance-Only).
 Muestra únicamente el saldo USDT disponible + botón web para historial detallado.
 Sin carga de métricas pesadas en el bot.
 """
@@ -32,7 +32,7 @@ async def wallet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     db_user = await get_user_by_telegram_id(update.effective_user.id)
     if not db_user:
-        await update.message.reply_text("❌ No estás registrado. Usa /start.")
+        await update.message.reply_text("⚠️ No estás registrado. Usa /start.")
         return
 
     balance = await get_balance(db_user.id)
@@ -44,8 +44,8 @@ async def wallet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     ]])
 
     msg = await update.message.reply_text(
-        f"💼 *Billetera* — @{db_user.alias}\n\n"
-        f"💰 Saldo disponible: `{_fmt(balance)} USDT`\n\n"
+        f"💰 *Billetera* – @{db_user.alias}\n\n"
+        f"💵 Saldo disponible: {_fmt(balance)} USDT\n\n"
         "_Historial de ganancias, referidos y retiros en tu panel web._",
         reply_markup=kb,
         parse_mode="Markdown",
