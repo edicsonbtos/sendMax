@@ -447,9 +447,11 @@ async def admin_metrics_vault(auth: dict = Depends(require_operator_or_admin)):
     )
     total_profit = float(row_profit["total_profit"]) if row_profit else 0.0
 
-    # Retiros Totales (Withdrawals pagados)
+    # Retiros Totales pagados a operadores.
+    # Filtra por status = 'RESUELTA' (único estado de retiro pagado observado en validación
+    # de producción al momento de este fix; revisar si se agregan nuevos estados en el futuro).
     row_withdraw = await fetch_one(
-        "SELECT COALESCE(SUM(amount_usdt), 0) AS total_withdrawals FROM withdrawals WHERE status ILIKE '%%PAID%%' OR status ILIKE '%%PAGADO%%'"
+        "SELECT COALESCE(SUM(amount_usdt), 0) AS total_withdrawals FROM withdrawals WHERE status = 'RESUELTA'"
     )
     total_withdrawals = float(row_withdraw["total_withdrawals"]) if row_withdraw else 0.0
 

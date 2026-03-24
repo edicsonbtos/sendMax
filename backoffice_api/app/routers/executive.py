@@ -164,8 +164,11 @@ async def executive_risk(auth: dict = Depends(require_admin)):
 
     # Check de integridad de Ledger (lectura simple)
     try:
+        # Integridad de Ledger: usuarios con balance negativo acumulado.
+        # Usa user_id (columna confirmada en wallet_ledger al momento de este fix;
+        # validar si cambia el esquema en futuras migraciones).
         ledger_anomalies = await fetch_all(
-            "SELECT wallet_id, SUM(amount_usdt) as balance FROM wallet_ledger GROUP BY wallet_id HAVING SUM(amount_usdt) < -0.01 LIMIT 5"
+            "SELECT user_id, SUM(amount_usdt) as balance FROM wallet_ledger GROUP BY user_id HAVING SUM(amount_usdt) < -0.01 LIMIT 5"
         )
     except Exception:
         ledger_anomalies = []
