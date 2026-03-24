@@ -950,10 +950,6 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                             if c_row is not None:
                                 client_id = c_row[0]
                                 
-                            # Importante: Consumir cualquier resultado restante para vaciar el cursor
-                            while await cur.fetchone() is not None:
-                                pass
-                                
                         except Exception as inner_e:
                             logger.error(f"Error upserting client: {inner_e}")
                             client_id = None

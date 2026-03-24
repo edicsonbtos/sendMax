@@ -11,7 +11,7 @@ Endpoints de operadores para el proceso bot/operator-web.
 ║  clients y client_ranking.                                  ║
 ╚══════════════════════════════════════════════════════════════╝
 """
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends, Header, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -20,19 +20,23 @@ import logging
 from uuid import uuid4
 import json
 import unicodedata
+import asyncio
 
 def _normalize_country(c: str) -> str:
     if not c: return ""
     s = unicodedata.normalize('NFKD', c).encode('ASCII', 'ignore').decode('utf-8')
     return s.upper().strip()
 
-
 from src.db.connection import get_async_conn
-from src.db.repositories.users_repo import get_payout_method
+from src.db.repositories.users_repo import get_payout_method, get_user_by_telegram_id, get_telegram_id_by_user_id
 from src.db.repositories.withdrawals_repo import WithdrawalsRepo
 from src.db.repositories import rates_repo
+from src.db.repositories.orders_repo import create_order_tx, next_public_id, get_order_by_public_id
 from src.config.settings import settings
+from src.config.dynamic_settings import dynamic_config
 from telegram import Bot
+from src.telegram_app.flows.new_order_flow import _notify_admin_new_order
+
 
 router = APIRouter(prefix="/api/operators", tags=["operators"])
 logger = logging.getLogger(__name__)
@@ -635,12 +639,150 @@ class CreateOrderRequest(BaseModel):
     payment_method: str  # "Zelle", "Bank Transfer", etc.
     notes: str = ""
 
-@router.post("/orders/create")
+
+@router.post("/orders/create-multipart")
+async def create_order_multipart(
+    client_id: int = Form(...),
+    beneficiary_text: str = Form(...),
+    origin_country: str = Form(...),
+    dest_country: str = Form(...),
+    amount_origin: Decimal = Form(...),
+    file: UploadFile = File(...),
+    user_id: int = Depends(get_current_operator)
+):
+    """
+    Crea una orden desde la web subiendo el archivo al bot de Telegram del operador.
+    """
+    if amount_origin <= 0:
+        raise HTTPException(status_code=400, detail="El monto debe ser mayor a 0")
+
+    if origin_country == dest_country:
+        raise HTTPException(status_code=400, detail="El origen y destino no pueden ser iguales")
+
+    # Leer archivo y validar
+    file_bytes = await file.read()
+    if len(file_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="El archivo excede los 10MB")
+
+    mime = file.content_type or ""
+    if not mime.startswith("image/") and mime != "application/pdf":
+        raise HTTPException(status_code=400, detail="El archivo debe ser una imagen o PDF")
+
+    try:
+        telegram_id = await get_telegram_id_by_user_id(user_id)
+        if not telegram_id:
+            raise HTTPException(status_code=400, detail="Tu usuario no tiene una cuenta de Telegram asociada.")
+
+        # Enviar archivo al DM del operador para obtener file_id
+        bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+
+        file_id = None
+        if mime.startswith("image/"):
+            msg = await bot.send_photo(chat_id=int(telegram_id), photo=file_bytes, caption="📸 Comprobante de orden subido desde la Web.")
+            file_id = msg.photo[-1].file_id
+        else:
+            msg = await bot.send_document(chat_id=int(telegram_id), document=file_bytes, filename=file.filename or "comprobante.pdf", caption="📄 Comprobante de orden subido desde la Web.")
+            file_id = msg.document.file_id
+
+        if not file_id:
+            raise HTTPException(status_code=500, detail="No se pudo obtener el identificador del archivo en Telegram")
+
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        logger.error(f"Error subiendo archivo a Telegram: {e}")
+        raise HTTPException(status_code=500, detail="Error conectando con el bot. Por favor, asegúrate de no haber bloqueado al bot en Telegram.")
+
+    try:
+        async with get_async_conn() as conn:
+            # Validar ruta y tasas
+            rv = await rates_repo.get_active_rate_version(conn)
+            if not rv:
+                raise HTTPException(status_code=400, detail="No hay tasas activas en este momento.")
+
+            rr = await rates_repo.get_route_rate(rate_version_id=rv.id, origin_country=origin_country, dest_country=dest_country)
+            if not rr:
+                raise HTTPException(status_code=400, detail=f"No existe tasa configurada para {origin_country} -> {dest_country}")
+
+            rate_client = rr.rate_client
+            commission_pct = getattr(rr, "commission_pct", Decimal("0.06")) # Fallback if missing
+
+            try:
+                commission_pct = await dynamic_config.get_commission_pct(origin_country, dest_country)
+            except Exception:
+                pass
+
+            payout_dest = (amount_origin * rate_client).quantize(Decimal("0.01"))
+
+            # Crear orden transaccionalmente
+            async with conn.transaction():
+                order = await create_order_tx(
+                    conn,
+                    operator_user_id=user_id,
+                    client_id=client_id,
+                    origin_country=origin_country,
+                    dest_country=dest_country,
+                    amount_origin=amount_origin,
+                    rate_version_id=rv.id,
+                    commission_pct=commission_pct,
+                    rate_client=rate_client,
+                    payout_dest=payout_dest,
+                    beneficiary_text=beneficiary_text,
+                    origin_payment_proof_file_id=file_id,
+                    initial_status="CREADA"
+                )
+
+                # Actualizar métricas cliente
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        "UPDATE clients SET total_orders = total_orders + 1, total_volume = total_volume + %s, updated_at = NOW() WHERE id = %s",
+                        (amount_origin, client_id)
+                    )
+
+                    # Update status atómicamente a ORIGEN_VERIFICANDO
+                    await cur.execute(
+                        "UPDATE orders SET status = 'ORIGEN_VERIFICANDO', updated_at = now() WHERE public_id = %s",
+                        (order.public_id,)
+                    )
+
+            # Refrescar order para el bot admin notify
+            order_full = await get_order_by_public_id(order.public_id)
+
+        # Notificar a admins (fuera de la transacción)
+        class ContextMock:
+            class BotMock:
+                async def send_message(self, **kwargs):
+                    return await bot.send_message(**kwargs)
+                async def send_photo(self, **kwargs):
+                    return await bot.send_photo(**kwargs)
+            bot = BotMock()
+
+        try:
+            await _notify_admin_new_order(ContextMock(), order_full)
+        except Exception as e:
+            logger.error(f"Error notificando admin nueva orden web #{order.public_id}: {e}")
+
+        return {
+            "status": "success",
+            "message": "Orden creada exitosamente y enviada a verificación.",
+            "order_id": order_full.id,
+            "public_id": order_full.public_id,
+            "amount_origin": float(amount_origin),
+            "payout_dest": float(payout_dest)
+        }
+
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        logger.error(f"Error creando orden multipart: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al crear la orden.")
+
+@router.post("/orders/create", deprecated=True)
+
 async def create_order_web(
     req: CreateOrderRequest,
     user_id: int = Depends(get_current_operator)
 ):
     """
+    DEPRECATED: Usa /orders/create-multipart
     Crea una nueva orden desde la interfaz web.
     
     Similar al flujo de Telegram pero adaptado para web.
