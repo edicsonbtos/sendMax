@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -55,8 +55,22 @@ export default function PaymentMethodsPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await apiRequest<{ ok: boolean; countries: Record<string, CountryMethods> }>('/admin/payment-methods');
-      setData(res.countries || {});
+      const res = await apiRequest<any>('/admin/payment-methods');
+      const parsedData: Record<string, CountryMethods> = {};
+      if (Array.isArray(res)) {
+        res.forEach((item: any) => {
+          if (item.country) {
+            parsedData[item.country] = {
+              methods: item.methods || [],
+              active_count: item.active_count || 0,
+              total_count: item.total_count || 0,
+            };
+          }
+        });
+      } else if (res && res.countries) {
+        Object.assign(parsedData, res.countries);
+      }
+      setData(parsedData);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error cargando');
     } finally {
@@ -66,23 +80,19 @@ export default function PaymentMethodsPage() {
 
   useEffect(() => { if (token) fetchData(); }, [token, fetchData]);
 
-  const saveAll = async (newData: Record<string, CountryMethods>) => {
+  const saveCountryMethods = async (country: string, methods: PaymentMethod[]) => {
     setSaving(true);
     try {
-      const payload: Record<string, { methods: PaymentMethod[] }> = {};
-      Object.entries(newData).forEach(([country, cd]) => {
-        if (cd.methods.length > 0) {
-          payload[country] = { methods: cd.methods };
-        }
-      });
-      await apiRequest('/admin/payment-methods', {
+      await apiRequest(`/admin/payment-methods/${country}`, {
         method: 'PUT',
-        body: JSON.stringify({ value_json: payload }),
+        body: JSON.stringify({ methods }),
       });
       setSnackbar({ open: true, message: 'Guardado correctamente', severity: 'success' });
-      await fetchData();
+      await fetchData(); // Re-fetch para sincronizar el estado validado del backend
+      return true;
     } catch (err: unknown) {
-      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Error', severity: 'error' });
+      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Error al guardar', severity: 'error' });
+      return false;
     } finally {
       setSaving(false);
     }
@@ -102,54 +112,39 @@ export default function PaymentMethodsPage() {
 
   const handleSaveMethod = async () => {
     if (!editCountry || !editMethod || !editMethod.name.trim()) return;
-    const newData = { ...data };
-    if (!newData[editCountry]) {
-      newData[editCountry] = { methods: [], active_count: 0, total_count: 0 };
-    }
-    const methods = [...newData[editCountry].methods];
+    const country = editCountry;
+    const cd = data[country] || { methods: [], active_count: 0, total_count: 0 };
+    const methods = [...cd.methods];
+    
     if (editIndex >= 0) {
       methods[editIndex] = editMethod;
     } else {
       methods.push(editMethod);
     }
-    newData[editCountry] = {
-      methods,
-      active_count: methods.filter(m => m.active).length,
-      total_count: methods.length,
-    };
-    setData(newData);
+    
+    // Reset modal state optimistically
     setEditCountry(null);
     setEditMethod(null);
-    await saveAll(newData);
+    await saveCountryMethods(country, methods);
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
-    const newData = { ...data };
-    const methods = [...newData[deleteTarget.country].methods];
+    const country = deleteTarget.country;
+    const methods = [...(data[country]?.methods || [])];
     methods.splice(deleteTarget.index, 1);
     methods.forEach((m, i) => { m.order = i + 1; });
-    newData[deleteTarget.country] = {
-      methods,
-      active_count: methods.filter(m => m.active).length,
-      total_count: methods.length,
-    };
-    setData(newData);
+    
     setDeleteTarget(null);
-    await saveAll(newData);
+    await saveCountryMethods(country, methods);
   };
 
   const handleToggleActive = async (country: string, index: number) => {
-    const newData = { ...data };
-    const methods = [...newData[country].methods];
-    methods[index] = { ...methods[index], active: !methods[index].active };
-    newData[country] = {
-      methods,
-      active_count: methods.filter(m => m.active).length,
-      total_count: methods.length,
-    };
-    setData(newData);
-    await saveAll(newData);
+    const methods = [...(data[country]?.methods || [])];
+    if (methods[index]) {
+      methods[index] = { ...methods[index], active: !methods[index].active };
+      await saveCountryMethods(country, methods);
+    }
   };
 
   return (
