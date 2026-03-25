@@ -160,3 +160,93 @@ async def test_executive_risk_returns_health_score():
     assert result["ok"] is True
     score = result["data"]["health_score"]
     assert 0 <= score <= 100, f"health_score fuera de rango: {score}"
+
+
+# ---------------------------------------------------------------------------
+# SM-101 — Treasury endpoint
+# ---------------------------------------------------------------------------
+
+def _treasury_fake(gp="500.00", oc="200.00", ol="150.00", rp="50.00"):
+    """Returns a fake_fetch_one that responds to the 4 treasury queries."""
+    call_count = {"n": 0}
+    responses = [
+        {"v": gp},   # gross_profit (orders)
+        {"v": oc},   # operator_commissions (wallet_ledger)
+        {"v": ol},   # operator_liabilities (wallets)
+        {"v": rp},   # resolved_payouts (withdrawals)
+    ]
+
+    async def fake(sql, *args, **kwargs):
+        idx = call_count["n"]
+        call_count["n"] += 1
+        if idx < len(responses):
+            return responses[idx]
+        return {"v": "0"}
+
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_treasury_response_shape():
+    """Verifica que el endpoint devuelve todos los campos obligatorios."""
+    with patch("backoffice_api.app.routers.metrics.fetch_one", side_effect=_treasury_fake()):
+        from backoffice_api.app.routers.metrics import admin_metrics_treasury
+        result = await admin_metrics_treasury(auth=_make_auth())
+
+    assert result["ok"] is True
+    required_fields = [
+        "gross_profit", "operator_commissions", "operator_liabilities",
+        "resolved_payouts", "business_retained_profit",
+        "withdrawal_coverage_estimate", "disclaimer", "timestamp",
+    ]
+    for field in required_fields:
+        assert field in result, f"Falta campo obligatorio: {field}"
+
+
+@pytest.mark.asyncio
+async def test_treasury_retained_profit_calculation():
+    """business_retained_profit == gross_profit - operator_commissions."""
+    with patch("backoffice_api.app.routers.metrics.fetch_one", side_effect=_treasury_fake(
+        gp="1000.00", oc="400.00"
+    )):
+        from backoffice_api.app.routers.metrics import admin_metrics_treasury
+        result = await admin_metrics_treasury(auth=_make_auth())
+
+    assert result["gross_profit"] == pytest.approx(1000.0)
+    assert result["operator_commissions"] == pytest.approx(400.0)
+    assert result["business_retained_profit"] == pytest.approx(600.0)
+
+
+@pytest.mark.asyncio
+async def test_treasury_coverage_estimate_calculation():
+    """withdrawal_coverage_estimate == (gross_profit - resolved_payouts) / operator_liabilities."""
+    with patch("backoffice_api.app.routers.metrics.fetch_one", side_effect=_treasury_fake(
+        gp="1000.00", oc="400.00", ol="200.00", rp="100.00"
+    )):
+        from backoffice_api.app.routers.metrics import admin_metrics_treasury
+        result = await admin_metrics_treasury(auth=_make_auth())
+
+    expected = (1000.0 - 100.0) / 200.0  # 4.5
+    assert result["withdrawal_coverage_estimate"] == pytest.approx(expected, abs=0.01)
+
+
+@pytest.mark.asyncio
+async def test_treasury_coverage_null_when_zero_liabilities():
+    """Si operator_liabilities == 0, withdrawal_coverage_estimate debe ser None."""
+    with patch("backoffice_api.app.routers.metrics.fetch_one", side_effect=_treasury_fake(
+        gp="1000.00", oc="400.00", ol="0.00", rp="50.00"
+    )):
+        from backoffice_api.app.routers.metrics import admin_metrics_treasury
+        result = await admin_metrics_treasury(auth=_make_auth())
+
+    assert result["withdrawal_coverage_estimate"] is None
+
+
+@pytest.mark.asyncio
+async def test_treasury_rejects_non_admin():
+    """Operadores no pueden acceder a treasury."""
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc_info:
+        from backoffice_api.app.routers.metrics import admin_metrics_treasury
+        await admin_metrics_treasury(auth={"role": "operator", "user_id": 99})
+    assert exc_info.value.status_code == 403

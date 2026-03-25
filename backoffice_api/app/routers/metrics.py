@@ -471,6 +471,62 @@ async def admin_metrics_vault(auth: dict = Depends(require_operator_or_admin)):
 
 
 # ============================================================
+# GET /admin/metrics/treasury  (SM-101)
+# ============================================================
+
+@router.get("/admin/metrics/treasury")
+async def admin_metrics_treasury(auth: dict = Depends(require_operator_or_admin)):
+    """
+    Vista financiera separada en conceptos canónicos.
+    Solo lectura. No modifica datos.
+    Ver FINANCIAL_MODEL.md para definiciones exactas.
+    """
+    if not _is_admin(auth):
+        raise HTTPException(status_code=403, detail="Solo administradores pueden ver la tesorería")
+
+    row_gp = await fetch_one(
+        "SELECT COALESCE(SUM(profit_real_usdt), 0) AS v FROM orders WHERE status IN ('PAGADA', 'COMPLETADA')"
+    )
+    gross_profit = float(row_gp["v"]) if row_gp else 0.0
+
+    row_oc = await fetch_one(
+        "SELECT COALESCE(SUM(amount_usdt), 0) AS v FROM wallet_ledger WHERE type = 'ORDER_PROFIT'"
+    )
+    operator_commissions = float(row_oc["v"]) if row_oc else 0.0
+
+    row_ol = await fetch_one(
+        "SELECT COALESCE(SUM(balance_usdt), 0) AS v FROM wallets"
+    )
+    operator_liabilities = float(row_ol["v"]) if row_ol else 0.0
+
+    row_rp = await fetch_one(
+        "SELECT COALESCE(SUM(amount_usdt), 0) AS v FROM withdrawals WHERE status = 'RESUELTA'"
+    )
+    resolved_payouts = float(row_rp["v"]) if row_rp else 0.0
+
+    business_retained_profit = gross_profit - operator_commissions
+
+    withdrawal_coverage_estimate = None
+    if operator_liabilities > 0:
+        withdrawal_coverage_estimate = round(
+            (gross_profit - resolved_payouts) / operator_liabilities, 4
+        )
+
+    import datetime
+    return {
+        "ok": True,
+        "gross_profit": round(gross_profit, 2),
+        "operator_commissions": round(operator_commissions, 2),
+        "operator_liabilities": round(operator_liabilities, 2),
+        "resolved_payouts": round(resolved_payouts, 2),
+        "business_retained_profit": round(business_retained_profit, 2),
+        "withdrawal_coverage_estimate": withdrawal_coverage_estimate,
+        "disclaimer": "Estimación interna basada en registros de BD. No representa conciliación de caja externa.",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+
+
+# ============================================================
 # GET /metrics/control-center (AGREGADOR FASE 3)
 # ============================================================
 
