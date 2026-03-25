@@ -546,7 +546,7 @@ async def admin_metrics_daily_snapshot(
         """
         SELECT 
             COUNT(*) as orders_completed,
-            COALESCE(SUM(amount_origin), 0) as volume_processed,
+            COALESCE(SUM(payout_dest) FILTER (WHERE dest_currency IN ('USD', 'USDT')), 0) as volume_usd,
             COALESCE(SUM(profit_real_usdt), 0) as gross_profit_today
         FROM orders
         WHERE status IN ('PAGADA', 'COMPLETADA')
@@ -556,7 +556,7 @@ async def admin_metrics_daily_snapshot(
         (date, date)
     )
     orders_completed = int(row_orders["orders_completed"] or 0) if row_orders else 0
-    volume_processed = float(row_orders["volume_processed"] or 0.0) if row_orders else 0.0
+    volume_usd = float(row_orders["volume_usd"] or 0.0) if row_orders else 0.0
     gross_profit_today = float(row_orders["gross_profit_today"] or 0.0) if row_orders else 0.0
 
     row_commissions = await fetch_one(
@@ -600,13 +600,13 @@ async def admin_metrics_daily_snapshot(
     return {
         "date": date,
         "orders_completed": orders_completed,
-        "volume_processed": round(volume_processed, 2),
+        "volume_usd": round(volume_usd, 2),
         "gross_profit_today": round(gross_profit_today, 2),
         "commissions_today": round(commissions_today, 2),
         "net_retained_today": round(net_retained_today, 2),
         "payouts_today": round(payouts_today, 2),
         "new_withdrawal_requests": new_withdrawal_requests,
-        "disclaimer": "Estimación interna basada en registros de BD. No representa conciliación de caja externa."
+        "disclaimer": "Estimación interna basada en registros de BD. Total volumen refleja pagos procesados en USD/USDT. No representa conciliación de caja externa."
     }
 
 # ============================================================

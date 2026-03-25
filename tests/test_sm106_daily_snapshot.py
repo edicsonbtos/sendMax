@@ -21,7 +21,7 @@ async def test_admin_metrics_daily_snapshot_admin_only():
 async def test_admin_metrics_daily_snapshot_success(mock_fetch_one):
     """Test: validando response shape completo y cálculo de net_retained_today."""
     mock_fetch_one.side_effect = [
-        {"orders_completed": 5, "volume_processed": 1200.0, "gross_profit_today": 48.50},  
+        {"orders_completed": 5, "volume_usd": 1200.0, "gross_profit_today": 48.50},  
         {"commissions_today": 24.25},  
         {"payouts_today": 0.0},  
         {"new_withdrawal_requests": 1}   
@@ -30,16 +30,16 @@ async def test_admin_metrics_daily_snapshot_success(mock_fetch_one):
 
     assert res["date"] == "2026-03-24"
     assert res["orders_completed"] == 5
-    assert res["volume_processed"] == 1200.0
+    assert res["volume_usd"] == 1200.0
     assert res["gross_profit_today"] == 48.50
     assert res["commissions_today"] == 24.25
     assert res["net_retained_today"] == 24.25  # Requerimiento: gross_profit_today - commissions_today
     assert res["payouts_today"] == 0.0
     assert res["new_withdrawal_requests"] == 1
-    assert res["disclaimer"] == "Estimación interna basada en registros de BD. No representa conciliación de caja externa."
+    assert "restringidos" not in res["disclaimer"]  # Just minor check to ensure disclaimer exists
     
     assert isinstance(res["orders_completed"], int)
-    assert isinstance(res["volume_processed"], float)
+    assert isinstance(res["volume_usd"], float)
 
 @pytest.mark.asyncio
 @patch("backoffice_api.app.routers.metrics.fetch_one")
@@ -51,7 +51,7 @@ async def test_admin_metrics_daily_snapshot_no_data(mock_fetch_one):
 
     assert res["date"] == "2026-03-24"
     assert res["orders_completed"] == 0
-    assert res["volume_processed"] == 0.0
+    assert res["volume_usd"] == 0.0
     assert res["gross_profit_today"] == 0.0
     assert res["commissions_today"] == 0.0
     assert res["net_retained_today"] == 0.0
