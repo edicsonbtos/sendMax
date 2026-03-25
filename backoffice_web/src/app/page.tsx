@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
@@ -9,7 +9,8 @@ import {
   TrendingUp as TrendingUpIcon, Receipt as ReceiptIcon,
   AttachMoney as MoneyIcon, Warning as WarningIcon,
   Refresh as RefreshIcon, Schedule as ClockIcon,
-  Verified as VerifiedIcon,
+  Verified as VerifiedIcon, AccountBalance as VaultIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -33,6 +34,7 @@ interface AlertsResponse { ok:boolean; cutoff_utc:string; origin_verificando_stu
 interface ProfitDayRaw { day:string; total_orders:number; total_profit:number; total_profit_real?:number; total_volume:number; }
 interface ProfitDailyResponse { days:number; profit_by_day:ProfitDayRaw[]; }
 interface ProfitDay { day:string; profit:number; profit_real:number; orders:number; volume:number; }
+interface TreasuryData { ok:boolean; gross_profit:number; operator_commissions:number; operator_liabilities:number; resolved_payouts:number; business_retained_profit:number; withdrawal_coverage_estimate:number|null; disclaimer:string; timestamp:string; }
 
 type IconComponent = React.ElementType<{sx?:object}>;
 interface StatCardProps { title:string; value:string|number; Icon:IconComponent; color:string; subtitle?:string; }
@@ -65,6 +67,7 @@ export default function OverviewPage() {
   const [alerts,setAlerts] = useState<StuckAlert[]>([]);
   const [profitDaily,setProfitDaily] = useState<ProfitDay[]>([]);
   const [statusCounts,setStatusCounts] = useState<{name:string;value:number;color:string}[]>([]);
+  const [treasury,setTreasury] = useState<TreasuryData|null>(null);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState('');
   const [lastUpdated,setLastUpdated] = useState('');
@@ -77,13 +80,14 @@ export default function OverviewPage() {
   const fetchData = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const [metricsData,companyData,alertsData,profitData] = await Promise.all([
+      const [metricsData,companyData,alertsData,profitData,treasuryData] = await Promise.all([
         apiRequest<MetricsOverview>('/metrics/overview'),
         apiRequest<CompanyOverview>('/metrics/company-overview').catch(()=>null),
         apiRequest<AlertsResponse>('/alerts/stuck-30m').catch(()=>null),
         apiRequest<ProfitDailyResponse>('/metrics/profit_daily?days=7').catch(()=>null),
+        apiRequest<TreasuryData>('/admin/metrics/treasury').catch(()=>null),
       ]);
-      setMetrics(metricsData); setCompanyOverview(companyData);
+      setMetrics(metricsData); setCompanyOverview(companyData); setTreasury(treasuryData);
       const allAlerts: StuckAlert[] = [];
       if(alertsData){ if(alertsData.origin_verificando_stuck) allAlerts.push(...alertsData.origin_verificando_stuck); if(alertsData.awaiting_paid_proof_stuck) allAlerts.push(...alertsData.awaiting_paid_proof_stuck); }
       setAlerts(allAlerts);
@@ -113,6 +117,41 @@ export default function OverviewPage() {
       {loading && <Box sx={{display:'flex',justifyContent:'center',py:8}}><CircularProgress sx={{color:'#4B2E83'}}/></Box>}
       {metrics && !loading && (
         <>
+          {/* SM-103: Treasury Card */}
+          {treasury && (
+            <Card sx={{mb:3,background:'linear-gradient(135deg, #1E3A5F 0%, #2563EB 100%)',color:'#fff',position:'relative',overflow:'visible'}} id="treasury-card">
+              <CardContent sx={{p:3}}>
+                <Stack direction={{xs:'column',md:'row'}} spacing={3} alignItems={{md:'center'}}>
+                  <Box sx={{flex:1}}>
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{mb:1}}>
+                      <VaultIcon sx={{fontSize:20,opacity:0.8}}/>
+                      <Typography variant="body2" sx={{color:'rgba(255,255,255,0.7)',fontSize:'0.8rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em'}}>Utilidad Retenida del Negocio</Typography>
+                      <Tooltip title="Utilidad bruta menos comisiones acreditadas a operadores, según registros internos. No incluye gastos externos ni conciliación con caja real." arrow>
+                        <InfoIcon sx={{fontSize:16,opacity:0.5,cursor:'help'}}/>
+                      </Tooltip>
+                    </Stack>
+                    <Typography variant="h3" sx={{fontWeight:900,letterSpacing:'-0.02em',lineHeight:1.1}}>
+                      {'$'+treasury.business_retained_profit.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+                    </Typography>
+                    <Typography variant="body2" sx={{color:'rgba(255,255,255,0.6)',mt:1,fontSize:'0.78rem'}}>
+                      {'$'+treasury.gross_profit.toLocaleString('en-US',{minimumFractionDigits:2})+' bruto − $'+treasury.operator_commissions.toLocaleString('en-US',{minimumFractionDigits:2})+' comisiones'}
+                    </Typography>
+                  </Box>
+                  <Divider orientation="vertical" flexItem sx={{borderColor:'rgba(255,255,255,0.15)',display:{xs:'none',md:'block'}}}/>
+                  <Stack spacing={1.5} sx={{minWidth:200}}>
+                    <Box>
+                      <Typography variant="caption" sx={{color:'rgba(255,255,255,0.5)',fontSize:'0.7rem'}}>Obligaciones con Operadores</Typography>
+                      <Typography variant="h6" sx={{fontWeight:700,color:'#FCD34D',lineHeight:1.2}}>{'$'+treasury.operator_liabilities.toLocaleString('en-US',{minimumFractionDigits:2})}</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" sx={{color:'rgba(255,255,255,0.5)',fontSize:'0.7rem'}}>Retiros Pagados</Typography>
+                      <Typography variant="body1" sx={{fontWeight:600,lineHeight:1.2}}>{'$'+treasury.resolved_payouts.toLocaleString('en-US',{minimumFractionDigits:2})}</Typography>
+                    </Box>
+                  </Stack>
+                </Stack>
+              </CardContent>
+            </Card>
+          )}
           <Stack direction="row" spacing={2.5} sx={{mb:4,flexWrap:'wrap',gap:2}}>
             <StatCard title="Total Ordenes" value={metrics.total_orders} Icon={ReceiptIcon} color="#4B2E83" subtitle={metrics.completed_orders+' pagadas'} />
             <StatCard title="Pendientes" value={metrics.pending_orders} Icon={TrendingUpIcon} color="#F59E0B" subtitle={metrics.awaiting_paid_proof>0?metrics.awaiting_paid_proof+' esperando comprobante':'Requieren atencion'} />
