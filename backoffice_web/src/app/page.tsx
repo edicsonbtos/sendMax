@@ -126,7 +126,7 @@ export default function OverviewPage() {
                     <Stack direction="row" alignItems="center" spacing={1} sx={{mb:1}}>
                       <VaultIcon sx={{fontSize:20,opacity:0.8}}/>
                       <Typography variant="body2" sx={{color:'rgba(255,255,255,0.7)',fontSize:'0.8rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em'}}>Utilidad Retenida del Negocio</Typography>
-                      <Tooltip title="Utilidad bruta menos comisiones acreditadas a operadores, según registros internos. No incluye gastos externos ni conciliación con caja real." arrow>
+                      <Tooltip title="Utilidad generada por órdenes completadas (registros internos) menos comisiones acreditadas a operadores. No incluye gastos externos ni conciliación de caja real." arrow>
                         <InfoIcon sx={{fontSize:16,opacity:0.5,cursor:'help'}}/>
                       </Tooltip>
                     </Stack>
@@ -134,7 +134,7 @@ export default function OverviewPage() {
                       {'$'+treasury.business_retained_profit.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
                     </Typography>
                     <Typography variant="body2" sx={{color:'rgba(255,255,255,0.6)',mt:1,fontSize:'0.78rem'}}>
-                      {'$'+treasury.gross_profit.toLocaleString('en-US',{minimumFractionDigits:2})+' bruto − $'+treasury.operator_commissions.toLocaleString('en-US',{minimumFractionDigits:2})+' comisiones'}
+                      {'$'+treasury.gross_profit.toLocaleString('en-US',{minimumFractionDigits:2})+' utilidad real − $'+treasury.operator_commissions.toLocaleString('en-US',{minimumFractionDigits:2})+' comisiones'}
                     </Typography>
                   </Box>
                   <Divider orientation="vertical" flexItem sx={{borderColor:'rgba(255,255,255,0.15)',display:{xs:'none',md:'block'}}}/>
@@ -151,6 +151,18 @@ export default function OverviewPage() {
                 </Stack>
               </CardContent>
             </Card>
+          )}
+          {/* SM-104: Alerta de cobertura */}
+          {treasury && treasury.withdrawal_coverage_estimate !== null && treasury.withdrawal_coverage_estimate !== undefined && treasury.withdrawal_coverage_estimate < 1.5 && (
+            <Alert
+              severity={treasury.withdrawal_coverage_estimate < 1.0 ? 'error' : 'warning'}
+              sx={{mb:3}}
+            >
+              {treasury.withdrawal_coverage_estimate < 1.0
+                ? `🚨 Riesgo de iliquidez: la cobertura interna es ${treasury.withdrawal_coverage_estimate.toFixed(2)}x frente a las obligaciones con operadores. Revisar tesorería antes de autorizar retiros.`
+                : `⚠️ Cobertura interna limitada: los fondos retenidos cubren aproximadamente ${treasury.withdrawal_coverage_estimate.toFixed(2)}x las obligaciones con operadores. Verificar saldo externo antes de autorizar salidas.`
+              }
+            </Alert>
           )}
           <Stack direction="row" spacing={2.5} sx={{mb:4,flexWrap:'wrap',gap:2}}>
             <StatCard title="Total Ordenes" value={metrics.total_orders} Icon={ReceiptIcon} color="#4B2E83" subtitle={metrics.completed_orders+' pagadas'} />
