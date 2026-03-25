@@ -527,6 +527,89 @@ async def admin_metrics_treasury(auth: dict = Depends(require_operator_or_admin)
 
 
 # ============================================================
+# GET /admin/metrics/daily_snapshot (SM-106)
+# ============================================================
+
+@router.get("/admin/metrics/daily_snapshot")
+async def admin_metrics_daily_snapshot(
+    date: str = Query(..., description="YYYY-MM-DD"),
+    auth: dict = Depends(require_operator_or_admin)
+):
+    """
+    SM-106: Daily financial snapshot.
+    Minimalista, admin-only, solo lectura.
+    """
+    if not _is_admin(auth):
+        raise HTTPException(status_code=403, detail="Solo administradores pueden ver el daily snapshot")
+
+    row_orders = await fetch_one(
+        """
+        SELECT 
+            COUNT(*) as orders_completed,
+            COALESCE(SUM(amount_origin), 0) as volume_processed,
+            COALESCE(SUM(profit_real_usdt), 0) as gross_profit_today
+        FROM orders
+        WHERE status IN ('PAGADA', 'COMPLETADA')
+          AND updated_at >= %s::date
+          AND updated_at < (%s::date + interval '1 day')
+        """,
+        (date, date)
+    )
+    orders_completed = int(row_orders["orders_completed"] or 0) if row_orders else 0
+    volume_processed = float(row_orders["volume_processed"] or 0.0) if row_orders else 0.0
+    gross_profit_today = float(row_orders["gross_profit_today"] or 0.0) if row_orders else 0.0
+
+    row_commissions = await fetch_one(
+        """
+        SELECT COALESCE(SUM(amount_usdt), 0) as commissions_today
+        FROM wallet_ledger
+        WHERE type = 'ORDER_PROFIT'
+          AND created_at >= %s::date
+          AND created_at < (%s::date + interval '1 day')
+        """,
+        (date, date)
+    )
+    commissions_today = float(row_commissions["commissions_today"] or 0.0) if row_commissions else 0.0
+
+    net_retained_today = gross_profit_today - commissions_today
+
+    row_payouts = await fetch_one(
+        """
+        SELECT COALESCE(SUM(amount_usdt), 0) as payouts_today
+        FROM withdrawals
+        WHERE status = 'RESUELTA'
+          AND updated_at >= %s::date
+          AND updated_at < (%s::date + interval '1 day')
+        """,
+        (date, date)
+    )
+    payouts_today = float(row_payouts["payouts_today"] or 0.0) if row_payouts else 0.0
+
+    row_new_req = await fetch_one(
+        """
+        SELECT COUNT(*) as new_withdrawal_requests
+        FROM withdrawals
+        WHERE status = 'SOLICITADA'
+          AND created_at >= %s::date
+          AND created_at < (%s::date + interval '1 day')
+        """,
+        (date, date)
+    )
+    new_withdrawal_requests = int(row_new_req["new_withdrawal_requests"] or 0) if row_new_req else 0
+
+    return {
+        "date": date,
+        "orders_completed": orders_completed,
+        "volume_processed": round(volume_processed, 2),
+        "gross_profit_today": round(gross_profit_today, 2),
+        "commissions_today": round(commissions_today, 2),
+        "net_retained_today": round(net_retained_today, 2),
+        "payouts_today": round(payouts_today, 2),
+        "new_withdrawal_requests": new_withdrawal_requests,
+        "disclaimer": "Estimación interna basada en registros de BD. No representa conciliación de caja externa."
+    }
+
+# ============================================================
 # GET /metrics/control-center (AGREGADOR FASE 3)
 # ============================================================
 
