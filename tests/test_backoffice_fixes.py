@@ -43,6 +43,14 @@ async def test_vault_withdrawal_query_uses_resuelta():
         from backoffice_api.app.routers.metrics import admin_metrics_vault
         result = await admin_metrics_vault(auth=_make_auth())
 
+    # Test Profit Query
+    profit_sqls = [s for s in captured_sqls if "profit_real_usdt" in s.lower()]
+    assert profit_sqls, "No se ejecutó ningún query sobre profit"
+    pq = profit_sqls[0]
+    assert "COMPLETADA" in pq.upper(), f"Query no incluye 'COMPLETADA': {pq}"
+    assert "PAGADA" in pq.upper(), f"Query no incluye 'PAGADA': {pq}"
+
+    # Test Withdrawals Query
     withdrawal_sqls = [s for s in captured_sqls if "withdrawals" in s.lower()]
     assert withdrawal_sqls, "No se ejecutó ningún query sobre withdrawals"
 

@@ -442,8 +442,11 @@ async def admin_metrics_vault(auth: dict = Depends(require_operator_or_admin)):
     if not _is_admin(auth):
         raise HTTPException(status_code=403, detail="Solo administradores pueden ver la bóveda central")
 
+    # Profit Total de órdenes (Ganancia bruta)
+    # FILTRO: IN ('PAGADA', 'COMPLETADA') (estados confirmados en producción que contienen profit;
+    # 'COMPLETADA' concentra el histórico actual, se mantiene 'PAGADA' por prudencia).
     row_profit = await fetch_one(
-        "SELECT COALESCE(SUM(profit_real_usdt), 0) AS total_profit FROM orders WHERE status = 'PAGADA'"
+        "SELECT COALESCE(SUM(profit_real_usdt), 0) AS total_profit FROM orders WHERE status IN ('PAGADA', 'COMPLETADA')"
     )
     total_profit = float(row_profit["total_profit"]) if row_profit else 0.0
 
