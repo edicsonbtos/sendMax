@@ -379,7 +379,8 @@ async def put_payment_methods_by_country(
     updated_by = _get_updated_by(auth, request)
     await fetch_one(
         "INSERT INTO settings(key, value_json, updated_at, updated_by) VALUES (%s, %s::jsonb, now(), %s) "
-        "ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = now(), updated_by = EXCLUDED.updated_by",
+        "ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = now(), updated_by = EXCLUDED.updated_by "
+        "RETURNING key",
         ("payment_methods", json.dumps(all_data), updated_by),
         rw=True,
     )
