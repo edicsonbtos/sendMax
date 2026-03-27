@@ -29,6 +29,7 @@ const adminMenu = [
   { text: "Snapshot Diario", path: "/daily-snapshot", icon: <CalendarIcon />, description: "Resumen financiero del día" },
   { text: "Configuracion", path: "/settings", icon: <SettingsIcon />, description: "Reglas y margenes" },
   { text: "Metodos de Pago", path: "/payment-methods", icon: <WalletIcon />, description: "Metodos por pais" },
+  { text: "Audit Log", path: "/audit-log", icon: <SettingsIcon />, description: "Historial de cambios" },
 ];
 
 const operatorMenu = [

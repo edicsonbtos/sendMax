@@ -153,6 +153,27 @@ class SettingsUpdate(BaseModel):
 
 # --------------- SETTINGS GENERICOS ---------------
 
+@router.get("/admin/audit-log")
+async def get_audit_log(
+    limit: int = 50,
+    offset: int = 0,
+    auth: dict = Depends(require_admin)
+):
+    rows = await fetch_all(
+        """
+        SELECT id, actor_user_id, action, entity_type, entity_id,
+               before_json, after_json, created_at, ip, user_agent
+        FROM audit_log
+        ORDER BY created_at DESC
+        LIMIT %s OFFSET %s
+        """,
+        (limit, offset)
+    )
+    for r in rows:
+        if r["created_at"]:
+            r["created_at"] = r["created_at"].isoformat()
+    return {"items": rows}
+
 @router.get("/admin/settings")
 async def get_admin_settings(auth: dict = Depends(require_admin)):
     rows = await fetch_all("SELECT key, value_json, updated_at, updated_by FROM settings ORDER BY key")
