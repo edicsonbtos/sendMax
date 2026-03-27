@@ -60,17 +60,17 @@ from src.db.repositories.trust_repo import get_trust_score
 logger = logging.getLogger(__name__)
 
 """
-Flujo: ðŸ“¤ Nuevo envÃ­o (PRO)  FIAT -> FIAT (coherente con profit puente)
+Flujo: “¤ Nuevo enví­o (PRO)  FIAT -> FIAT (coherente con profit puente)
 
 Regla de negocio (unit consistency):
-- orders.amount_origin = FIAT del paÃ­s de origen
-- orders.payout_dest   = FIAT del paÃ­s de destino
-- route_rates.rate_client = (FIAT_dest / FIAT_origin) ya incluye comisiÃ³n
+- orders.amount_origin = FIAT del paí­s de origen
+- orders.payout_dest   = FIAT del paí­s de destino
+- route_rates.rate_client = (FIAT_dest / FIAT_origin) ya incluye comisií³n
 - profit_usdt se calcula al pagar con snapshot:
     (amount_origin / buy_origin) - (payout_dest / sell_dest)
 
 UX:
-- Pantalla Ãºnica (edit_message_text) best-effort
+- Pantalla íºnica (edit_message_text) best-effort
 - Aislamiento con context.user_data["order_mode"]=True
 """
 
@@ -79,13 +79,13 @@ ASK_CLIENT_NAME, ASK_ORIGIN, ASK_DEST, ASK_BENEF_MODE, ASK_AMOUNT, ASK_BENEF, AS
 
 # Botones
 BTN_CANCEL = "Cancelar"
-BTN_CONFIRM = "Confirmar âœ…"
-BTN_EDIT = "Editar âœï¸"
+BTN_CONFIRM = "Confirmar …"
+BTN_EDIT = "Editar ï¸"
 BTN_EDIT_AMOUNT = "Editar monto"
 BTN_EDIT_BENEF = "Editar beneficiario"
 BTN_BACK = "Volver"
 BTN_CONTINUE = "Continuar âž¡ï¸"
-BTN_KEEP_EDITING = "Seguir editando ðŸ”„"
+BTN_KEEP_EDITING = "Seguir editando ”„"
 
 # Callbacks de Address Book
 CB_BENEF_NEW = "ab:new"
@@ -255,19 +255,19 @@ def _build_summary_text(order: dict, rr) -> str:
     if len(benef_short) > 260:
         benef_short = benef_short[:260].rstrip() + "..."
 
-    # Usar comisiÃ³n del snapshot de tasas
+    # Usar comisií³n del snapshot de tasas
     comm_decimal = getattr(rr, "commission_pct", order.get("commission_pct", Decimal("0.06")))
 
     return (
-        "Listo âœ… Revisa tu envÃ­o:\n\n"
+        "Listo … Revisa tu enví­o:\n\n"
         f"Ruta: {COUNTRY_FLAGS[origin]} {COUNTRY_LABELS[origin]} -> {COUNTRY_FLAGS[dest]} {COUNTRY_LABELS[dest]}\n"
         f"Monto (origen): {_fmt_money(amount_fiat)} {origin}\n"
         f"Tasa: {_fmt_rate(rr.rate_client)}\n"
-        f"ComisiÃ³n: {fmt_percent(comm_decimal)}%\n"
+        f"Comisií³n: {fmt_percent(comm_decimal)}%\n"
         f"Recibe aprox (destino): {_fmt_money(payout_dest)} {dest}\n\n"
         "Beneficiario:\n"
         f"{benef_short}\n\n"
-        "Â¿Confirmamos?"
+        "¿Confirmamos?"
     )
 
 
@@ -282,7 +282,7 @@ async def _notify_admin_new_order(context: ContextTypes.DEFAULT_TYPE, order) -> 
     kb = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("âœ… Aprobar", callback_data=f"ord:orig_ok:{order.public_id}"),
+                InlineKeyboardButton("… Aprobar", callback_data=f"ord:orig_ok:{order.public_id}"),
                 InlineKeyboardButton("âŒ Rechazar", callback_data=f"ord:orig_rej:{order.public_id}"),
                 InlineKeyboardButton("âš™ï¸ En Proceso", callback_data=f"ord:proc:{order.public_id}"),
             ]
@@ -302,14 +302,14 @@ async def _notify_admin_new_order(context: ContextTypes.DEFAULT_TYPE, order) -> 
         await context.bot.send_photo(
             chat_id=target_chat_id,
             photo=order.origin_payment_proof_file_id,
-            caption=f"ðŸ“„ Comprobante Origen #{fmt_public_id(order.public_id)}",
+            caption=f"“„ Comprobante Origen #{fmt_public_id(order.public_id)}",
         )
 
 
 async def entry_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     if context.user_data.get("order_mode"):
-        await update.message.reply_text("â³ Ya tienes un envÃ­o en curso. Si deseas salir, escribe Cancelar.")
+        await update.message.reply_text("⏳ Ya tienes un envío en curso. Si deseas salir, escribe Cancelar.")
         return ASK_BENEF_MODE
     context.user_data["order_mode"] = True
     context.user_data["order"] = {}
@@ -318,7 +318,7 @@ async def entry_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await _screen_send_or_edit(
         update, context,
-        "ðŸ‘¤ Â¿QuiÃ©n te envÃ­a el dinero?\n\nEscribe el *Nombre del Cliente*:",
+        "👤 ¿Quién te envía el dinero?\n\nEscribe el *Nombre del Cliente*:",
         reply_markup=_cancel_keyboard(),
         parse_mode="Markdown",
     )
@@ -328,12 +328,12 @@ async def entry_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def receive_client_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = (update.message.text or "").strip()
     if text.lower() == BTN_CANCEL.lower():
-        await _screen_send_or_edit(update, context, "EnvÃ­o cancelado âœ…")
+        await _screen_send_or_edit(update, context, "Enví­o cancelado …")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
     if len(text) < 2:
-        await _screen_send_or_edit(update, context, "âš ï¸ Escribe un nombre vÃ¡lido (mÃ­nimo 2 letras):", reply_markup=_cancel_keyboard())
+        await _screen_send_or_edit(update, context, "⚠️ Escribe un nombre válido (mínimo 2 letras):", reply_markup=_cancel_keyboard())
         return ASK_CLIENT_NAME
 
     await _best_effort_delete(update, context, update.message.message_id)
@@ -350,7 +350,7 @@ async def receive_client_name(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data["order"]["benef_mode"] = "manual"
         await _screen_send_or_edit(
             update, context,
-            "ðŸ“¤ Nuevo envÃ­o\n\nElige el paÃ­s de *origen*:",
+            "“¤ Nuevo enví­o\n\nElige el paí­s de *origen*:",
             reply_markup=_origin_keyboard(),
             parse_mode="Markdown",
         )
@@ -358,14 +358,14 @@ async def receive_client_name(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     rows = []
     for fav in favorites[:7]:
-        label = f"ðŸ‘¤ {fav.alias} ({COUNTRY_FLAGS.get(fav.dest_country,'ðŸŒ')} {fav.dest_country})"
+        label = f"‘¤ {fav.alias} ({COUNTRY_FLAGS.get(fav.dest_country,'Œ')} {fav.dest_country})"
         rows.append([InlineKeyboardButton(label, callback_data=f"{CB_BENEF_PREFIX}{fav.id}")])
     rows.append([InlineKeyboardButton("âž¡ï¸ Continuar Manual", callback_data=CB_BENEF_MANUAL)])
     kb = InlineKeyboardMarkup(rows)
 
     await _screen_send_or_edit(
         update, context,
-        "ðŸ“¤ Nuevo envÃ­o\n\nðŸ“– *Agenda LÃ­quida* â€” Tus contactos guardados\n\nElige un contacto o toca Continuar Manual:",
+        "“¤ Nuevo enví­o\n\n“– *Agenda Lí­quida* â€” Tus contactos guardados\n\nElige un contacto o toca Continuar Manual:",
         reply_markup=kb,
         parse_mode="Markdown",
     )
@@ -375,7 +375,7 @@ async def receive_client_name(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def receive_origin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     code = _parse_country(update.message.text, allowed=_ORIGIN_CODES)
     if not code:
-        await _screen_send_or_edit(update, context, "Selecciona un paÃ­s usando los botones ðŸ‘‡", reply_markup=_origin_keyboard())
+        await _screen_send_or_edit(update, context, "Selecciona un paí­s usando los botones ‘‡", reply_markup=_origin_keyboard())
         return ASK_ORIGIN
 
     context.user_data["order"]["origin"] = code
@@ -390,7 +390,7 @@ async def receive_origin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     else:
         await _screen_send_or_edit(
             update, context,
-            "Perfecto âœ… Ahora elige el paÃ­s/mÃ©todo de *destino*:",
+            "Perfecto … Ahora elige el paí­s/mí©todo de *destino*:",
             reply_markup=_dest_keyboard(code), parse_mode="Markdown"
         )
         return ASK_DEST
@@ -400,11 +400,11 @@ async def receive_dest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     code = _parse_country(update.message.text, allowed=_DEST_CODES)
     origin = context.user_data["order"].get("origin", "")
     if not code:
-        await _screen_send_or_edit(update, context, "Selecciona un destino usando los botones ðŸ‘‡", reply_markup=_dest_keyboard(origin))
+        await _screen_send_or_edit(update, context, "Selecciona un destino usando los botones ‘‡", reply_markup=_dest_keyboard(origin))
         return ASK_DEST
 
     if code == origin:
-        await _screen_send_or_edit(update, context, "Esa ruta no es vÃ¡lida. Elige un destino diferente ðŸ‘‡", reply_markup=_dest_keyboard(origin))
+        await _screen_send_or_edit(update, context, "Esa ruta no es válida. Elige un destino diferente ‘‡", reply_markup=_dest_keyboard(origin))
         return ASK_DEST
 
     context.user_data["order"]["dest"] = code
@@ -421,7 +421,7 @@ async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     text = (update.message.text or "").strip()
 
     if text.lower() == BTN_CANCEL.lower():
-        await _screen_send_or_edit(update, context, "Listo, cancelado âœ…")
+        await _screen_send_or_edit(update, context, "Listo, cancelado …")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
@@ -430,7 +430,7 @@ async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if amount <= 0:
             raise InvalidOperation()
     except Exception:
-        await _screen_send_or_edit(update, context, "Monto invÃ¡lido. Escribe solo el nÃºmero (ej: 10000).", reply_markup=_cancel_keyboard())
+        await _screen_send_or_edit(update, context, "Monto inválido. Escribe solo el níºmero (ej: 10000).", reply_markup=_cancel_keyboard())
         return ASK_AMOUNT
 
     await _best_effort_delete(update, context, update.message.message_id)
@@ -440,15 +440,15 @@ async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     edit_target = context.user_data.get("edit_target")
     if edit_target == "amount":
         context.user_data.pop("edit_target", None)
-        await _screen_send_or_edit(update, context, "Listo âœ… Â¿Quieres seguir editando o continuar?", reply_markup=_after_edit_keyboard())
+        await _screen_send_or_edit(update, context, "Listo … ¿Quieres seguir editando o continuar?", reply_markup=_after_edit_keyboard())
         return ASK_EDIT_FIELD
 
-    # Si viene de agenda lÃ­quida ("saved"), saltamos directo a pedir foto (ASK_PROOF)
+    # Si viene de agenda lí­quida ("saved"), saltamos directo a pedir foto (ASK_PROOF)
     if context.user_data["order"].get("benef_mode") == "saved":
         await _screen_send_or_edit(
             update, context,
-            "Perfecto âœ… Ya seleccionaste tu beneficiario guardado.\n\n"
-            "Ahora envÃ­a el *comprobante de pago* en foto.",
+            "Perfecto … Ya seleccionaste tu beneficiario guardado.\n\n"
+            "Ahora enví­a el *comprobante de pago* en foto.",
             reply_markup=_cancel_keyboard(), parse_mode="Markdown",
         )
         return ASK_PROOF
@@ -456,13 +456,13 @@ async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Si es manual o no tiene contactos, seguimos el flujo natural
     await _screen_send_or_edit(
         update, context,
-        "Perfecto âœ… Ahora pega los *datos del beneficiario* (como lo enviarÃ¡s por WhatsApp).\n\n"
+        "Perfecto … Ahora pega los *datos del beneficiario* (como lo enviarás por WhatsApp).\n\n"
         "Incluye al menos:\n"
         " Nombre\n"
-        " CÃ©dula\n"
+        " Cí©dula\n"
         " N cuenta\n"
         " Tipo\n\n"
-        "EnvÃ­alo en un solo mensaje.",
+        "Enví­alo en un solo mensaje.",
         reply_markup=_cancel_keyboard(), parse_mode="Markdown",
     )
     return ASK_BENEF
@@ -498,18 +498,18 @@ async def receive_benef_mode(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         if not beneficiary:
             try:
-                await q.edit_message_text("âš ï¸ Contacto no encontrado. Usa la opciÃ³n Nuevo contacto.")
+                await q.edit_message_text("âš ï¸ Contacto no encontrado. Usa la opcií³n Nuevo contacto.")
             except Exception:
                 pass
             return ASK_BENEF_MODE
 
         parts = []
         if beneficiary.full_name:    parts.append(f"Nombre: {beneficiary.full_name}")
-        if beneficiary.id_number:    parts.append(f"CÃ©dula: {beneficiary.id_number}")
+        if beneficiary.id_number:    parts.append(f"Cí©dula: {beneficiary.id_number}")
         if beneficiary.bank_name:    parts.append(f"Banco: {beneficiary.bank_name}")
         if beneficiary.account_number: parts.append(f"Cuenta: {beneficiary.account_number}")
-        if beneficiary.phone:        parts.append(f"TelÃ©fono: {beneficiary.phone}")
-        if beneficiary.payment_method: parts.append(f"MÃ©todo: {beneficiary.payment_method}")
+        if beneficiary.phone:        parts.append(f"Telí©fono: {beneficiary.phone}")
+        if beneficiary.payment_method: parts.append(f"Mí©todo: {beneficiary.payment_method}")
         if beneficiary.notes:        parts.append(f"Nota: {beneficiary.notes}")
         snapshot = "\n".join(parts) if parts else beneficiary.alias
 
@@ -521,7 +521,7 @@ async def receive_benef_mode(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=f"âœ… *{beneficiary.alias}* seleccionado.\n\nAhora elige el paÃ­s de *origen*:",
+            text=f"… *{beneficiary.alias}* seleccionado.\n\nAhora elige el paí­s de *origen*:",
             reply_markup=_origin_keyboard(),
             parse_mode="Markdown",
         )
@@ -532,7 +532,7 @@ async def receive_benef_mode(update: Update, context: ContextTypes.DEFAULT_TYPE)
         _close_menu()
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="ðŸ“¤ Nuevo envÃ­o\n\nElige el paÃ­s de *origen*:",
+            text="“¤ Nuevo enví­o\n\nElige el paí­s de *origen*:",
             reply_markup=_origin_keyboard(),
             parse_mode="Markdown",
         )
@@ -544,11 +544,11 @@ async def receive_benef_mode(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def receive_save_alias(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Handler para recibir el alias del Smart-Save.
-    Se llama despuÃ©s de que el operador confirma guardar el beneficiario.
+    Se llama despuí©s de que el operador confirma guardar el beneficiario.
     """
     q = update.callback_query
     if q:
-        # Primer toque: preguntÃ³ si quiere guardar
+        # Primer toque: preguntí³ si quiere guardar
         try:
             await q.answer()
         except Exception:
@@ -556,14 +556,14 @@ async def receive_save_alias(update: Update, context: ContextTypes.DEFAULT_TYPE)
         data = q.data or ""
         if data == CB_SAVE_NO:
             try:
-                await q.edit_message_text("ðŸ‘ Listo, no se guardÃ³ el contacto.")
+                await q.edit_message_text("‘ Listo, no se guardí³ el contacto.")
             except Exception:
                 pass
             return ConversationHandler.END
         if data == CB_SAVE_YES:
             try:
                 await q.edit_message_text(
-                    "ðŸ“ Â¿CÃ³mo quieres llamar a este contacto? (Ej: \"Mi PapÃ¡\", \"Cliente Lima\")\n"
+                    "“ ¿Cí³mo quieres llamar a este contacto? (Ej: \"Mi Papá\", \"Cliente Lima\")\n"
                     "Escribe el alias ahora â†“"
                 )
             except Exception:
@@ -578,7 +578,7 @@ async def receive_save_alias(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     alias = (update.message.text or "").strip() if update.message else ""
     if not alias or len(alias) < 2:
-        await update.message.reply_text("âš ï¸ Escribe un nombre vÃ¡lido (mÃ­nimo 2 caracteres).")
+        await update.message.reply_text("âš ï¸ Escribe un nombre válido (mí­nimo 2 caracteres).")
         return ASK_SAVE_ALIAS
 
     order_data = context.user_data.get("smart_save_data", {})
@@ -603,12 +603,12 @@ async def receive_save_alias(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await link_order_to_beneficiary(int(order_data["public_id"]), saved.id)
 
         await update.message.reply_text(
-            f"âœ… Â¡Guardado como *{alias}*! La prÃ³xima vez aparecerÃ¡ en tus Favoritos.",
+            f"… ¡Guardado como *{alias}*! La prí³xima vez aparecerá en tus Favoritos.",
             parse_mode="Markdown",
         )
     except Exception as e:
         logger.warning("smart_save failed: %s", e)
-        await update.message.reply_text("âš ï¸ No se pudo guardar el contacto. Intenta desde el menÃº de Agenda.")
+        await update.message.reply_text("âš ï¸ No se pudo guardar el contacto. Intenta desde el meníº de Agenda.")
 
     context.user_data.pop("smart_save_waiting_alias", None)
     context.user_data.pop("smart_save_data", None)
@@ -620,7 +620,7 @@ async def receive_benef(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await _screen_send_or_edit(
             update,
             context,
-            "âš ï¸ RecibÃ­ una imagen, pero primero necesito que escribas los datos solicitados en texto. Por favor, ingrÃ©salos para continuar.",
+            "âš ï¸ Recibí­ una imagen, pero primero necesito que escribas los datos solicitados en texto. Por favor, ingrí©salos para continuar.",
             reply_markup=_cancel_keyboard(),
         )
         return ASK_BENEF
@@ -628,7 +628,7 @@ async def receive_benef(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     text = (update.message.text or "").strip()
 
     if text.lower() == BTN_CANCEL.lower():
-        await _screen_send_or_edit(update, context, "Listo, cancelado âœ…")
+        await _screen_send_or_edit(update, context, "Listo, cancelado …")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
@@ -642,7 +642,7 @@ async def receive_benef(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if edit_target == "beneficiary":
         context.user_data["order"]["beneficiary_text"] = text
         context.user_data.pop("edit_target", None)
-        await _screen_send_or_edit(update, context, "Perfecto âœ… Â¿Quieres seguir editando o continuar?", reply_markup=_after_edit_keyboard())
+        await _screen_send_or_edit(update, context, "Perfecto … ¿Quieres seguir editando o continuar?", reply_markup=_after_edit_keyboard())
         return ASK_EDIT_FIELD
 
     context.user_data["order"]["beneficiary_text"] = text
@@ -650,7 +650,7 @@ async def receive_benef(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await _screen_send_or_edit(
         update,
         context,
-        "Excelente âœ… Ahora envÃ­a el *comprobante de pago* en foto.",
+        "Excelente … Ahora enví­a el *comprobante de pago* en foto.",
         reply_markup=_cancel_keyboard(),
         parse_mode="Markdown",
     )
@@ -662,8 +662,8 @@ async def _compute_cash_rate_on_the_fly(
     origin: str,
 ) -> "RouteRate | None":
     """
-    Calcula la tasa VENEZUELA_CASH al vuelo cuando no estÃ¡ en route_rates todavÃ­a.
-    Usa los precios Binance ya almacenados en p2p_country_prices para esta versiÃ³n.
+    Calcula la tasa VENEZUELA_CASH al vuelo cuando no está en route_rates todaví­a.
+    Usa los precios Binance ya almacenados en p2p_country_prices para esta versií³n.
     """
     try:
         from src.db.repositories.rates_repo import RouteRate
@@ -706,7 +706,7 @@ async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # Caso: Llega texto en lugar de foto
     if update.message and update.message.text:
         if update.message.text.lower() == BTN_CANCEL.lower():
-            await _screen_send_or_edit(update, context, "Listo, cancelado âœ…")
+            await _screen_send_or_edit(update, context, "Listo, cancelado …")
             _reset_flow_memory(context)
             return ConversationHandler.END
 
@@ -739,7 +739,7 @@ async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     try:
         rv = await asyncio.wait_for(get_latest_active_rate_version(), timeout=5.0)
     except asyncio.TimeoutError:
-        await _screen_send_or_edit(update, context, "â³ Error de conexiÃ³n. Reintenta en un momento.")
+        await _screen_send_or_edit(update, context, "â³ Error de conexií³n. Reintenta en un momento.")
         return ASK_PROOF
 
     if not rv:
@@ -752,16 +752,16 @@ async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     rr = await get_route_rate(rate_version_id=rv.id, origin_country=origin, dest_country=dest)
     if not rr:
-        # Si la ruta no estÃ¡ en DB (ej: primera vez con VENEZUELA_CASH antes de regenerar tasas),
+        # Si la ruta no está en DB (ej: primera vez con VENEZUELA_CASH antes de regenerar tasas),
         # intentamos calcularla al vuelo desde los precios disponibles.
         if dest == "VENEZUELA_CASH":
             rr = await _compute_cash_rate_on_the_fly(rv.id, origin)
         if not rr:
-            await _screen_send_or_edit(update, context, "Esa ruta no estÃ¡ disponible ahora mismo. Intenta otra ruta.")
+            await _screen_send_or_edit(update, context, "Esa ruta no está disponible ahora mismo. Intenta otra ruta.")
             _reset_flow_memory(context)
             return ConversationHandler.END
 
-    # Leer comisiÃ³n de DB (ASYNC - fuera del flow sync)
+    # Leer comisií³n de DB (ASYNC - fuera del flow sync)
     comm_pct = await dynamic_config.get_commission_pct(origin, dest)
 
     context.user_data["order"]["rate_version_id"] = rv.id
@@ -799,17 +799,17 @@ async def _try_auto_approve(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> bool:
     """
-    Sprint 3 â€” Piloto AutomÃ¡tico.
+    Sprint 3 â€” Piloto Automático.
     Auto-aprueba la orden si:
       1. auto_approve_enabled = 'true' en settings
       2. trust_score del operador >= auto_approve_min_trust (default 90)
       3. monto estimado en USD < auto_approve_max_amount_usd (default 500)
 
-    Retorna True si fue auto-aprobado (para suprimir la notificaciÃ³n manual al admin).
-    Nunca lanza excepciÃ³n â€” cualquier fallo deja el flujo normal intacto.
+    Retorna True si fue auto-aprobado (para suprimir la notificacií³n manual al admin).
+    Nunca lanza excepcií³n â€” cualquier fallo deja el flujo normal intacto.
     """
     try:
-        # Leer configuraciÃ³n desde DB
+        # Leer configuracií³n desde DB
         async with get_async_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -842,13 +842,13 @@ async def _try_auto_approve(
         if score < min_trust:
             return False
 
-        # Estimar monto en USD (amount_origin_fiat Ã— rate_client â‰ˆ USD payout)
+        # Estimar monto en USD (amount_origin_fiat í— rate_client â‰ˆ USD payout)
         from decimal import Decimal
         estimated_usd = float(Decimal(str(amount_origin_fiat)) * Decimal(str(rate_client)))
         if estimated_usd >= max_usd:
             return False
 
-        # âœ… Condiciones cumplidas â€” Auto-aprobar
+        # … Condiciones cumplidas â€” Auto-aprobar
         async with get_async_conn() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -863,18 +863,18 @@ async def _try_auto_approve(
             order.public_id, operator_user_id, score, estimated_usd,
         )
 
-        # Notificar al admin con mensaje especial ðŸš€
+        # Notificar al admin con mensaje especial š€
         target_chat_id = settings.ORIGIN_REVIEW_TELEGRAM_CHAT_ID or settings.ADMIN_TELEGRAM_USER_ID
         if target_chat_id:
             await context.bot.send_message(
                 chat_id=int(target_chat_id),
                 text=(
-                    f"ðŸš€ <b>Orden #{order.public_id} AUTO-APROBADA</b>\n\n"
-                    f"âœ… Historial de confianza del operador verificado\n"
+                    f"š€ <b>Orden #{order.public_id} AUTO-APROBADA</b>\n\n"
+                    f"… Historial de confianza del operador verificado\n"
                     f"â­ Trust Score: <b>{score:.0f}/100</b>\n"
-                    f"ðŸ’° Monto est. USD: <b>${estimated_usd:.2f}</b>\n\n"
-                    "La orden avanzÃ³ directamente a <b>ORIGEN CONFIRMADO</b>. "
-                    "No requiere aprobaciÃ³n manual."
+                    f"’° Monto est. USD: <b>${estimated_usd:.2f}</b>\n\n"
+                    "La orden avanzí³ directamente a <b>ORIGEN CONFIRMADO</b>. "
+                    "No requiere aprobacií³n manual."
                 ),
                 parse_mode="HTML",
             )
@@ -889,22 +889,22 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     text = (update.message.text or "").strip()
 
     if text.lower() == BTN_CANCEL.lower():
-        await _screen_send_or_edit(update, context, "EnvÃ­o cancelado âœ…")
+        await _screen_send_or_edit(update, context, "Enví­o cancelado …")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
     if text == BTN_EDIT:
-        await _screen_send_or_edit(update, context, "Â¿QuÃ© quieres editar?", reply_markup=_edit_keyboard())
+        await _screen_send_or_edit(update, context, "¿Quí© quieres editar?", reply_markup=_edit_keyboard())
         return ASK_EDIT
 
     if text != BTN_CONFIRM:
-        await _screen_send_or_edit(update, context, "Selecciona una opciÃ³n usando los botones ðŸ‘‡", reply_markup=_confirm_keyboard())
+        await _screen_send_or_edit(update, context, "Selecciona una opcií³n usando los botones ‘‡", reply_markup=_confirm_keyboard())
         return ASK_CONFIRM
 
     telegram_id = update.effective_user.id
     user = await get_user_by_telegram_id(telegram_id)
     if not user:
-        await _screen_send_or_edit(update, context, "No estÃ¡s registrado. Escribe /start para registrarte.")
+        await _screen_send_or_edit(update, context, "No estás registrado. Escribe /start para registrarte.")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
@@ -923,7 +923,7 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Usar valor ya calculado en receive_proof (evita segunda consulta DB)
     commission_pct = order_data.get("commission_pct", Decimal("0.06"))
 
-    # LOG para auditorÃ­a
+    # LOG para auditorí­a
     logger.info(f"Order creation - Route: {origin}â†’{dest}, Commission: {commission_pct} ({fmt_percent(commission_pct)}%)")
 
     payout_dest = (amount_origin * rate_client)
@@ -982,7 +982,7 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                             (amount_origin, client_id)
                         )
 
-                # 2. Cambiar estado inmediatamente (AtÃ³mico)
+                # 2. Cambiar estado inmediatamente (Atí³mico)
                 await update_order_status_tx(conn, int(order.public_id), "ORIGEN_VERIFICANDO")
 
     except Exception as e:
@@ -990,7 +990,7 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("âŒ Error al registrar la orden. Por favor intenta de nuevo.")
         return ConversationHandler.END
 
-    # â”€â”€ Sprint 3: Auto-aprobaciÃ³n inteligente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # â”€â”€ Sprint 3: Auto-aprobacií³n inteligente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     auto_approved = await _try_auto_approve(
         order=order,
         operator_user_id=int(user.id),
@@ -1025,7 +1025,7 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     saved_benef_id = order_data.get("beneficiary_id")
 
     if saved_benef_id:
-        # UsÃ³ un favorito â†’ vincular orden + incrementar contador
+        # Usí³ un favorito â†’ vincular orden + incrementar contador
         try:
             await link_order_to_beneficiary(int(order.public_id), saved_benef_id)
             await increment_uses(saved_benef_id)
@@ -1033,8 +1033,8 @@ async def receive_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             logger.warning("link_beneficiary failed: %s", e)
 
     await update.message.reply_text(
-        f"âœ… Â¡Listo! Orden #{_fmt_public_id(order.public_id)} registrada.\n"
-        "En breve Pagos la procesa. Puedes ver tus operaciones en ðŸ“Š Resumen."
+        f"… ¡Listo! Orden #{_fmt_public_id(order.public_id)} registrada.\n"
+        "En breve Pagos la procesa. Puedes ver tus operaciones en “Š Resumen."
     )
 
     _reset_flow_memory(context)
@@ -1045,7 +1045,7 @@ async def receive_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     text = (update.message.text or "").strip()
 
     if text.lower() == BTN_CANCEL.lower():
-        await _screen_send_or_edit(update, context, "EnvÃ­o cancelado âœ…")
+        await _screen_send_or_edit(update, context, "Enví­o cancelado …")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
@@ -1062,7 +1062,7 @@ async def receive_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await _screen_send_or_edit(update, context, "Pega nuevamente los datos del beneficiario:", reply_markup=_cancel_keyboard())
         return ASK_BENEF
 
-    await _screen_send_or_edit(update, context, "Selecciona una opciÃ³n usando los botones ðŸ‘‡", reply_markup=_edit_keyboard())
+    await _screen_send_or_edit(update, context, "Selecciona una opcií³n usando los botones ‘‡", reply_markup=_edit_keyboard())
     return ASK_EDIT
 
 
@@ -1070,18 +1070,18 @@ async def receive_after_edit(update: Update, context: ContextTypes.DEFAULT_TYPE)
     text = (update.message.text or "").strip()
 
     if text.lower() == BTN_CANCEL.lower():
-        await _screen_send_or_edit(update, context, "EnvÃ­o cancelado âœ…")
+        await _screen_send_or_edit(update, context, "Enví­o cancelado …")
         _reset_flow_memory(context)
         return ConversationHandler.END
 
     if text == BTN_KEEP_EDITING:
-        await _screen_send_or_edit(update, context, "Â¿QuÃ© quieres editar?", reply_markup=_edit_keyboard())
+        await _screen_send_or_edit(update, context, "¿Quí© quieres editar?", reply_markup=_edit_keyboard())
         return ASK_EDIT
 
     if text == BTN_CONTINUE:
         return await _show_confirm_screen(update, context)
 
-    await _screen_send_or_edit(update, context, "Selecciona una opciÃ³n usando los botones ðŸ‘‡", reply_markup=_after_edit_keyboard())
+    await _screen_send_or_edit(update, context, "Selecciona una opcií³n usando los botones ‘‡", reply_markup=_after_edit_keyboard())
     return ASK_EDIT_FIELD
 
 

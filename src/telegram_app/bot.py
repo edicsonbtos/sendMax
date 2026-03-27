@@ -63,7 +63,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         try:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="âš ï¸ Lo siento, experimentÃ© un inconveniente tÃ©cnico momentÃ¡neo. Por favor, usa /start para continuar.",
+                text="⚠️ Lo siento, experimenté un inconveniente técnico momentáneo. Por favor, usa /start para continuar.",
             )
         except Exception:
             pass
@@ -84,7 +84,7 @@ async def universal_sniffer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def build_bot() -> Application:
-    # Persistencia de sesiÃ³n (Fase 2)
+    # Persistencia de sesií³n (Fase 2)
     persistence = PicklePersistence(filepath="bot_persistence.pickle")
     
     request = HTTPXRequest(connect_timeout=20.0, read_timeout=30.0, write_timeout=30.0, pool_timeout=30.0)
@@ -104,7 +104,7 @@ def build_bot() -> Application:
     if int(getattr(settings, "FLOW_DEBUG", 0) or 0) == 1:
         app.add_handler(MessageHandler(filters.ALL, universal_sniffer), group=-1)
 
-    # /start = KYC. /cancel /panic = PÃ¡nico.
+    # /start = KYC. /cancel /panic = Pánico.
     app.add_handler(CommandHandler(["cancel", "panic"], panic_handler), group=0)
     app.add_handler(build_kyc_conversation(), group=0)
 
@@ -141,7 +141,7 @@ def build_bot() -> Application:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_cancel_reason_text), group=5)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_kyc_reject_reason), group=5)
 
-    # MenÃº (solo APPROVED)
+    # Meníº (solo APPROVED)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router), group=6)
 
     # Initialize Google Drive Vault Folders
@@ -150,5 +150,5 @@ def build_bot() -> Application:
     except Exception as e:
         logger.error("Failed to initialize Google Drive folders: %s", e)
     
-    logger.info("Bot listo: KYC + Ã³rdenes + retiros + admin (Persistence: ON)")
+    logger.info("Bot listo: KYC + í³rdenes + retiros + admin (Persistence: ON)")
     return app
