@@ -24,6 +24,21 @@ async def _parse_date_range(d: date):
     end_utc = end_local.astimezone(timezone.utc)
     return start_utc, end_utc
 
+@router.get("/pending")
+async def get_pending_closure(auth: dict = Depends(require_admin)):
+    """Verifica visualmente si el día anterior aún no ha sido cerrado."""
+    today = datetime.now(VET).date()
+    yesterday = today - timedelta(days=1)
+    
+    row = await fetch_one("SELECT id FROM daily_closures WHERE closure_date = %s", (yesterday,))
+    is_pending = row is None
+    
+    return {
+        "pending": is_pending,
+        "date": yesterday.isoformat(),
+        "reason": "El día anterior no ha sido cerrado." if is_pending else "Al día."
+    }
+
 @router.post("/execute", response_model=DailyClosureResponse)
 async def execute_daily_closure(
     payload: DailyClosureExecuteRequest,

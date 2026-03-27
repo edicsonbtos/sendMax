@@ -68,6 +68,7 @@ export default function OverviewPage() {
   const [profitDaily,setProfitDaily] = useState<ProfitDay[]>([]);
   const [statusCounts,setStatusCounts] = useState<{name:string;value:number;color:string}[]>([]);
   const [treasury,setTreasury] = useState<TreasuryData|null>(null);
+  const [pendingClosure, setPendingClosure] = useState(false);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState('');
   const [lastUpdated,setLastUpdated] = useState('');
@@ -80,14 +81,16 @@ export default function OverviewPage() {
   const fetchData = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const [metricsData,companyData,alertsData,profitData,treasuryData] = await Promise.all([
+      const [metricsData,companyData,alertsData,profitData,treasuryData,pendingClosureData] = await Promise.all([
         apiRequest<MetricsOverview>('/metrics/overview'),
         apiRequest<CompanyOverview>('/metrics/company-overview').catch(()=>null),
         apiRequest<AlertsResponse>('/alerts/stuck-30m').catch(()=>null),
         apiRequest<ProfitDailyResponse>('/metrics/profit_daily?days=7').catch(()=>null),
         apiRequest<TreasuryData>('/admin/metrics/treasury').catch(()=>null),
+        apiRequest<{pending:boolean}>('/daily_closure/pending').catch(()=>null),
       ]);
       setMetrics(metricsData); setCompanyOverview(companyData); setTreasury(treasuryData);
+      setPendingClosure(pendingClosureData?.pending || false);
       const allAlerts: StuckAlert[] = [];
       if(alertsData){ if(alertsData.origin_verificando_stuck) allAlerts.push(...alertsData.origin_verificando_stuck); if(alertsData.awaiting_paid_proof_stuck) allAlerts.push(...alertsData.awaiting_paid_proof_stuck); }
       setAlerts(allAlerts);
@@ -114,6 +117,7 @@ export default function OverviewPage() {
         <Tooltip title="Actualizar datos"><IconButton onClick={fetchData} disabled={loading} sx={{color:'#4B2E83'}}><RefreshIcon/></IconButton></Tooltip>
       </Stack>
       {error && <Alert severity="error" sx={{mb:3}}>{error}</Alert>}
+      {pendingClosure && <Alert severity="warning" sx={{mb:3, fontWeight: 600, border: '1px solid #F59E0B', backgroundColor: '#FFFBF0', color: '#B45309'}}>⚠️ El día anterior no ha sido cerrado. Revisa el cierre diario antes de continuar.</Alert>}
       {loading && <Box sx={{display:'flex',justifyContent:'center',py:8}}><CircularProgress sx={{color:'#4B2E83'}}/></Box>}
       {metrics && !loading && (
         <>
