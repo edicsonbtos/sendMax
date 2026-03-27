@@ -227,12 +227,22 @@ export default function OverviewPage() {
               </Stack>
             </CardContent></Card>
           ) : null}
-          {alerts.length>0 && (
+          {alerts.length > 0 ? (
             <Card sx={{border:'1px solid #F59E0B',backgroundColor:'#FFFBF0'}}><CardContent sx={{p:3}}>
               <Stack direction="row" alignItems="center" spacing={1.5} sx={{mb:2}}><WarningIcon sx={{color:'#F59E0B'}}/><Typography variant="h6" sx={{fontWeight:800}}>Alertas Activas</Typography><Chip label={alerts.length+' orden'+(alerts.length>1?'es':'')} size="small" sx={{backgroundColor:'#FFF5E6',color:'#F59E0B',fontWeight:800,border:'1px solid #F59E0B'}}/></Stack>
               <Typography variant="body2" sx={{color:'#64748B',mb:2}}>Ordenes estancadas por mas de 30 minutos</Typography>
               <Stack spacing={1.5}>{alerts.map(a=>{const min=Math.floor((Date.now()-new Date(a.updated_at).getTime())/60000);return(<Alert severity="warning" key={a.public_id} sx={{backgroundColor:'#FFF5E6',border:'1px solid #FBBF24'}}><Stack direction="row" spacing={2} alignItems="center" sx={{flexWrap:'wrap',gap:1}}><Chip label={'#'+a.public_id} size="small" sx={{fontWeight:800,fontFamily:'monospace'}}/><Typography variant="body2" sx={{fontWeight:700}}>{a.status}</Typography><Typography variant="body2" sx={{color:'#64748B'}}>{a.origin_country+' > '+a.dest_country}</Typography><Chip icon={<ClockIcon sx={{fontSize:14}}/>} label={min+' min'} size="small" color="warning" variant="outlined" sx={{fontWeight:700}}/></Stack></Alert>);})}</Stack>
             </CardContent></Card>
+          ) : (
+            <Card sx={{ border: '1px solid #10B981', backgroundColor: '#F0FDF4', mb: 4 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Stack direction="row" alignItems="center" spacing={1.5}>
+                  <VerifiedIcon sx={{ color: '#10B981' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#065F46' }}>✅ Sin órdenes atascadas</Typography>
+                </Stack>
+                <Typography variant="body2" sx={{ color: '#047857', mt: 1 }}>Todas las órdenes están fluyendo correctamente (&lt; 30 min).</Typography>
+              </CardContent>
+            </Card>
           )}
         </>
       )}
