@@ -11,13 +11,13 @@ import {
 import {
   Refresh as RefreshIcon, AccountBalanceWallet as WalletIcon,
   TrendingUp as InIcon, TrendingDown as OutIcon,
-  AccountBalance as BankIcon, Download as DownloadIcon,
+  AccountBalance as BankIcon, Download as DownloadIcon, History as HistoryIcon,
   Add as AddIcon, Remove as RemoveIcon,
   DeleteSweep as EmptyIcon, Info as InfoIcon,
   Public as GlobeIcon,
 } from '@mui/icons-material';
 import { useAuth } from '@/components/AuthProvider';
-import { apiRequest } from '@/lib/api';
+import { apiRequest, API_BASE, getToken, getApiKey } from '@/lib/api';
 
 /* -- Interfaces ------------------------------------------- */
 interface WalletBalance {
@@ -287,6 +287,25 @@ export default function OriginWalletsPage() {
     link.click();
   };
 
+  const downloadHistoryCSV = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/origin-wallets/export`, {
+        headers: {
+          'Authorization': `Bearer ${getToken()}`,
+          'X-API-KEY': getApiKey() || ''
+        }
+      });
+      if (!response.ok) throw new Error('Error al descargar historial');
+      const blob = await response.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `historial_cierres_${today}.csv`;
+      link.click();
+    } catch (err) {
+      setSnackbar({ open: true, message: 'Error descargando historial', severity: 'error' });
+    }
+  };
+
   /* -- Modal Config --------------------------------------- */
   const modalConfig = {
     deposit: { title: 'Depositar Fondos', color: '#16A34A', icon: <AddIcon />, desc: 'Registrar entrada manual de fondos fiat. Esto SUMA al balance.', confirm: 'Confirmar Deposito', showAmount: true },
@@ -322,6 +341,7 @@ export default function OriginWalletsPage() {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
+          <Button variant="outlined" startIcon={<HistoryIcon />} onClick={downloadHistoryCSV} size="small">Descargar Histórico CSV</Button>
           <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportCSV} disabled={wallets.length === 0} size="small">CSV</Button>
           <Button variant="contained" startIcon={<RefreshIcon />} onClick={fetchData} disabled={loading}>Actualizar</Button>
         </Stack>
