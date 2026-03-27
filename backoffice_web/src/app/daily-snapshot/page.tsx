@@ -143,7 +143,7 @@ export default function DailySnapshotPage() {
         snapshot && (
           <>
             <Grid container spacing={3} sx={{ mb: 4 }}>
-              <Grid item xs={12} md={4}>
+              <Grid size={{ xs: 12, md: 4 }}>
                 <StatCard 
                   title="Órdenes Completadas" 
                   value={snapshot.orders_completed} 
@@ -152,7 +152,7 @@ export default function DailySnapshotPage() {
                   subtitle="Registros internos"
                 />
               </Grid>
-              <Grid item xs={12} md={4}>
+              <Grid size={{ xs: 12, md: 4 }}>
                 <StatCard 
                   title="Volumen USD/USDT" 
                   value={formatCurrency(snapshot.volume_usd)} 
@@ -161,7 +161,7 @@ export default function DailySnapshotPage() {
                   subtitle="Filtrado por moneda base"
                 />
               </Grid>
-              <Grid item xs={12} md={4}>
+              <Grid size={{ xs: 12, md: 4 }}>
                 <StatCard 
                   title="Utilidad Real del Día" 
                   value={formatCurrency(snapshot.gross_profit_today)} 
@@ -191,7 +191,7 @@ export default function DailySnapshotPage() {
                 <Divider />
                 <Box sx={{ p: 3, backgroundColor: '#FAF8FF' }}>
                   <Grid container spacing={4}>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ xs: 12, md: 6 }}>
                       <Stack spacing={2}>
                         <Box>
                           <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Comisiones Operadores</Typography>
@@ -210,7 +210,7 @@ export default function DailySnapshotPage() {
                         </Box>
                       </Stack>
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ xs: 12, md: 6 }}>
                       <Stack spacing={2}>
                         <Box>
                           <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Retiros Pagados Hoy</Typography>
