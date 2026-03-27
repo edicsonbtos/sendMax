@@ -200,13 +200,44 @@ async def put_margins(
     auth: dict = Depends(require_admin)
 ):
     """Actualiza margenes colectivos y dispara regeneracion si se solicita."""
+    before = await fetch_one("SELECT value_json FROM settings WHERE key=%s", ("margins",))
+    before_json = _normalize_json(before["value_json"]) if before else None
+
     updated_by = _get_updated_by(auth, request)
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
     await fetch_one(
         "INSERT INTO settings(key, value_json, updated_at, updated_by) VALUES (%s, %s::jsonb, now(), %s) "
         "ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = now(), updated_by = EXCLUDED.updated_by",
         ("margins", json.dumps(payload), updated_by),
         rw=True,
     )
+    
+    try:
+        await fetch_one(
+            """
+            INSERT INTO audit_log(
+                actor_user_id, action, entity_type, entity_id,
+                before_json, after_json, ip, user_agent
+            )
+            VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
+            RETURNING id
+            """,
+            (
+                auth.get("user_id"),
+                "MARGINS_UPDATED",
+                "settings",
+                "margins",
+                _safe_json_dumps(before_json),
+                _safe_json_dumps(payload),
+                client_ip,
+                user_agent,
+            ),
+            rw=True,
+        )
+    except Exception as e:
+        logger.error("Error guardando audit trail para margins: %s", e)
     
     if payload.get("regenerate"):
         # Podriamos disparar la regeneracion aqui mismo si quieramos, 
@@ -224,13 +255,45 @@ async def put_profit_split(
     auth: dict = Depends(require_admin)
 ):
     """Actualiza la distribucion de ganancias."""
+    before = await fetch_one("SELECT value_json FROM settings WHERE key=%s", ("profit_split",))
+    before_json = _normalize_json(before["value_json"]) if before else None
+
     updated_by = _get_updated_by(auth, request)
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
     await fetch_one(
         "INSERT INTO settings(key, value_json, updated_at, updated_by) VALUES (%s, %s::jsonb, now(), %s) "
         "ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = now(), updated_by = EXCLUDED.updated_by",
         ("profit_split", json.dumps(payload), updated_by),
         rw=True,
     )
+
+    try:
+        await fetch_one(
+            """
+            INSERT INTO audit_log(
+                actor_user_id, action, entity_type, entity_id,
+                before_json, after_json, ip, user_agent
+            )
+            VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
+            RETURNING id
+            """,
+            (
+                auth.get("user_id"),
+                "PROFIT_SPLIT_UPDATED",
+                "settings",
+                "profit_split",
+                _safe_json_dumps(before_json),
+                _safe_json_dumps(payload),
+                client_ip,
+                user_agent,
+            ),
+            rw=True,
+        )
+    except Exception as e:
+        logger.error("Error guardando audit trail para profit_split: %s", e)
+
     return {"ok": True}
 
 
