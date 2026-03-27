@@ -167,6 +167,7 @@ async def lifespan(app: FastAPI):
 
 # Webhook secret token (se genera en lifespan, se verifica en /webhook)
 _webhook_secret_token: str | None = None
+_last_webhook_ts: float = 0.0
 
 IS_PRODUCTION = os.environ.get("RAILWAY_ENVIRONMENT") == "production" or bool(os.environ.get("WEBHOOK_URL"))
 
@@ -249,10 +250,38 @@ async def root():
 async def health():
     return {"status": "ok", "service": "sendmax-bot"}
 
+@app.get("/admin/health/bot")
+async def admin_bot_health():
+    import time
+    global _last_webhook_ts
+    
+    # Check PTB connectivity
+    try:
+        me = await bot_app.bot.get_me()
+        tg_status = "ok"
+        bot_usr = me.username
+    except Exception as e:
+        tg_status = "down"
+        bot_usr = str(e)
+        
+    diff = time.time() - _last_webhook_ts if _last_webhook_ts > 0 else -1
+    
+    return {
+        "status": "ok" if tg_status == "ok" else "error",
+        "telegram_api": tg_status,
+        "bot_username": bot_usr,
+        "last_webhook_ts": _last_webhook_ts,
+        "seconds_since_last_webhook": int(diff)
+    }
+
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
     """Endpoint to receive Telegram updates (con verificación de firma)."""
+    import time
+    global _last_webhook_ts
+    _last_webhook_ts = time.time()
+    
     # Verificar que el request viene de Telegram (secret_token header)
     if _webhook_secret_token:
         incoming_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
