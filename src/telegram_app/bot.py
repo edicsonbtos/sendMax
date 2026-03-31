@@ -84,7 +84,7 @@ async def universal_sniffer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def build_bot() -> Application:
-    # Persistencia de sesií³n (Fase 2)
+    # Persistencia de sesión (Fase 2)
     persistence = PicklePersistence(filepath="bot_persistence.pickle")
     
     request = HTTPXRequest(connect_timeout=20.0, read_timeout=30.0, write_timeout=30.0, pool_timeout=30.0)
@@ -141,7 +141,7 @@ def build_bot() -> Application:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_cancel_reason_text), group=5)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_kyc_reject_reason), group=5)
 
-    # Meníº (solo APPROVED)
+    # Menú (solo APPROVED)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router), group=6)
 
     # Initialize Google Drive Vault Folders
@@ -150,5 +150,5 @@ def build_bot() -> Application:
     except Exception as e:
         logger.error("Failed to initialize Google Drive folders: %s", e)
     
-    logger.info("Bot listo: KYC + í³rdenes + retiros + admin (Persistence: ON)")
+    logger.info("Bot listo: KYC + órdenes + retiros + admin (Persistence: ON)")
     return app

@@ -80,7 +80,7 @@ ASK_CLIENT_NAME, ASK_ORIGIN, ASK_DEST, ASK_BENEF_MODE, ASK_AMOUNT, ASK_BENEF, AS
 # Botones
 BTN_CANCEL = "Cancelar"
 BTN_CONFIRM = "Confirmar …"
-BTN_EDIT = "Editar ï¸"
+BTN_EDIT = "Editar ✏️"
 BTN_EDIT_AMOUNT = "Editar monto"
 BTN_EDIT_BENEF = "Editar beneficiario"
 BTN_BACK = "Volver"
@@ -556,14 +556,14 @@ async def receive_save_alias(update: Update, context: ContextTypes.DEFAULT_TYPE)
         data = q.data or ""
         if data == CB_SAVE_NO:
             try:
-                await q.edit_message_text("‘ Listo, no se guardó el contacto.")
+                await q.edit_message_text("👍 Listo, no se guardó el contacto.")
             except Exception:
                 pass
             return ConversationHandler.END
         if data == CB_SAVE_YES:
             try:
                 await q.edit_message_text(
-                    "“ ¿Cómo quieres llamar a este contacto? (Ej: \"Mi Papá\", \"Cliente Lima\")\n"
+                    "🤔 ¿Cómo quieres llamar a este contacto? (Ej: \"Mi Papá\", \"Cliente Lima\")\n"
                     "Escribe el alias ahora ↓"
                 )
             except Exception:
