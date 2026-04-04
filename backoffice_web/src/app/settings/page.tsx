@@ -105,8 +105,8 @@ export default function SettingsPage() {
     try {
       const [commRes, activeRes, historyRes] = await Promise.all([
         apiGet<CommissionsConfig>("/api/v1/config/commissions"),
-        apiGet<{ ok: boolean; version?: RateVersion }>("/api/v1/rates/active"),
-        apiGet<{ versions: RateVersion[] }>("/api/v1/rates/versions?limit=10"),
+        apiGet<{ ok: boolean; version?: RateVersion }>("/admin/rates/active"),
+        apiGet<{ versions: RateVersion[] }>("/admin/rates/versions?limit=10"),
       ]);
 
       if (commRes) {
@@ -163,7 +163,7 @@ export default function SettingsPage() {
     if (!confirm("¿Seguro que quieres regenerar todas las tasas ahora?")) return;
     setSaving(true);
     try {
-      await apiPost("/api/v1/rates/regenerate", {
+      await apiPost("/admin/rates/regenerate", {
         kind: "manual",
         reason: "Desde Settings UI",
         activate: true,
