@@ -60,6 +60,12 @@ interface CommissionsConfig {
   };
 }
 
+interface CashDeliveryConfig {
+  zelle_usdt_cost: number;
+  margin_cash_zelle: number;
+  margin_cash_general: number;
+}
+
 /* ============ Helpers ============ */
 function toNum(label: string, v: string): number {
   const n = Number(String(v).replace(",", "."));
@@ -73,6 +79,150 @@ function formatDate(iso: string | null): string {
     day: "numeric", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
+}
+
+function CashDeliveryPanel() {
+  const [config, setConfig] = React.useState<CashDeliveryConfig>({
+    zelle_usdt_cost: 1.03,
+    margin_cash_zelle: 12,
+    margin_cash_general: 10,
+  });
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [success, setSuccess] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    async function loadConfig() {
+      try {
+        const res = await apiGet<{ ok: boolean; value_json: CashDeliveryConfig }>("/admin/settings/cash_delivery");
+        if (res && res.value_json) {
+          setConfig({
+            zelle_usdt_cost: res.value_json.zelle_usdt_cost || 1.03,
+            // Convertir decimal backend (ej: 0.12) a % para UI (12.0)
+            margin_cash_zelle: (res.value_json.margin_cash_zelle || 0) * 100,
+            margin_cash_general: (res.value_json.margin_cash_general || 0) * 100,
+          });
+        }
+      } catch (err) {
+        // Ignoramos 404 inicial si no existe el setting aún
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadConfig();
+  }, []);
+
+  const handleSave = async () => {
+    if (config.zelle_usdt_cost <= 0) {
+      setError("El costo USDT debe ser mayor a 0");
+      return;
+    }
+    if (config.margin_cash_zelle < 0 || config.margin_cash_zelle > 100 || config.margin_cash_general < 0 || config.margin_cash_general > 100) {
+      setError("Los márgenes deben estar entre 0 y 100%");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await apiPost("/admin/settings/cash_delivery", {
+        value_json: {
+          zelle_usdt_cost: config.zelle_usdt_cost,
+          // Convertir de % UI (12.0) a decimal backend (0.12)
+          margin_cash_zelle: config.margin_cash_zelle / 100,
+          margin_cash_general: config.margin_cash_general / 100,
+        }
+      });
+      setSuccess("Configuración de efectivo guardada");
+    } catch (e: any) {
+      setError(e.message || "Error al guardar configuración de efectivo");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <CircularProgress size={24} />;
+  }
+
+  return (
+    <Paper sx={{ p: 3, borderLeft: "4px solid #F59E0B" }}>
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>💵 Configuración de Efectivo (Cash Delivery)</Typography>
+      </Stack>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Precios y márgenes para entregas en efectivo (USD)
+      </Typography>
+
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+      {success && <Alert severity="success" sx={{ mb: 3 }}>{success}</Alert>}
+
+      <Stack direction="row" spacing={3} sx={{ mb: 3 }}>
+        <Box flex={1}>
+          <TextField
+            label="Costo USDT por $1 USD (Zelle)"
+            value={config.zelle_usdt_cost}
+            onChange={(e) => setConfig({ ...config, zelle_usdt_cost: parseFloat(e.target.value) || 0 })}
+            type="number"
+            inputProps={{ step: "0.01", min: "0.01" }}
+            size="small"
+            fullWidth
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            ej: 1.03 = cada $1 efectivo cuesta 1.03 USDT
+          </Typography>
+        </Box>
+        <Box flex={1}>
+          <TextField
+            label="Margen Zelle → Cash (%)"
+            value={config.margin_cash_zelle}
+            onChange={(e) => setConfig({ ...config, margin_cash_zelle: parseFloat(e.target.value) || 0 })}
+            type="number"
+            inputProps={{ step: "0.1", min: "0", max: "100" }}
+            InputProps={{ endAdornment: "%" }}
+            size="small"
+            fullWidth
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            Ganancia sobre operaciones Zelle a Efectivo
+          </Typography>
+        </Box>
+        <Box flex={1}>
+          <TextField
+            label="Margen General → Cash (%)"
+            value={config.margin_cash_general}
+            onChange={(e) => setConfig({ ...config, margin_cash_general: parseFloat(e.target.value) || 0 })}
+            type="number"
+            inputProps={{ step: "0.1", min: "0", max: "100" }}
+            InputProps={{ endAdornment: "%" }}
+            size="small"
+            fullWidth
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            Ganancia para otras rutas hacia Efectivo
+          </Typography>
+        </Box>
+      </Stack>
+
+      <Box sx={{ bgcolor: "rgba(59, 130, 246, 0.1)", border: "1px solid rgba(59, 130, 246, 0.3)", borderRadius: 1, p: 2, mb: 3 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>📊 Vista previa de cálculo:</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Cliente paga <b>$100 USD</b> vía Zelle para recibir efectivo:</Typography>
+        <Typography variant="body2" sx={{ color: "success.main" }}>→ Costo base: {(100 * config.zelle_usdt_cost).toFixed(2)} USDT</Typography>
+        <Typography variant="body2" sx={{ color: "success.main" }}>→ Margen ({config.margin_cash_zelle}%): {(100 * config.zelle_usdt_cost * config.margin_cash_zelle / 100).toFixed(2)} USDT</Typography>
+        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>→ Total a entregar en efectivo: ${(100 - (100 * config.margin_cash_zelle / 100)).toFixed(2)} USD</Typography>
+      </Box>
+
+      <Box sx={{ textAlign: "right" }}>
+        <Button variant="contained" color="primary" onClick={handleSave} disabled={saving} startIcon={<SaveIcon />}>
+          Guardar Efectivo
+        </Button>
+      </Box>
+    </Paper>
+  );
 }
 
 /* ============ Component ============ */
@@ -335,6 +485,9 @@ export default function SettingsPage() {
             </Button>
           </Stack>
         </Paper>
+
+        {/* Cash Delivery Panel */}
+        <CashDeliveryPanel />
 
         {/* Profit Split */}
         <Paper sx={{ p: 3, borderLeft: "4px solid #2563EB" }}>
