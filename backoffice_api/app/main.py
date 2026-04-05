@@ -14,7 +14,7 @@ from .routers import (
     diagnostics, metrics, orders, origin_wallets,
     settings, alerts, corrections, auth, users,
     config, rates_admin, exports, operator, vaults,
-    daily_closure, executive,
+    daily_closure, executive, internal,
 )
 from .db import close_pools
 # IMPORTANT: ALLOWED_ORIGINS is explicitly imported from .config here.
@@ -135,6 +135,7 @@ app.include_router(operator.router)
 app.include_router(vaults.router)
 app.include_router(daily_closure.router)
 app.include_router(executive.router)
+app.include_router(internal.router)
 
 @app.get("/")
 async def root():
